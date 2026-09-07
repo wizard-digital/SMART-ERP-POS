@@ -426,6 +426,9 @@ export default function SalesPage() {
   const [isCreateExpenseOpen, setIsCreateExpenseOpen] = useState(false);
   const canCreateExpense = useCanAccess([], ['expenses.create']);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const limit = 50;
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300);
     return () => clearTimeout(timer);
@@ -434,9 +437,6 @@ export default function SalesPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [paymentMethodFilter, statusFilter, debouncedSearch, startDate, endDate]);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const limit = 50;
 
   const {
     sortField: salesSortField,
@@ -2268,6 +2268,19 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
   const canReprintReceipt = useBackendPermission('sales.reprint');
   const canReassignCustomer = useBackendPermission('sales.reassign_customer');
   const canRestateTax = useBackendPermission('sales.tax_restatement');
+  // Hooks first — aged-return date may read sale detail state after it is declared.
+  const [saleDetails, setSaleDetails] = useState<SaleRow | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showVoidModal, setShowVoidModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [showExchangeModal, setShowExchangeModal] = useState(false);
+  const [showReassignCustomerModal, setShowReassignCustomerModal] = useState(false);
+  const [showTaxRestatementModal, setShowTaxRestatementModal] = useState(false);
+  const [invoiceSettings, setInvoiceSettings] = useState<InvoiceSettingsForReceipt | null>(null);
+  const [isReprinting, setIsReprinting] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
   const saleDateForAge = String(
     (saleDetails as { saleDate?: string; sale_date?: string } | null)?.saleDate
       ?? (saleDetails as { sale_date?: string } | null)?.sale_date
@@ -2286,17 +2299,6 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
   const agedReturnTitle = agedReturnBlocked
     ? agedSaleReturnDeniedMessage(agedReturnGate.ageDays, AGED_SALE_RETURN_DAYS)
     : undefined;
-  const [saleDetails, setSaleDetails] = useState<SaleRow | null>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showVoidModal, setShowVoidModal] = useState(false);
-  const [showRefundModal, setShowRefundModal] = useState(false);
-  const [showExchangeModal, setShowExchangeModal] = useState(false);
-  const [showReassignCustomerModal, setShowReassignCustomerModal] = useState(false);
-  const [showTaxRestatementModal, setShowTaxRestatementModal] = useState(false);
-  const [invoiceSettings, setInvoiceSettings] = useState<InvoiceSettingsForReceipt | null>(null);
-  const [isReprinting, setIsReprinting] = useState(false);
-  const modalRef = useRef<HTMLDivElement>(null);
 
   // Handle escape key and focus trap
   useEffect(() => {

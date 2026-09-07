@@ -1,0 +1,34 @@
+{
+  "proof": "SALES_PAGE_SALE_DETAIL_TDZ",
+  "passed": true,
+  "asOf": "2026-09-07T16:46:11.999Z",
+  "priorError": "ReferenceError: Cannot access 'h' before initialization (SaleDetailModal / SalesPage-*.js)",
+  "rootCause": {
+    "commit": "a9c3c61bf732159edb1a88d22b77c78ff7b6a83a",
+    "summary": "Aged-return UI gate inserted saleDateForAge that read saleDetails before const [saleDetails] = useState — temporal dead zone. Minifier renamed saleDetails → h.",
+    "trigger": "Opening any sale detail modal (View) on Sales Analytics",
+    "notCausedBy": "Sales New Expense / adaptive KPI chrome (1da58011) — that landed later; crash is SaleDetailModal TDZ from aged-return commit"
+  },
+  "gates": [
+    {
+      "id": "SALE_DETAILS_BEFORE_AGE",
+      "ok": true,
+      "detail": "useState@629 saleDateForAge@1409"
+    },
+    {
+      "id": "NO_SALE_DETAILS_BEFORE_HOOK",
+      "ok": true,
+      "detail": "saleDetails absent before useState"
+    },
+    {
+      "id": "CURRENT_PAGE_BEFORE_EFFECT",
+      "ok": true,
+      "detail": "useState@1396 setCurrentPage@1662"
+    }
+  ],
+  "claims": [
+    "SaleDetailModal declares saleDetails useState before saleDateForAge",
+    "SalesPage declares currentPage before setCurrentPage effects",
+    "Root cause: a9c3c61b aged-return gate referenced saleDetails pre-hook"
+  ]
+}
