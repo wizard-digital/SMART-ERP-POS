@@ -164,7 +164,7 @@ describe('posCartAtCost — customer reprice preserves inventory cost (SSoT)', (
 
   it('walk-in after write-down: catalog 10000, floor 3000, edit to 3000 allowed, 2999.98 blocked', () => {
     const synced = applyAllocatedCarryingToCartLine(
-      { unitPrice: 10000, costPrice: 5000, quantity: 1 },
+      { unitPrice: 10000, costPrice: 5000, quantity: 1, subtotal: 10000 },
       3000,
     );
     expect(synced.unitPrice).toBe(10000);
