@@ -3738,6 +3738,7 @@ export const reportsRepository = {
       startDate: string;
       endDate: string;
       category?: string;
+      paymentMethod?: string;
     }
   ): Promise<SalesByCategoryRow[]> {
     const [startUtc, endUtc] = toUtcParams(options.startDate, options.endDate);
@@ -3747,6 +3748,12 @@ export const reportsRepository = {
     if (options.category) {
       params.push(options.category);
       categoryFilter = `AND ${categoryMatchClause('p.category', params.length)}`;
+    }
+
+    let paymentFilter = '';
+    if (options.paymentMethod) {
+      params.push(options.paymentMethod);
+      paymentFilter = `AND s.payment_method::text = $${params.length}`;
     }
 
     const query = `
@@ -3766,6 +3773,7 @@ export const reportsRepository = {
       WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
         AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
         ${categoryFilter}
+        ${paymentFilter}
       GROUP BY COALESCE(p.category, 'Uncategorized')
       ORDER BY total_revenue DESC
     `;

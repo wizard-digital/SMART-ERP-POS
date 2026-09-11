@@ -1,0 +1,107 @@
+{
+  "proof": "mgmt-pnl-category-live",
+  "range": {
+    "startDate": "2026-09-01",
+    "endDate": "2026-09-30"
+  },
+  "generatedAt": "2026-09-11T08:08:43.848Z",
+  "summary": {
+    "totalRevenue": 156000,
+    "totalCogs": 126000,
+    "grossProfit": 29000,
+    "grossMarginPct": 18.58974358974359,
+    "totalExpenses": 0,
+    "totalStockAdjustments": 6815500.5,
+    "totalSupplierPayments": 0,
+    "netProfit": 29000,
+    "netMarginPct": 18.58974358974359,
+    "saleCount": 27,
+    "glSalesRevenue": 155000,
+    "glSalesReturns": 240000,
+    "glNetRevenue": -85000,
+    "glGrossCogs": 126000,
+    "glNetCogs": -54000
+  },
+  "categoryTotals": {
+    "revenue": 156000,
+    "cogs": 126000,
+    "grossProfit": 29000
+  },
+  "moneyIn": 155000,
+  "categories": [
+    {
+      "categoryName": "Uncategorized",
+      "transactionCount": 27,
+      "unitsSold": 28,
+      "totalRevenue": 153000,
+      "totalCogs": 124000,
+      "grossProfit": 29000,
+      "grossMarginPct": 18.95
+    },
+    {
+      "categoryName": "ART DRUGS",
+      "transactionCount": 1,
+      "unitsSold": 1,
+      "totalRevenue": 2000,
+      "totalCogs": 2000,
+      "grossProfit": 0,
+      "grossMarginPct": 0
+    },
+    {
+      "categoryName": "MEDICINE A",
+      "transactionCount": 1,
+      "unitsSold": 1,
+      "totalRevenue": 1000,
+      "totalCogs": 0,
+      "grossProfit": 0,
+      "grossMarginPct": 0
+    }
+  ],
+  "cashFilter": {
+    "totalRevenue": 152000,
+    "saleCount": 26
+  },
+  "gates": [
+    {
+      "id": "KPI_EQ_CATEGORY_REVENUE",
+      "ok": true,
+      "detail": "summary.totalRevenue 156000 === category sum 156000"
+    },
+    {
+      "id": "KPI_EQ_CATEGORY_COGS",
+      "ok": true,
+      "detail": "summary.totalCogs 126000 === category sum 126000"
+    },
+    {
+      "id": "KPI_EQ_CATEGORY_GP",
+      "ok": true,
+      "detail": "summary.grossProfit 29000 === category sum 29000"
+    },
+    {
+      "id": "REVENUE_POSITIVE_WHEN_SALES",
+      "ok": true,
+      "detail": "period sales revenue 156000 (sales 27)"
+    },
+    {
+      "id": "RETURNS_DISCLOSED",
+      "ok": true,
+      "detail": "glSalesReturns=240000 glNetRevenue=-85000"
+    },
+    {
+      "id": "PRIOR_BUG_SHAPE_FIXED",
+      "ok": true,
+      "detail": "Management Total Revenue is not negative while category rows are positive"
+    },
+    {
+      "id": "MONEY_IN_NEAR_SALES",
+      "ok": true,
+      "detail": "Money In 155000 ≈ GL sales revenue 155000"
+    },
+    {
+      "id": "PAYMENT_FILTER_SHRINKS_OR_EQ",
+      "ok": true,
+      "detail": "CASH rev 152000 / sales 26 ≤ ALL 156000 / 27"
+    }
+  ],
+  "passed": true
+}

@@ -137,6 +137,13 @@ interface BusinessSummary {
   netProfit: number;
   netMarginPct: number;
   saleCount: number;
+  /** Period SALE credits on REVENUE (GL). Optional for older API payloads. */
+  glSalesRevenue?: number;
+  /** Period SALE_REFUND debits on REVENUE (4010), incl. cross-period returns. */
+  glSalesReturns?: number;
+  glNetRevenue?: number;
+  glGrossCogs?: number;
+  glNetCogs?: number;
 }
 
 interface BusinessPerformanceData {
@@ -204,61 +211,194 @@ const BusinessPerformancePage: React.FC = () => {
   });
   const report = data as BusinessPerformanceData | undefined;
 
-  // Summary cards
+  const moneyInTotal = report
+    ? report.moneyIn.reduce((s, r) => s + r.totalAmount, 0)
+    : 0;
+  const moneyInTxns = report
+    ? report.moneyIn.reduce((s, r) => s + r.transactionCount, 0)
+    : 0;
+  const categoryUnits = report
+    ? report.revenueByCategory.reduce((s, r) => s + r.unitsSold, 0)
+    : 0;
+  const costStockTotal = report
+    ? report.costAndStock.reduce((s, r) => s + r.totalAmount, 0)
+    : 0;
+  const costStockEntries = report
+    ? report.costAndStock.reduce((s, r) => s + r.entryCount, 0)
+    : 0;
+
+  // KPI strip follows the visible section so "Section" filter is not cosmetic-only.
   const summaryCards = report?.summary
-    ? [
-      {
-        label: 'Total Revenue',
-        value: formatCurrency(report.summary.totalRevenue),
-        icon: ShoppingCart,
-        color: 'text-blue-600',
-        bg: 'bg-blue-50',
-      },
-      {
-        label: 'COGS',
-        value: formatCurrency(report.summary.totalCogs),
-        icon: Receipt,
-        color: 'text-orange-600',
-        bg: 'bg-orange-50',
-      },
-      {
-        label: 'Gross Profit',
-        value: formatCurrency(report.summary.grossProfit),
-        icon: report.summary.grossProfit >= 0 ? TrendingUp : TrendingDown,
-        color: report.summary.grossProfit >= 0 ? 'text-green-600' : 'text-red-600',
-        bg: report.summary.grossProfit >= 0 ? 'bg-green-50' : 'bg-red-50',
-        sub: `${report.summary.grossMarginPct.toFixed(1)}% margin`,
-      },
-      {
-        label: 'Expenses',
-        value: formatCurrency(report.summary.totalExpenses),
-        icon: DollarSign,
-        color: 'text-red-600',
-        bg: 'bg-red-50',
-      },
-      {
-        label: 'Net Profit',
-        value: formatCurrency(report.summary.netProfit),
-        icon: report.summary.netProfit >= 0 ? TrendingUp : TrendingDown,
-        color: report.summary.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600',
-        bg: report.summary.netProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50',
-        sub: `${report.summary.netMarginPct.toFixed(1)}% net margin`,
-      },
-      {
-        label: 'Sale Transactions',
-        value: report.summary.saleCount.toLocaleString(),
-        icon: BarChart3,
-        color: 'text-indigo-600',
-        bg: 'bg-indigo-50',
-      },
-    ]
+    ? (() => {
+        const s = report.summary;
+        const fullPl = [
+          {
+            label: 'Total Revenue',
+            value: formatCurrency(s.totalRevenue),
+            icon: ShoppingCart,
+            color: 'text-blue-600',
+            bg: 'bg-blue-50',
+          },
+          {
+            label: 'COGS',
+            value: formatCurrency(s.totalCogs),
+            icon: Receipt,
+            color: 'text-orange-600',
+            bg: 'bg-orange-50',
+          },
+          {
+            label: 'Gross Profit',
+            value: formatCurrency(s.grossProfit),
+            icon: s.grossProfit >= 0 ? TrendingUp : TrendingDown,
+            color: s.grossProfit >= 0 ? 'text-green-600' : 'text-red-600',
+            bg: s.grossProfit >= 0 ? 'bg-green-50' : 'bg-red-50',
+            sub: `${s.grossMarginPct.toFixed(1)}% margin`,
+          },
+          {
+            label: 'Expenses',
+            value: formatCurrency(s.totalExpenses),
+            icon: DollarSign,
+            color: 'text-red-600',
+            bg: 'bg-red-50',
+          },
+          {
+            label: 'Net Profit',
+            value: formatCurrency(s.netProfit),
+            icon: s.netProfit >= 0 ? TrendingUp : TrendingDown,
+            color: s.netProfit >= 0 ? 'text-emerald-600' : 'text-red-600',
+            bg: s.netProfit >= 0 ? 'bg-emerald-50' : 'bg-red-50',
+            sub: `${s.netMarginPct.toFixed(1)}% net margin`,
+          },
+          {
+            label: 'Sale Transactions',
+            value: s.saleCount.toLocaleString(),
+            icon: BarChart3,
+            color: 'text-indigo-600',
+            bg: 'bg-indigo-50',
+          },
+        ];
+
+        switch (visibleSection) {
+          case 'MONEY_IN':
+            return [
+              {
+                label: 'Money In',
+                value: formatCurrency(moneyInTotal),
+                icon: Wallet,
+                color: 'text-blue-600',
+                bg: 'bg-blue-50',
+              },
+              {
+                label: 'Transactions',
+                value: moneyInTxns.toLocaleString(),
+                icon: BarChart3,
+                color: 'text-indigo-600',
+                bg: 'bg-indigo-50',
+              },
+            ];
+          case 'RECEIPTS':
+            return [
+              {
+                label: 'AR Collections',
+                value: formatCurrency(report.arCollections?.totalCollected ?? 0),
+                icon: HandCoins,
+                color: 'text-teal-600',
+                bg: 'bg-teal-50',
+                sub: `${report.arCollections?.paymentCount ?? 0} payment(s)`,
+              },
+              {
+                label: 'Deposits Taken',
+                value: formatCurrency(report.customerDeposits?.totalDeposited ?? 0),
+                icon: Landmark,
+                color: 'text-purple-600',
+                bg: 'bg-purple-50',
+                sub: `${report.customerDeposits?.depositCount ?? 0} deposit(s)`,
+              },
+              {
+                label: 'Deposit Liability',
+                value: formatCurrency(report.customerDeposits?.outstandingLiability ?? 0),
+                icon: Landmark,
+                color: 'text-orange-600',
+                bg: 'bg-orange-50',
+              },
+            ];
+          case 'REVENUE':
+            return [
+              fullPl[0],
+              fullPl[1],
+              fullPl[2],
+              {
+                label: 'Sale Transactions',
+                value: s.saleCount.toLocaleString(),
+                icon: BarChart3,
+                color: 'text-indigo-600',
+                bg: 'bg-indigo-50',
+              },
+              {
+                label: 'Units Sold',
+                value: categoryUnits.toLocaleString(),
+                icon: Package,
+                color: 'text-slate-600',
+                bg: 'bg-slate-50',
+              },
+            ];
+          case 'COST_STOCK':
+            return [
+              {
+                label: 'Cost & Stock Total',
+                value: formatCurrency(costStockTotal),
+                icon: Package,
+                color: 'text-orange-600',
+                bg: 'bg-orange-50',
+                sub: `${costStockEntries} GL entries`,
+              },
+              {
+                label: 'COGS (period sales)',
+                value: formatCurrency(s.totalCogs),
+                icon: Receipt,
+                color: 'text-orange-600',
+                bg: 'bg-orange-50',
+              },
+              {
+                label: 'Stock Adjustments',
+                value: formatCurrency(s.totalStockAdjustments),
+                icon: Package,
+                color: 'text-amber-700',
+                bg: 'bg-amber-50',
+              },
+            ];
+          case 'EXPENSES':
+            return [
+              {
+                label: 'Operating Expenses',
+                value: formatCurrency(s.totalExpenses),
+                icon: DollarSign,
+                color: 'text-red-600',
+                bg: 'bg-red-50',
+              },
+              {
+                label: 'Supplier Payments',
+                value: formatCurrency(s.totalSupplierPayments),
+                icon: CreditCard,
+                color: 'text-orange-600',
+                bg: 'bg-orange-50',
+              },
+            ];
+          case 'NET_POSITION':
+          case 'ALL':
+          default:
+            return fullPl;
+        }
+      })()
     : [];
 
   const kpiMetrics: AdaptiveReportMetric[] = summaryCards.map((card) => {
     const primary =
       card.label === 'Total Revenue' ||
       card.label === 'Gross Profit' ||
-      card.label === 'Net Profit';
+      card.label === 'Net Profit' ||
+      card.label === 'Money In' ||
+      card.label === 'Cost & Stock Total';
     return {
       id: card.label,
       label: card.label,
@@ -510,7 +650,7 @@ const BusinessPerformancePage: React.FC = () => {
                     </h2>
                   </div>
                   <p className="text-sm text-gray-500 mt-1">
-                    GL revenue allocated proportionally to product categories
+                    Period sales by product category (same totals as Management Revenue / COGS / Gross Profit)
                   </p>
                 </div>
                 <div className="overflow-x-auto">
@@ -788,7 +928,9 @@ const BusinessPerformancePage: React.FC = () => {
             )}
 
             {/* ── Section 4b: Supplier Payments by Funding Account ── */}
-            {report.supplierPaymentsByAccount && report.supplierPaymentsByAccount.length > 0 && (
+            {(showSection('EXPENSES') || showSection('NET_POSITION')) &&
+              report.supplierPaymentsByAccount &&
+              report.supplierPaymentsByAccount.length > 0 && (
               <div className="bg-white rounded-lg border shadow-sm">
                 <div className="px-3 py-3 sm:px-6 sm:py-4 border-b">
                   <div className="flex items-center gap-2">
@@ -1001,7 +1143,7 @@ const BusinessPerformancePage: React.FC = () => {
                       <tbody className="divide-y divide-gray-100">
                         <tr>
                           <td className="px-4 py-3 text-sm text-gray-900">
-                            Total Revenue (GL)
+                            Total Revenue (period sales)
                           </td>
                           <td className="px-4 py-3 text-sm text-right text-green-700 font-semibold">
                             {formatCurrency(report.summary.totalRevenue)}

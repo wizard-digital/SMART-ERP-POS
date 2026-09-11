@@ -142,6 +142,10 @@ export interface CustomerReceiptsDayBreakdown {
 // ---------------------------------------------------------------------------
 
 export interface BusinessSummary {
+  /**
+   * Management P&L primary revenue = sum of Section 2 category rows (period sales).
+   * Not GL net (SALE − SALE_REFUND): cross-period returns live in glSalesReturns.
+   */
   totalRevenue: number;
   totalCogs: number;
   grossProfit: number;
@@ -152,6 +156,16 @@ export interface BusinessSummary {
   netProfit: number;
   netMarginPct: number;
   saleCount: number;
+  /** Period SALE credits on REVENUE (GL). */
+  glSalesRevenue: number;
+  /** Period SALE_REFUND debits on REVENUE (typically 4010), incl. cross-period returns. */
+  glSalesReturns: number;
+  /** GL net revenue (sales − returns). Informational; may be negative. */
+  glNetRevenue: number;
+  /** SALE_COGS DR on 5000 (gross). */
+  glGrossCogs: number;
+  /** SALE_COGS DR − refund CR on 5000. */
+  glNetCogs: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -277,6 +291,7 @@ export async function getBusinessPerformanceReport(
       reportsRepository.getSalesByCategory(pool as Pool, {
         startDate,
         endDate,
+        paymentMethod: datedFilters.paymentMethod,
       }),
       repo.getCostAndStock(datedFilters, pool),
       datedFilters.includeExpenses !== false
@@ -353,25 +368,54 @@ export async function getBusinessPerformanceReport(
     };
 
     // --- Section 5: Summary ---
-    const totalRevenue = Money.toNumber(Money.parseDb(totals.total_revenue));
-    const glCogs = Money.toNumber(Money.parseDb(totals.total_cogs));
-    const categoryCogsSum = revenueByCategory.reduce(
+    // Primary Management P&L KPIs follow Section 2 (period sale_items by category).
+    // Mixing GL-net revenue (which subtracts cross-period 4010 returns) with category
+    // rows made the header/TOTAL contradict the positive category table.
+    const categoryRevenue = revenueByCategory.reduce(
+      (sum, r) => Money.toNumber(Money.add(sum, r.totalRevenue)),
+      0,
+    );
+    const categoryCogs = revenueByCategory.reduce(
       (sum, r) => Money.toNumber(Money.add(sum, r.totalCogs)),
       0,
     );
-    // GL (SALE_COGS on 5000) is authoritative; fall back to category roll-up if legacy rows lack COGS journal
-    const totalCogs = glCogs > 0 ? glCogs : categoryCogsSum;
-    const totalExpenses = Money.toNumber(Money.parseDb(totals.total_expenses));
-    const totalStockAdjustments = Money.toNumber(Money.parseDb(totals.total_stock_adjustments));
-    const totalSupplierPayments = supplierPaymentsByAccount.reduce((sum, r) => Money.toNumber(Money.add(sum, r.totalPaid)), 0);
-    const grossProfit = Money.toNumber(Money.subtract(totalRevenue, totalCogs));
+    const categoryGrossProfit = revenueByCategory.reduce(
+      (sum, r) => Money.toNumber(Money.add(sum, r.grossProfit)),
+      0,
+    );
+
+    const glNetRevenue = Money.toNumber(Money.parseDb(totals.total_revenue));
+    const glSalesRevenue = Money.toNumber(Money.parseDb(totals.gl_sales_revenue));
+    const glSalesReturns = Money.toNumber(Money.parseDb(totals.gl_sales_returns));
+    const glGrossCogs = Money.toNumber(Money.parseDb(totals.total_cogs));
+    const glNetCogs = Money.toNumber(Money.parseDb(totals.gl_net_cogs));
+
+    const totalRevenue = categoryRevenue;
+    // Prefer category COGS (same SSOT as revenue rows). Fall back to GL goods-issue if categories empty.
+    const totalCogs = revenueByCategory.length > 0 ? categoryCogs : glGrossCogs;
+    const totalExpenses =
+      datedFilters.includeExpenses !== false
+        ? Money.toNumber(Money.parseDb(totals.total_expenses))
+        : 0;
+    const totalStockAdjustments =
+      datedFilters.includeStockAdjustments !== false
+        ? Money.toNumber(Money.parseDb(totals.total_stock_adjustments))
+        : 0;
+    const totalSupplierPayments = supplierPaymentsByAccount.reduce(
+      (sum, r) => Money.toNumber(Money.add(sum, r.totalPaid)),
+      0,
+    );
+    const grossProfit =
+      revenueByCategory.length > 0
+        ? categoryGrossProfit
+        : Money.toNumber(Money.subtract(totalRevenue, totalCogs));
+    // Operating net = GP − operating expenses. Stock adjustments (5130/5140) stay in Section 3
+    // and are disclosed separately — they are not silently folded into revenue.
     const netProfit = Money.toNumber(Money.subtract(grossProfit, totalExpenses));
-    const grossMarginPct = totalRevenue > 0
-      ? Money.toNumber(Money.percentageRate(grossProfit, totalRevenue))
-      : 0;
-    const netMarginPct = totalRevenue > 0
-      ? Money.toNumber(Money.percentageRate(netProfit, totalRevenue))
-      : 0;
+    const grossMarginPct =
+      totalRevenue > 0 ? Money.toNumber(Money.percentageRate(grossProfit, totalRevenue)) : 0;
+    const netMarginPct =
+      totalRevenue > 0 ? Money.toNumber(Money.percentageRate(netProfit, totalRevenue)) : 0;
 
     const summary: BusinessSummary = {
       totalRevenue,
@@ -384,6 +428,11 @@ export async function getBusinessPerformanceReport(
       netProfit,
       netMarginPct,
       saleCount: totals.sale_count,
+      glSalesRevenue,
+      glSalesReturns,
+      glNetRevenue,
+      glGrossCogs,
+      glNetCogs,
     };
 
     return {

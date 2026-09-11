@@ -1,0 +1,62 @@
+{
+  "proof": "mgmt-pnl-category-ssot",
+  "generatedAt": "2026-09-11T08:08:41.128Z",
+  "gates": [
+    {
+      "id": "KPI_FROM_CATEGORY",
+      "ok": true,
+      "detail": "summary.totalRevenue/COGS/GP derived from Section 2 category sum"
+    },
+    {
+      "id": "GL_RETURNS_FIELD",
+      "ok": true,
+      "detail": "exposes glSalesReturns / glNetRevenue for cross-period 4010 disclosure"
+    },
+    {
+      "id": "NO_GL_NET_AS_PRIMARY",
+      "ok": true,
+      "detail": "does not use GL-net revenue as Management Total Revenue"
+    },
+    {
+      "id": "PAYMENT_TO_CATEGORY",
+      "ok": true,
+      "detail": "payment method filter passed into getSalesByCategory"
+    },
+    {
+      "id": "SPLIT_GL_SALES",
+      "ok": true,
+      "detail": "split sales/returns"
+    },
+    {
+      "id": "NET_COGS",
+      "ok": true,
+      "detail": "net COGS includes refund credits"
+    },
+    {
+      "id": "PAYMENT_SCOPE_SUMMARY",
+      "ok": true,
+      "detail": "summary totals respect payment method on sale/refund joins"
+    },
+    {
+      "id": "SECTION_SCOPED_KPI",
+      "ok": true,
+      "detail": "KPI strip switches by visible section"
+    },
+    {
+      "id": "SUPPLIER_GATED",
+      "ok": true,
+      "detail": "Section 4b respects section filter"
+    },
+    {
+      "id": "NO_RETURNS_BANNER",
+      "ok": true,
+      "detail": "no noisy returns banner on Management P&L"
+    },
+    {
+      "id": "CATEGORY_SUBTITLE",
+      "ok": true,
+      "detail": "Section 2 copy matches sale_items SSOT"
+    }
+  ],
+  "passed": true
+}

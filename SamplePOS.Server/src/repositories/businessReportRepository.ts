@@ -56,8 +56,16 @@ export interface SupplierPaymentByAccountRow {
 
 /** Section 5 — summary totals (computed in service, but we gather raw numbers here) */
 export interface SummaryTotalsRow {
+  /** Net GL revenue (SALE CR − SALE_REFUND DR on REVENUE). Can be negative when returns of prior-period sales post in-range. */
   total_revenue: string;
+  /** Period SALE credits on REVENUE (excludes 4010 returns). */
+  gl_sales_revenue: string;
+  /** Period SALE_REFUND debits on REVENUE (typically 4010). Includes cross-period returns. */
+  gl_sales_returns: string;
+  /** SALE_COGS debits on 5000 (gross goods issue). */
   total_cogs: string;
+  /** SALE_COGS DR − refund CR on 5000 (SALE_REFUND / SALE_REFUND_COGS). */
+  gl_net_cogs: string;
   total_expenses: string;
   total_stock_adjustments: string;
   sale_count: number;
@@ -222,7 +230,7 @@ export async function getCostAndStock(
 
   // COGS is posted as SALE_COGS (separate journal from revenue SALE).
   const refTypes = filters.includeStockAdjustments !== false
-    ? ['SALE_COGS', 'STOCK_MOVEMENT', 'GOODS_RECEIPT']
+    ? ['SALE_COGS', 'STOCK_MOVEMENT', 'GOODS_RECEIPT', 'LOT_WRITE_DOWN']
     : ['SALE_COGS'];
 
   const query = `
@@ -244,7 +252,7 @@ export async function getCostAndStock(
     WHERE lt."Status" = 'POSTED'
       AND lt."ReferenceType" = ANY($3::text[])
       AND (
-        a."AccountCode" IN ('5000','5010','5110','5120','5130','4110')
+        a."AccountCode" IN ('5000','5010','5110','5120','5130','5140','4110')
       )
       AND (lt."ReferenceType" != 'SALE_COGS' OR s.status IS NULL OR s.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
       ${dateClause(1)}
@@ -362,16 +370,33 @@ export async function getSummaryTotals(
 ): Promise<SummaryTotalsRow> {
   const db = dbPool || globalPool;
 
-  // Total revenue from GL — net of partial refunds.
+  const params = dateParams(filters);
+  const paymentParamIdx = filters.paymentMethod ? params.length + 1 : 0;
+  if (filters.paymentMethod) {
+    params.push(filters.paymentMethod);
+  }
+  // When payment method is set, keep only matching sale / original-sale refund rows.
+  const paymentScope = paymentParamIdx
+    ? `AND (
+        (lt."ReferenceType" = 'SALE' AND s.payment_method::text = $${paymentParamIdx})
+        OR (lt."ReferenceType" = 'SALE_REFUND' AND refund_sale.payment_method::text = $${paymentParamIdx})
+      )`
+    : '';
+  const cogsPaymentScope = paymentParamIdx
+    ? `AND (
+        (lt."ReferenceType" = 'SALE_COGS' AND s.payment_method::text = $${paymentParamIdx})
+        OR (lt."ReferenceType" IN ('SALE_REFUND', 'SALE_REFUND_COGS') AND refund_sale.payment_method::text = $${paymentParamIdx})
+      )`
+    : '';
+
+  // Total revenue from GL — split sales vs returns so Management P&L can show both.
   //
-  // SALE entries:      CR on REVENUE accounts (positive revenue)
-  // SALE_REFUND entries: DR on REVENUE accounts (revenue reversal, negative)
+  // SALE entries:      CR on REVENUE accounts (positive revenue) — typically 4000
+  // SALE_REFUND entries: DR on REVENUE accounts (contra) — typically 4010
   //
-  // Full refunds (VOIDED_BY_RETURN): original SALE excluded via status check,
-  // AND SALE_REFUND excluded via refund_sale status check → net = 0 (correct).
-  //
-  // Partial refunds (PARTIALLY_RETURNED): original SALE included,
-  // SALE_REFUND debit subtracted → net = actual collected revenue (fix for #7).
+  // Cross-period returns: SALE_REFUND can post in this range for a sale dated earlier.
+  // That correctly hits 4010 for the period, but must NOT replace period sales revenue
+  // in the category / management KPI strip (see businessReportService).
   const revenueQuery = `
     SELECT
       ROUND(COALESCE(SUM(
@@ -385,6 +410,22 @@ export async function getSummaryTotals(
           ELSE 0
         END
       ), 0)::numeric, 2) AS total_revenue,
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN lt."ReferenceType" = 'SALE' AND le."CreditAmount" > 0
+               AND (s.status IS NULL OR s.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
+            THEN le."CreditAmount"
+          ELSE 0
+        END
+      ), 0)::numeric, 2) AS gl_sales_revenue,
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN lt."ReferenceType" = 'SALE_REFUND' AND le."DebitAmount" > 0
+               AND (refund_sale.status IS NULL OR refund_sale.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
+            THEN le."DebitAmount"
+          ELSE 0
+        END
+      ), 0)::numeric, 2) AS gl_sales_returns,
       COUNT(DISTINCT CASE
         WHEN lt."ReferenceType" = 'SALE' AND le."CreditAmount" > 0
              AND (s.status IS NULL OR s.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
@@ -401,26 +442,49 @@ export async function getSummaryTotals(
     WHERE lt."ReferenceType" IN ('SALE', 'SALE_REFUND')
       AND lt."Status" = 'POSTED'
       AND a."AccountType" = 'REVENUE'
+      ${paymentScope}
       ${dateClause(1)}
   `;
 
-  // Total COGS from GL — goods-issue journal (referenceType SALE_COGS, account 5000)
+  // Total COGS from GL — goods-issue (SALE_COGS DR) net of refund inventory restore (CR on 5000).
   const cogsQuery = `
     SELECT
-      ROUND(COALESCE(SUM(le."DebitAmount"), 0)::numeric, 2) AS total_cogs
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN lt."ReferenceType" = 'SALE_COGS' AND le."DebitAmount" > 0
+               AND (s.status IS NULL OR s.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
+            THEN le."DebitAmount"
+          ELSE 0
+        END
+      ), 0)::numeric, 2) AS total_cogs,
+      ROUND(COALESCE(SUM(
+        CASE
+          WHEN lt."ReferenceType" = 'SALE_COGS' AND le."DebitAmount" > 0
+               AND (s.status IS NULL OR s.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
+            THEN le."DebitAmount"
+          WHEN lt."ReferenceType" IN ('SALE_REFUND', 'SALE_REFUND_COGS') AND le."CreditAmount" > 0
+               AND (refund_sale.status IS NULL OR refund_sale.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
+            THEN -le."CreditAmount"
+          ELSE 0
+        END
+      ), 0)::numeric, 2) AS gl_net_cogs
     FROM ledger_entries le
     JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
     JOIN accounts a ON a."Id" = le."AccountId"
     LEFT JOIN sales s ON lt."ReferenceType" = 'SALE_COGS' AND lt."ReferenceId" = s.id
-    WHERE lt."ReferenceType" = 'SALE_COGS'
+    LEFT JOIN sale_refunds sr
+      ON lt."ReferenceType" IN ('SALE_REFUND', 'SALE_REFUND_COGS') AND lt."ReferenceId" = sr.id
+    LEFT JOIN sales refund_sale ON sr.sale_id = refund_sale.id
+    WHERE lt."ReferenceType" IN ('SALE_COGS', 'SALE_REFUND', 'SALE_REFUND_COGS')
       AND lt."Status" = 'POSTED'
       AND a."AccountCode" = '5000'
-      AND le."DebitAmount" > 0
-      AND (s.status IS NULL OR s.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
+      ${cogsPaymentScope}
       ${dateClause(1)}
   `;
 
   // Total expenses from GL (DR on EXPENSE accounts for EXPENSE/EXPENSE_PAYMENT)
+  // Expenses are not payment-method scoped (operating P&L, not till mix).
+  const expenseParams = dateParams(filters);
   const expenseQuery = `
     SELECT
       ROUND(COALESCE(SUM(le."DebitAmount"), 0)::numeric, 2) AS total_expenses
@@ -449,17 +513,16 @@ export async function getSummaryTotals(
     JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
     JOIN accounts a ON a."Id" = le."AccountId"
     WHERE lt."Status" = 'POSTED'
-      AND lt."ReferenceType" = 'STOCK_MOVEMENT'
-      AND a."AccountCode" IN ('5110','5120','5130','4110')
+      AND lt."ReferenceType" IN ('STOCK_MOVEMENT', 'LOT_WRITE_DOWN')
+      AND a."AccountCode" IN ('5110','5120','5130','5140','4110')
       ${dateClause(1)}
   `;
 
-  const params = dateParams(filters);
   const [revResult, cogsResult, expResult, adjResult] = await Promise.all([
     db.query(revenueQuery, params),
     db.query(cogsQuery, params),
-    db.query(expenseQuery, params),
-    db.query(stockAdjQuery, params),
+    db.query(expenseQuery, expenseParams),
+    db.query(stockAdjQuery, expenseParams),
   ]);
 
   const rev = revResult.rows[0] || {};
@@ -469,7 +532,10 @@ export async function getSummaryTotals(
 
   return {
     total_revenue: rev.total_revenue || '0',
+    gl_sales_revenue: rev.gl_sales_revenue || '0',
+    gl_sales_returns: rev.gl_sales_returns || '0',
     total_cogs: cogs.total_cogs || '0',
+    gl_net_cogs: cogs.gl_net_cogs || '0',
     total_expenses: exp.total_expenses || '0',
     total_stock_adjustments: adj.total_stock_adjustments || '0',
     sale_count: parseInt(rev.sale_count, 10) || 0,
