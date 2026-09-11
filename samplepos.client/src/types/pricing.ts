@@ -135,6 +135,9 @@ export interface ResolvedPrice {
   basePrice: number;
   discount: number;
   atCostLayers?: AtCostLayerPrice[];
+  /** FEFO allocated carrying per base unit — POS walk-in floor after lot write-down. */
+  allocatedCostPerBase?: number;
+  allocatedLayers?: AtCostLayerPrice[];
   appliedRule: {
     ruleId: string | null;
     ruleName: string | null;

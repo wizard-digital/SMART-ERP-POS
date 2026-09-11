@@ -16,6 +16,10 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '524_relax_ledger_entries_constraints.sql',
     '554_sales_liquidity_allowed_sources.sql',
     '555_quotation_content_hash_terminal_statuses.sql',
+    '610_po_unit_price_precision_6dp.sql',
+    '611_lot_write_down_clearance.sql',
+    '612_lot_write_down_immutability.sql',
+    '613_lot_write_down_journal_coupling.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -153,6 +157,76 @@ export async function verifyMigrationPostcondition(
                 ) AS ok`,
             );
             return rows[0]?.ok === true;
+        }
+        case '610_po_unit_price_precision_6dp.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'purchase_order_items'
+                      AND column_name = 'unit_price'
+                      AND numeric_scale >= 6
+                ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '611_lot_write_down_clearance.sql': {
+            const tableOk = await tableExists(pool, 'lot_write_down_documents');
+            const { rows: col } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'inventory_batches'
+                      AND column_name = 'original_cost_price'
+                ) AS ok`,
+            );
+            const { rows: acct } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM accounts
+                    WHERE "AccountCode" = '5140'
+                      AND "AllowManualPosting" = false
+                      AND 'INVENTORY_MOVE' = ANY(COALESCE("AllowedSources", '{}'::text[]))
+                ) AS ok`,
+            );
+            return tableOk && col[0]?.ok === true && acct[0]?.ok === true;
+        }
+        case '612_lot_write_down_immutability.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM pg_trigger
+                    WHERE tgname = 'trg_inventory_batches_carrying_write_down'
+                      AND tgrelid = 'inventory_batches'::regclass
+                ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '613_lot_write_down_journal_coupling.sql': {
+            const { rows: fn } = await pool.query<{ def: string | null }>(
+                `SELECT pg_get_functiondef(p.oid) AS def
+                 FROM pg_proc p
+                 WHERE p.proname = 'inventory_batches_carrying_write_down_guard'`,
+            );
+            const def = fn[0]?.def ?? '';
+            const increaseBlocked = def.includes('cannot increase after lot creation');
+            const nullJeNotAuthorization = !def.includes('journal_entry_id IS NULL');
+            const { rows: deferred } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM pg_trigger
+                    WHERE tgname = 'trg_lot_write_down_posted_journal'
+                      AND tgrelid = 'lot_write_down_documents'::regclass
+                      AND tgdeferrable
+                      AND tginitdeferred
+                ) AS ok`,
+            );
+            const { rows: postedFn } = await pool.query<{ def: string | null }>(
+                `SELECT pg_get_functiondef(p.oid) AS def
+                 FROM pg_proc p
+                 WHERE p.proname = 'lot_write_down_posted_requires_journal'`,
+            );
+            const postedDef = postedFn[0]?.def ?? '';
+            const postedCastsId = postedDef.includes('CAST(rec.id AS TEXT)');
+            return increaseBlocked && nullJeNotAuthorization && deferred[0]?.ok === true && postedCastsId;
         }
         default:
             return true;

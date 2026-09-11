@@ -15,7 +15,7 @@
  */
 
 import type { Pool, PoolClient } from 'pg';
-import type Decimal from 'decimal.js';
+import Decimal from 'decimal.js';
 import NodeCache from 'node-cache';
 import { pool as globalPool } from '../../db/pool.js';
 import { Money } from '../../utils/money.js';
@@ -30,6 +30,8 @@ import * as pricingService from '../../services/pricingService.js';
 import * as repo from './pricingRepository.js';
 import { normalisePriceRule, normaliseProductCategory } from './pricingRepository.js';
 import {
+    previewFefoIssueCostForBaseQty,
+    previewFefoIssueLayers,
     resolveAtCostWithLayers,
     type ProductValuationForAtCost,
 } from './atCostIssuePrice.js';
@@ -89,6 +91,12 @@ export interface ResolvedPrice {
     discount: number;
     /** FIFO/FEFO segments when scope is at_cost (e.g. 1@20000 + 1@18000). */
     atCostLayers?: AtCostLayerPrice[];
+    /**
+     * FEFO/FIFO allocated carrying per base unit for the requested qty.
+     * POS walk-in floor after lot write-down. Independent of catalog cost_price.
+     */
+    allocatedCostPerBase?: number;
+    allocatedLayers?: AtCostLayerPrice[];
     appliedRule: {
         ruleId: string | null;
         ruleName: string | null;
@@ -98,11 +106,44 @@ export interface ResolvedPrice {
     };
 }
 
+/** Live FEFO carrying — not cached with selling price (write-down must be visible immediately). */
+async function attachAllocatedIssueCost(
+    pool: Pool | PoolClient,
+    productId: string,
+    baseQty: number,
+    price: ResolvedPrice,
+): Promise<ResolvedPrice> {
+    const qty = new Decimal(baseQty);
+    if (!qty.isFinite() || qty.lessThanOrEqualTo(0)) return price;
+    try {
+        const preview = await previewFefoIssueCostForBaseQty(pool, productId, qty);
+        const covered = preview?.coveredQty;
+        if (!covered || covered.lessThanOrEqualTo(0)) return price;
+        const allocatedCostPerBase = Money.toNumber(Money.round(preview.totalCost.dividedBy(covered), 2));
+        if (!(allocatedCostPerBase > 0)) return price;
+        let allocatedLayers = price.atCostLayers;
+        if (!allocatedLayers?.length) {
+            allocatedLayers = await previewFefoIssueLayers(pool, productId, qty);
+        }
+        return {
+            ...price,
+            allocatedCostPerBase,
+            allocatedLayers: allocatedLayers?.length ? allocatedLayers : undefined,
+        };
+    } catch (err) {
+        logger.debug('Allocated FEFO cost preview unavailable', {
+            productId,
+            error: err instanceof Error ? err.message : String(err),
+        });
+        return price;
+    }
+}
+
 // ============================================================================
 // CORE: getFinalPrice — single product price resolution
 // ============================================================================
 
-export async function getFinalPrice(
+async function resolveSellingPrice(
     productId: string,
     customerId: string | undefined,
     customerGroupId: string | undefined,
@@ -304,11 +345,31 @@ export async function getFinalPrice(
     return fallback;
 }
 
+export async function getFinalPrice(
+    productId: string,
+    customerId: string | undefined,
+    customerGroupId: string | undefined,
+    quantity: number = 1,
+    dbPool?: Pool | PoolClient,
+    baseQuantity?: number,
+): Promise<ResolvedPrice> {
+    const pool = dbPool || globalPool;
+    const price = await resolveSellingPrice(
+        productId,
+        customerId,
+        customerGroupId,
+        quantity,
+        dbPool,
+        baseQuantity,
+    );
+    return attachAllocatedIssueCost(pool, productId, baseQuantity ?? quantity, price);
+}
+
 // ============================================================================
 // BULK: getFinalPricesBulk — cart / order pricing (batched)
 // ============================================================================
 
-export async function getFinalPricesBulk(
+async function resolveSellingPricesBulk(
     items: Array<{ productId: string; quantity: number; baseQuantity?: number }>,
     customerId: string | undefined,
     customerGroupId: string | undefined,
@@ -544,6 +605,26 @@ export async function getFinalPricesBulk(
     }
 
     return results;
+}
+
+export async function getFinalPricesBulk(
+    items: Array<{ productId: string; quantity: number; baseQuantity?: number }>,
+    customerId: string | undefined,
+    customerGroupId: string | undefined,
+    dbPool?: Pool | PoolClient,
+): Promise<ResolvedPrice[]> {
+    const pool = dbPool || globalPool;
+    const selling = await resolveSellingPricesBulk(items, customerId, customerGroupId, dbPool);
+    return Promise.all(
+        items.map((item, i) =>
+            attachAllocatedIssueCost(
+                pool,
+                item.productId,
+                item.baseQuantity ?? item.quantity,
+                selling[i],
+            ),
+        ),
+    );
 }
 
 // ============================================================================

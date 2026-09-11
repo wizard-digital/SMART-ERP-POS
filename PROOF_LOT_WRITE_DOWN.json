@@ -1,0 +1,186 @@
+{
+  "proof": "LOT_WRITE_DOWN_NRV",
+  "passed": true,
+  "asOf": "2026-09-11T07:32:23.860Z",
+  "claims": [
+    "Still-sellable lots expiring within 60 days may be written down; original cost is preserved.",
+    "Carrying cost_price is the POS/FEFO/AT_COST floor; no till override.",
+    "Damaged/quarantined/calendar-expired/no-expiry cannot use write-down.",
+    "GL DR 5140 / CR 1300; qty unchanged; not 5110/5120/5130 disposal.",
+    "UI, API default, PDF fallback, and live window matrix all use LOT_WRITE_DOWN_MAX_DAYS (60).",
+    "POS walk-in selling price stays catalog; till floor is FEFO carrying after write-down (edit down to new carrying allowed).",
+    "Valuation SSOT is remaining qty × carrying; GL 1300 matches; COGS 5000 uses carrying not original; 5140 is separate P&L (no double-count)."
+  ],
+  "gates": [
+    {
+      "id": "SQL_ORIGINAL_COST",
+      "ok": true,
+      "detail": "original_cost_price on inventory_batches"
+    },
+    {
+      "id": "SQL_TRIGGER_INSERT_ONLY",
+      "ok": true,
+      "detail": "original set on insert only"
+    },
+    {
+      "id": "SQL_DOC",
+      "ok": true,
+      "detail": "NEAR_EXPIRY document"
+    },
+    {
+      "id": "SQL_5140",
+      "ok": true,
+      "detail": "5140 clearance markdown"
+    },
+    {
+      "id": "SQL_NO_QTY_CONSUME",
+      "ok": true,
+      "detail": "does not consume qty in SQL"
+    },
+    {
+      "id": "SQL_ORIGINAL_IMMUTABLE",
+      "ok": true,
+      "detail": "612 freezes original after insert"
+    },
+    {
+      "id": "SQL_613_NO_NULL_JE_AUTH",
+      "ok": true,
+      "detail": "613: decrease not authorized by NULL JE; increases forbidden; deferred journal required"
+    },
+    {
+      "id": "NO_HANDLER",
+      "ok": true,
+      "detail": "no SM consume path"
+    },
+    {
+      "id": "NO_CONSUME_LOT",
+      "ok": true,
+      "detail": "no lot consume"
+    },
+    {
+      "id": "NO_DISPOSAL_ACCOUNTS",
+      "ok": true,
+      "detail": "does not debit 5110-5130"
+    },
+    {
+      "id": "USES_5140",
+      "ok": true,
+      "detail": "5140"
+    },
+    {
+      "id": "UPDATES_CARRYING",
+      "ok": true,
+      "detail": "carrying only"
+    },
+    {
+      "id": "GL_INVENTORY_MOVE",
+      "ok": true,
+      "detail": "Rule H 1300 source"
+    },
+    {
+      "id": "REF_TYPE",
+      "ok": true,
+      "detail": "reference LOT_WRITE_DOWN"
+    },
+    {
+      "id": "FEFO_COST_PRICE",
+      "ok": true,
+      "detail": "FEFO reads batch cost_price"
+    },
+    {
+      "id": "BELOW_COST_HARD",
+      "ok": true,
+      "detail": "till has no write-down bypass"
+    },
+    {
+      "id": "BAND_SSOT",
+      "ok": true,
+      "detail": "write-down 1–60 days; Critical KPI stays ≤7d"
+    },
+    {
+      "id": "CRITICAL_OK",
+      "ok": true,
+      "detail": "2 × 400 markdown"
+    },
+    {
+      "id": "SIXTY_OK",
+      "ok": true,
+      "detail": "day 60 still eligible"
+    },
+    {
+      "id": "SIXTY_ONE_BLOCK",
+      "ok": true,
+      "detail": "day 61 blocked"
+    },
+    {
+      "id": "QUARANTINE_BLOCK",
+      "ok": true,
+      "detail": "quarantined blocked"
+    },
+    {
+      "id": "EXPIRED_BLOCK",
+      "ok": true,
+      "detail": "calendar expired blocked"
+    },
+    {
+      "id": "NO_EXPIRY_BLOCK",
+      "ok": true,
+      "detail": "no expiry (in-transit damage path) blocked"
+    },
+    {
+      "id": "UI_WRITE_DOWN",
+      "ok": true,
+      "detail": "write-down on Expiring Items"
+    },
+    {
+      "id": "UI_CLEARANCE_NAME",
+      "ok": true,
+      "detail": "named clearance markdown not below-cost sale"
+    },
+    {
+      "id": "UI_60_DAY_WINDOW",
+      "ok": true,
+      "detail": "UI uses 60-day write-down SSOT"
+    },
+    {
+      "id": "UI_QUARANTINE_EXPIRED",
+      "ok": true,
+      "detail": "quarantine still expired-only"
+    },
+    {
+      "id": "EXPENSE_ACCOUNT",
+      "ok": true,
+      "detail": "5140 constant"
+    },
+    {
+      "id": "SSOT_ZOD_HORIZON",
+      "ok": true,
+      "detail": "Expiring Items API default = LOT_WRITE_DOWN_MAX_DAYS"
+    },
+    {
+      "id": "SSOT_PDF_FALLBACK",
+      "ok": true,
+      "detail": "PDF days fallback = LOT_WRITE_DOWN_MAX_DAYS"
+    },
+    {
+      "id": "SSOT_REJECT_MSG",
+      "ok": true,
+      "detail": "reject copy uses LOT_WRITE_DOWN_MAX_DAYS"
+    },
+    {
+      "id": "SSOT_LIVE_MATRIX",
+      "ok": true,
+      "detail": "live proof measures 1/7/8/20/30/45/60 + report horizon + POS 10000/3000 SQL + P&L/valuation identity"
+    },
+    {
+      "id": "SSOT_ENGINE_ALLOCATED",
+      "ok": true,
+      "detail": "pricing engine attaches live FEFO carrying on every resolved price"
+    },
+    {
+      "id": "SSOT_POS_ALLOCATED_FLOOR",
+      "ok": true,
+      "detail": "POS walk-in syncs cart cost floor from allocated FEFO carrying"
+    }
+  ]
+}

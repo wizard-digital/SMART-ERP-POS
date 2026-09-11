@@ -56,4 +56,47 @@ describe('assertSaleLineNotBelowAllocatedCost', () => {
       expect((e as BusinessError).message).toContain('below actual inventory cost');
     }
   });
+
+  it('allows 0.01 tolerance at carrying 6000 (5999.99) and rejects 5999.98', () => {
+    expect(() =>
+      assertSaleLineNotBelowAllocatedCost({
+        productId: 'p1',
+        quantity: 1,
+        lineRevenue: 6000.01,
+        totalAllocatedCost: 6000,
+        costPerSellingUnit: 6000,
+        unitPrice: 6000.01,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertSaleLineNotBelowAllocatedCost({
+        productId: 'p1',
+        quantity: 1,
+        lineRevenue: 6000,
+        totalAllocatedCost: 6000,
+        costPerSellingUnit: 6000,
+        unitPrice: 6000,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertSaleLineNotBelowAllocatedCost({
+        productId: 'p1',
+        quantity: 1,
+        lineRevenue: 5999.99,
+        totalAllocatedCost: 6000,
+        costPerSellingUnit: 6000,
+        unitPrice: 5999.99,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertSaleLineNotBelowAllocatedCost({
+        productId: 'p1',
+        quantity: 1,
+        lineRevenue: 5999.98,
+        totalAllocatedCost: 6000,
+        costPerSellingUnit: 6000,
+        unitPrice: 5999.98,
+      }),
+    ).toThrow(BusinessError);
+  });
 });

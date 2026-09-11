@@ -19,6 +19,7 @@ jest.unstable_mockModule('./atCostIssuePrice.js', () => ({
     resolveAtCostWithLayers: mockResolveAtCostWithLayers,
     resolveAtCostPerBaseUnit: jest.fn<MockFn>(),
     previewFefoIssueCostForBaseQty: jest.fn<MockFn>(),
+    previewFefoIssueLayers: jest.fn<MockFn>(),
 }));
 
 jest.unstable_mockModule('./pricingRepository.js', () => ({

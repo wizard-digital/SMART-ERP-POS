@@ -241,3 +241,35 @@ export function buildAtCostBlendedCartLine(
     unitPriceManuallySet: template.unitPriceManuallySet,
   };
 }
+
+/**
+ * Walk-in / retail: keep catalog (or manual) selling price; set cost floor to FEFO carrying.
+ * AT_COST: selling price and cost are the issue price.
+ */
+export function applyAllocatedCarryingToCartLine<
+  T extends {
+    unitPrice: number;
+    costPrice: number;
+    quantity: number;
+    discount?: PosCartLineDiscount;
+  },
+>(
+  line: T,
+  allocatedCostPerSellingUnit: number | null | undefined,
+): T {
+  if (
+    allocatedCostPerSellingUnit == null ||
+    !Number.isFinite(allocatedCostPerSellingUnit) ||
+    allocatedCostPerSellingUnit <= 0
+  ) {
+    return line;
+  }
+  const costPrice = new Decimal(allocatedCostPerSellingUnit).toDecimalPlaces(2).toNumber();
+  const recalc = recalcPosCartLineFields({
+    quantity: line.quantity,
+    unitPrice: line.unitPrice,
+    costPrice,
+    discount: line.discount,
+  });
+  return { ...line, ...recalc, costPrice };
+}

@@ -56,6 +56,7 @@ import {
 import { buildPosOrderLinePayload } from '../../utils/posOrderLinePayload';
 import {
   atCostCartGroupNeedsUpdate,
+  applyAllocatedCarryingToCartLine,
   buildAtCostBlendedCartLine,
   buildAtCostSplitCartLines,
   canSplitAtCostLayersToSellingUom,
@@ -985,13 +986,11 @@ export default function POSPage() {
     return [...groups.entries()].map(([k, q]) => `${k}:${q}`).join(',');
   }, [items]);
 
-  // ========== PRICING ENGINE: Reprice cart when customer changes ==========
-  // REGRESSION: AT_COST_FIFO_INTEGRITY.md — baseQuantity, layer split, costPrice sync
-  // When a customer is selected/changed, resolve prices through the engine
-  // (tiers, price rules, group discounts) and update cart item prices.
-  // Also re-resolves when items change (new item added or quantity updated).
+  // ========== PRICING ENGINE: Reprice cart when customer or lines change ==========
+  // Walk-in included: allocatedCostPerBase is the FEFO carrying floor after lot write-down.
+  // Manual unit prices are kept; cost floor still syncs.
   useEffect(() => {
-    if (items.length === 0 || !selectedCustomer?.id) return;
+    if (items.length === 0) return;
 
     const repriceCart = async () => {
       const regularItems = items.filter((it) => !it.id.startsWith('custom_'));
@@ -1003,15 +1002,16 @@ export default function POSPage() {
         selectedUomId?: string;
         totalQty: number;
         template: LineItem;
+        hasManualUnitPrice: boolean;
       };
 
       const groups = new Map<string, PricingGroup>();
       for (const item of regularItems) {
-        if (item.unitPriceManuallySet) continue;
         const key = posCartGroupKey(item.id, item.selectedUomId);
         const existing = groups.get(key);
         if (existing) {
           existing.totalQty += item.quantity;
+          existing.hasManualUnitPrice = existing.hasManualUnitPrice || !!item.unitPriceManuallySet;
         } else {
           groups.set(key, {
             key,
@@ -1019,6 +1019,7 @@ export default function POSPage() {
             selectedUomId: item.selectedUomId,
             totalQty: item.quantity,
             template: item,
+            hasManualUnitPrice: !!item.unitPriceManuallySet,
           });
         }
       }
@@ -1043,9 +1044,7 @@ export default function POSPage() {
 
         setItems((prev) => {
           let changed = false;
-          const manualOrCustom = prev.filter(
-            (i) => i.id.startsWith('custom_') || i.unitPriceManuallySet,
-          );
+          const customOnly = prev.filter((i) => i.id.startsWith('custom_'));
           const repriced: LineItem[] = [];
 
           const groupList = [...groups.values()];
@@ -1056,7 +1055,6 @@ export default function POSPage() {
                 .filter(
                   (i) =>
                     !i.id.startsWith('custom_') &&
-                    !i.unitPriceManuallySet &&
                     posCartGroupKey(i.id, i.selectedUomId) === group.key,
                 )
                 .forEach((i) => repriced.push(i));
@@ -1077,10 +1075,18 @@ export default function POSPage() {
               group.template.availableUoms,
               group.selectedUomId,
             );
+            const allocatedSelling =
+              price.allocatedCostPerBase != null && price.allocatedCostPerBase > 0
+                ? scaleEngineBasePriceToSellingUom(
+                    price.allocatedCostPerBase,
+                    group.template.availableUoms,
+                    group.selectedUomId,
+                  )
+                : null;
             const isAtCostRule = price.appliedRule.scope === 'at_cost';
             const isAtCostIssuePrice =
               isAtCostRule || selectedCustomer?.pricingMode === 'AT_COST';
-            const layers = (price.atCostLayers ?? []) as AtCostLayerSegment[];
+            const layers = (price.atCostLayers ?? price.allocatedLayers ?? []) as AtCostLayerSegment[];
             const pricingRule =
               price.appliedRule.scope !== 'base'
                 ? {
@@ -1094,12 +1100,19 @@ export default function POSPage() {
             const oldLines = prev.filter(
               (i) =>
                 !i.id.startsWith('custom_') &&
-                !i.unitPriceManuallySet &&
                 posCartGroupKey(i.id, i.selectedUomId) === group.key,
             );
 
+            const sellingUnitPrice =
+              isAtCostIssuePrice
+                ? scaledFinalPrice
+                : group.hasManualUnitPrice
+                  ? group.template.unitPrice
+                  : scaledFinalPrice;
+
             if (
               isAtCostRule &&
+              !group.hasManualUnitPrice &&
               mustSplitAtCostFifoLayers(layers, group.totalQty, scaledFinalPrice) &&
               canSplitAtCostLayersToSellingUom(layers, factor)
             ) {
@@ -1116,22 +1129,25 @@ export default function POSPage() {
             const blended = buildAtCostBlendedCartLine(
               group.template,
               group.totalQty,
-              scaledFinalPrice,
+              sellingUnitPrice,
               layers,
               pricingRule,
               isAtCostIssuePrice,
             ) as LineItem;
+            const withCost = applyAllocatedCarryingToCartLine(blended, allocatedSelling);
             const withLayers: LineItem = {
-              ...blended,
+              ...withCost,
               atCostLayers:
                 isAtCostRule && layers.length > 1 ? layers : undefined,
+              unitPriceManuallySet: group.hasManualUnitPrice,
             };
             if (atCostCartGroupNeedsUpdate(oldLines, [withLayers], isAtCostRule)) changed = true;
+            if (Math.abs(withLayers.costPrice - (oldLines[0]?.costPrice ?? -1)) > 0.009) changed = true;
             repriced.push(withLayers);
           });
 
           if (!changed) return prev;
-          return [...manualOrCustom, ...repriced];
+          return [...customOnly, ...repriced];
         });
       } catch (err) {
         console.warn('Pricing engine bulk resolution failed, keeping current prices', err);
@@ -1512,7 +1528,8 @@ export default function POSPage() {
         // For AT_COST customers, always start at the UoM's cost price — no async reprice flash.
         // The pricing engine will confirm the same value on the next repriceCart run.
         const isAtCost = selectedCustomer?.pricingMode === 'AT_COST';
-        // Catalog uom.cost ≠ FEFO AT_COST — repriceCart sets FEFO on both unitPrice and costPrice.
+        // Catalog uom.cost ≠ FEFO carrying after write-down. Walk-in keeps catalog selling
+        // price; repriceCart sets costPrice from allocatedCostPerBase. AT_COST also reprices selling.
         const effectiveUnitPrice = uom.price;
         const lineCost = isAtCost ? uom.price : uom.cost;
 
@@ -2426,7 +2443,7 @@ export default function POSPage() {
 
     if (!options?.silent && belowCost) {
       toast.error(
-        `"${productName}": price is below catalog cost for this UoM. Sale will be blocked (server uses actual batch cost).`,
+        `"${productName}": price is below allocated batch cost. Sale will be blocked.`,
         { duration: 6000 },
       );
     }

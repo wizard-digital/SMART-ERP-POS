@@ -11,7 +11,6 @@ import { ValidationError, NotFoundError } from '../../middleware/errorHandler.js
 import { getBusinessYear, getBusinessDate } from '../../utils/dateRange.js';
 import { StockMovementHandler } from '../inventory/stockMovementHandler.js';
 import { storeLocationRepository } from '../inventory/warehouse/storeLocationRepository.js';
-import { warehouseInventoryRepository } from '../inventory/warehouse/warehouseInventoryRepository.js';
 import { productLotRepository } from '../inventory/warehouse/productLotRepository.js';
 import { isMultistoreEnabled } from '../inventory/warehouse/multistoreSettings.js';
 import { alignBatchSubledgerToStoreBalances } from '../../services/warehouseInventoryCoupling.js';
@@ -58,6 +57,19 @@ function rethrowInvariant(err: unknown): never {
     throw new ValidationError(err.message);
   }
   throw err;
+}
+
+function resolveDisposalCarryingUnitCost(batchCarrying: number, supplied?: number): number {
+  const carrying = Number(batchCarrying);
+  if (!Number.isFinite(carrying) || carrying <= 0) {
+    throw new ValidationError('Disposal requires a positive batch carrying cost');
+  }
+  if (supplied != null && supplied > 0 && Math.abs(supplied - carrying) > 0.01) {
+    throw new ValidationError(
+      `Disposal must use remaining carrying cost ${carrying}; caller supplied ${supplied}. Original acquisition cost is not used after a write-down.`,
+    );
+  }
+  return carrying;
 }
 
 async function nextDocumentNumber(client: PoolClient): Promise<string> {
@@ -159,25 +171,19 @@ export async function disposeFromQuarantine(
       fromStoreType: store.storeType,
     });
 
-    let unitCost = input.unitCost;
-    if (!unitCost || unitCost <= 0) {
-      const costRow = await client.query(
-        `SELECT cost_price FROM inventory_batches WHERE id = $1`,
-        [batchId],
-      );
-      unitCost = Number(costRow.rows[0]?.cost_price ?? 0);
-    }
+    const costRow = await client.query<{ cost_price: string }>(
+      `SELECT cost_price FROM inventory_batches WHERE id = $1`,
+      [batchId],
+    );
+    const unitCost = resolveDisposalCarryingUnitCost(
+      Number(costRow.rows[0]?.cost_price),
+      input.unitCost,
+    );
 
     await alignBatchSubledgerToStoreBalances(client, input.productId);
 
-    // Reduce quarantine store balance first (same pattern as WRITE_OFF)
-    await warehouseInventoryRepository.adjustSellableQuantity(client, {
-      storeLocationId: input.storeLocationId!,
-      productLotId: input.productLotId,
-      productId: input.productId,
-      quantity: input.quantity,
-      direction: 'OUT',
-    });
+    // Qty dual-write owned by StockMovementHandler → consumeLot(sourceStore).
+    // Do not pre-adjust balances (double-decrement / silent INV-002 risk).
 
     const documentNumber = await nextDocumentNumber(client);
     const docIns = await client.query<{ id: string }>(
@@ -213,6 +219,7 @@ export async function disposeFromQuarantine(
         movementType,
         quantity: input.quantity,
         unitCost,
+        sourceStoreLocationId: input.storeLocationId!,
         referenceType: 'LOSS_DISPOSAL',
         referenceId: documentId,
         reason: `${reason}: ${input.memo ?? 'quarantine disposal'} [${store.code}]`,
@@ -336,41 +343,10 @@ async function disposeSoftQuarantine(
     const expenseAccountCode = expenseAccountForDisposal({ reason, fromStoreType });
     const movementType = movementTypeForDisposal({ reason, fromStoreType });
 
-    let unitCost = input.unitCost;
-    if (!unitCost || unitCost <= 0) {
-      unitCost = Number(row.cost_price);
-    }
+    const unitCost = resolveDisposalCarryingUnitCost(Number(row.cost_price), input.unitCost);
 
-    // Reduce store balances for every product_lot on this batch (single-store may still have MAIN rows).
-    const bals = await client.query<{
-      store_location_id: string;
-      product_lot_id: string;
-      qty: string;
-    }>(
-      `SELECT b.store_location_id,
-              b.product_lot_id,
-              GREATEST(b.quantity_on_hand - b.quantity_reserved - b.quantity_committed, 0)::text AS qty
-       FROM inventory_balances b
-       INNER JOIN product_lots pl ON pl.id = b.product_lot_id
-       WHERE pl.inventory_batch_id = $1
-       FOR UPDATE OF b`,
-      [batchId],
-    );
-    let left = input.quantity;
-    for (const b of bals.rows) {
-      if (left <= 0.0001) break;
-      const avail = Number(b.qty);
-      if (avail <= 0.0001) continue;
-      const take = Math.min(left, avail);
-      await warehouseInventoryRepository.adjustSellableQuantity(client, {
-        storeLocationId: b.store_location_id,
-        productLotId: b.product_lot_id,
-        productId: input.productId,
-        quantity: take,
-        direction: 'OUT',
-      });
-      left -= take;
-    }
+    // Qty dual-write owned by StockMovementHandler → consumeLot (cross-store deduct).
+    // Do not pre-adjust balances (double-decrement / silent INV-002 risk).
 
     const documentNumber = await nextDocumentNumber(client);
     const docIns = await client.query<{ id: string }>(

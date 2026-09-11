@@ -67,8 +67,8 @@ export function isPosAtCostLine(
 }
 
 /**
- * Floor for client validation.
- * AT_COST: ignore stale catalog uom.cost until engine sync (costPrice ≈ unitPrice).
+ * Floor for client validation — must match server FEFO allocated carrying
+ * (lot write-down lowers this; catalog product cost_price is not the till floor).
  */
 export function getPosLineMinUnitPrice(
   item: { unitPrice: number; costPrice: number; pricingRule?: { scope?: string } },

@@ -565,7 +565,9 @@ export const lotService: ILotService = {
     const productPolicy = await fetchProductLotPolicy(db, input.productId);
     const minDays = input.minDaysBeforeExpiry ?? 0;
     const multistore = await isMultistoreEnabled(db);
-    const useStore = multistore && Boolean(input.storeLocationId);
+    // INV-002: multistore consume must dual-write balances unless caller explicitly skips.
+    const skipBalanceDeduction = input.skipStoreBalanceDeduction === true;
+    const useStore = multistore && !skipBalanceDeduction && Boolean(input.storeLocationId);
     if (useStore && !input.allowDisposalStatuses) {
       const storeRes = await db.query<{ store_type: string }>(
         `SELECT store_type FROM store_locations WHERE id = $1`,
@@ -586,11 +588,14 @@ export const lotService: ILotService = {
     if (input.allowDisposalStatuses && !input.specificLotId) {
       throw new ValidationError('Disposal consume requires specificLotId');
     }
+    // Default dual-write: specific-lot consume without a store deducts across all store balances.
+    // Opt out only via skipStoreBalanceDeduction (or explicit deductAcrossAllStoreBalances: false).
     const crossStoreDeduct = Boolean(
       multistore
-      && input.deductAcrossAllStoreBalances
+      && !skipBalanceDeduction
       && input.specificLotId
-      && !input.storeLocationId,
+      && !input.storeLocationId
+      && input.deductAcrossAllStoreBalances !== false,
     );
 
     const policy = input.selectionPolicy

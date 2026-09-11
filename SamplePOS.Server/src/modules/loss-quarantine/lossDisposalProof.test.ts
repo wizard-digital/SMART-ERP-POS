@@ -80,7 +80,9 @@ describe('Loss disposal posting (Phase 2C)', () => {
     expect(svc).toContain('reverseDisposal');
     expect(svc).toContain('allowDisposalStatuses');
     expect(svc).toMatch(/Prefer inventoryBatchId from the aging line/);
-    expect(svc).toMatch(/pl\.inventory_batch_id = \$1/);
+    // INV-002: disposal qty dual-write via processMovement → consumeLot (no pre-adjust balances)
+    expect(svc).toContain('sourceStoreLocationId');
+    expect(svc).toMatch(/Qty dual-write owned by StockMovementHandler/);
   });
 
   it('lot selector skips expiry filter when disposing calendar-expired batches', () => {

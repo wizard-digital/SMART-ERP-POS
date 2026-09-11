@@ -84,9 +84,16 @@ export interface LotConsumeInput {
   syncProduct?: boolean;
   /**
    * With specificLotId + MANUAL in multistore: deduct warehouse balances across all stores
-   * (supplier return path). Requires recordMovement/syncProduct false when caller owns side effects.
+   * (supplier return / StockMovementHandler when no source store).
+   * Default when multistore + specificLotId + no storeLocationId: true (INV-002 dual-write).
+   * Set false only with skipStoreBalanceDeduction when caller already adjusted balances.
    */
   deductAcrossAllStoreBalances?: boolean;
+  /**
+   * Caller already mutated inventory_balances for this consume (legacy split write).
+   * When true, only the batch master is decremented — do not use on new paths.
+   */
+  skipStoreBalanceDeduction?: boolean;
   /**
    * ADR-004 Phase 2C: dispose from quarantine — allow QUARANTINED/EXPIRED lots and
    * DAMAGE/EXPIRED/RETURN store balances (never for POS sale).

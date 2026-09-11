@@ -927,6 +927,7 @@ export const reportsRepository = {
         b.batch_number,
         b.expiry_date,
         b.cost_price as unit_cost,
+        COALESCE(b.original_cost_price, b.cost_price) as original_unit_cost,
         b.remaining_quantity as quantity_remaining
       FROM inventory_batches b
       INNER JOIN products p ON p.id = b.product_id
@@ -943,6 +944,7 @@ export const reportsRepository = {
     return result.rows.map((row) => {
       const quantityRemaining = new Decimal(row.quantity_remaining);
       const unitCost = new Decimal(row.unit_cost || 0);
+      const originalUnitCost = new Decimal(row.original_unit_cost || row.unit_cost || 0);
       const potentialLoss = quantityRemaining.times(unitCost);
       const daysUntilExpiry = computeDaysUntilExpiry(row.expiry_date) ?? 0;
 
@@ -956,6 +958,7 @@ export const reportsRepository = {
         daysUntilExpiry,
         quantityRemaining: quantityRemaining.toDecimalPlaces(3).toNumber(),
         unitCost: unitCost.toDecimalPlaces(2).toNumber(),
+        originalUnitCost: originalUnitCost.toDecimalPlaces(2).toNumber(),
         potentialLoss: potentialLoss.toDecimalPlaces(2).toNumber(),
         urgency: classifyExpiryUrgency(daysUntilExpiry),
       };

@@ -1,0 +1,1124 @@
+{
+  "proof": "FORENSIC_LWD_611_612",
+  "asOf": "2026-09-11T05:41:00.583Z",
+  "sku": "FORLWD-20260911054055",
+  "rows": [
+    {
+      "id": "MIG_611_613_RUNNER",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "applied=already-current reapplied613=false",
+      "evidence": {
+        "applied": {
+          "applied": [],
+          "reapplied613": false
+        }
+      }
+    },
+    {
+      "id": "SCHEMA_TRIGGER",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "triggers=trg_inventory_batches_carrying_write_down",
+      "evidence": {
+        "catalog": [
+          {
+            "tgname": "trg_inventory_batches_carrying_write_down",
+            "def": "CREATE TRIGGER trg_inventory_batches_carrying_write_down BEFORE INSERT OR UPDATE ON public.inventory_batches FOR EACH ROW EXECUTE FUNCTION inventory_batches_carrying_write_down_guard()"
+          }
+        ]
+      }
+    },
+    {
+      "id": "SCHEMA_FN",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "function body loaded from pg_proc",
+      "evidence": {
+        "def": "CREATE OR REPLACE FUNCTION public.inventory_batches_carrying_write_down_guard()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\r\nBEGIN\r\n  IF TG_OP = 'INSERT' THEN\r\n    NEW.original_cost_price := NEW.cost_price;\r\n    RETURN NEW;\r\n  END IF;\r\n\r\n  IF NEW.original_cost_price IS DISTINCT FROM OLD.original_cost_price THEN\r\n    RAISE EXCEPTION 'original_cost_price is immutable after lot creation'\r\n      USING ERRCODE = 'integrity_constraint_violation';\r\n  END IF;\r\n\r\n  IF NEW.cost_price IS DISTINCT FROM OLD.cost_price\r\n     AND NEW.cost_price > OLD.cost_price + 0.0000005 THEN\r\n    RAISE EXCEPTION 'inventory_batches.cost_price cannot increase after lot creation'\r\n      USING ERRCODE = 'integrity_constraint_violation';\r\n  END IF;\r\n\r\n  IF NEW.cost_price IS DISTINCT FROM OLD.cost_price\r\n     AND NEW.c"
+      }
+    },
+    {
+      "id": "SCHEMA_DEFERRED_JE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "POSTED documents require deferred journal constraint trigger",
+      "evidence": {
+        "deferred": {
+          "ok": true
+        }
+      }
+    },
+    {
+      "id": "SCHEMA_DOC_CHECKS",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "constraints=chk_lot_write_down_new_below_previous,chk_lot_write_down_new_positive,chk_lot_write_down_qty_positive,lot_write_down_documents_created_by_fkey,lot_write_down_documents_inventory_batch_id_fkey,lot_write_down_documents_pkey,lot_write_down_documents_product_id_fkey,lot_write_down_documents_reason_check,lot_write_down_documents_reversed_by_document_id_fkey,lot_write_down_documents_reverses_document_id_fkey,lot_write_down_documents_status_check,trg_lot_write_down_posted_journal,uq_lot_write_down_documents_number",
+      "evidence": {
+        "chk": [
+          {
+            "conname": "chk_lot_write_down_new_below_previous",
+            "def": "CHECK ((new_carrying_unit_cost < previous_carrying_unit_cost))"
+          },
+          {
+            "conname": "chk_lot_write_down_new_positive",
+            "def": "CHECK ((new_carrying_unit_cost >= 0.01))"
+          },
+          {
+            "conname": "chk_lot_write_down_qty_positive",
+            "def": "CHECK ((quantity > (0)::numeric))"
+          },
+          {
+            "conname": "lot_write_down_documents_created_by_fkey",
+            "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+          },
+          {
+            "conname": "lot_write_down_documents_inventory_batch_id_fkey",
+            "def": "FOREIGN KEY (inventory_batch_id) REFERENCES inventory_batches(id)"
+          },
+          {
+            "conname": "lot_write_down_documents_pkey",
+            "def": "PRIMARY KEY (id)"
+          },
+          {
+            "conname": "lot_write_down_documents_product_id_fkey",
+            "def": "FOREIGN KEY (product_id) REFERENCES products(id)"
+          },
+          {
+            "conname": "lot_write_down_documents_reason_check",
+            "def": "CHECK (((reason)::text = 'NEAR_EXPIRY'::text))"
+          },
+          {
+            "conname": "lot_write_down_documents_reversed_by_document_id_fkey",
+            "def": "FOREIGN KEY (reversed_by_document_id) REFERENCES lot_write_down_documents(id)"
+          },
+          {
+            "conname": "lot_write_down_documents_reverses_document_id_fkey",
+            "def": "FOREIGN KEY (reverses_document_id) REFERENCES lot_write_down_documents(id)"
+          },
+          {
+            "conname": "lot_write_down_documents_status_check",
+            "def": "CHECK (((status)::text = ANY ((ARRAY['DRAFT'::character varying, 'POSTED'::character varying, 'REVERSED'::character varying, 'CANCELLED'::character varying])::text[])))"
+          },
+          {
+            "conname": "trg_lot_write_down_posted_journal",
+            "def": "TRIGGER DEFERRABLE INITIALLY DEFERRED"
+          },
+          {
+            "conname": "uq_lot_write_down_documents_number",
+            "def": "UNIQUE (document_number)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "SCHEMA_TENANT_COL",
+      "ok": true,
+      "result": "UNPROVEN",
+      "detail": "inventory_batches has no tenant_id column (isolation depends on separate tenant DBs, not row ACL)",
+      "evidence": {
+        "tenantCol": []
+      }
+    },
+    {
+      "id": "INSERT_ORIGINAL",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "INSERT established original=10000.000000 carrying=10000.00",
+      "evidence": {
+        "afterIns": {
+          "id": "5e34948b-8338-498a-92f3-36ca87b3d93f",
+          "cost_price": "10000.00",
+          "original_cost_price": "10000.000000"
+        }
+      }
+    },
+    {
+      "id": "SQL_ORIGINAL_IMMUTABLE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "original_cost_price is immutable after lot creation",
+      "evidence": {
+        "sql": "UPDATE inventory_batches SET original_cost_price = 1",
+        "error": "original_cost_price is immutable after lot creation",
+        "remaining": {
+          "original_cost_price": "10000.000000"
+        }
+      }
+    },
+    {
+      "id": "SQL_ORIGINAL_BULK",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "original_cost_price is immutable after lot creation",
+      "evidence": {
+        "error": "original_cost_price is immutable after lot creation"
+      }
+    },
+    {
+      "id": "SQL_COST_NO_DOC",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "inventory_batches.cost_price may decrease only via a posted lot write-down document",
+      "evidence": {
+        "error": "inventory_batches.cost_price may decrease only via a posted lot write-down document",
+        "remaining": {
+          "cost_price": "10000.00"
+        }
+      }
+    },
+    {
+      "id": "SQL_COST_INCREASE_UNGOVERNED",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "inventory_batches.cost_price cannot increase after lot creation",
+      "evidence": {
+        "error": "inventory_batches.cost_price cannot increase after lot creation"
+      }
+    },
+    {
+      "id": "SQL_COST_INCREASE_BULK",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "inventory_batches.cost_price cannot increase after lot creation",
+      "evidence": {
+        "error": "inventory_batches.cost_price cannot increase after lot creation"
+      }
+    },
+    {
+      "id": "SQL_FORGED_POSTED_NULL_JE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "POSTED lot write-down requires a posted journal",
+      "evidence": {
+        "error": "POSTED lot write-down requires a posted journal",
+        "docs": {
+          "n": 0
+        }
+      }
+    },
+    {
+      "id": "SQL_FORGE_TX_COST_DROP",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "carrying=10000.00 qty=10.0000 docs=0 err=POSTED lot write-down requires a posted journal",
+      "evidence": {
+        "before": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        },
+        "after": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        }
+      }
+    },
+    {
+      "id": "SQL_OTHER_LOT_DOC",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "inventory_batches.cost_price may decrease only via a posted lot write-down document",
+      "evidence": {
+        "error": "inventory_batches.cost_price may decrease only via a posted lot write-down document"
+      }
+    },
+    {
+      "id": "SQL_AMOUNT_MISMATCH",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "inventory_batches.cost_price may decrease only via a posted lot write-down document",
+      "evidence": {
+        "error": "inventory_batches.cost_price may decrease only via a posted lot write-down document"
+      }
+    },
+    {
+      "id": "SQL_DRAFT_DOC",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "inventory_batches.cost_price may decrease only via a posted lot write-down document",
+      "evidence": {
+        "error": "inventory_batches.cost_price may decrease only via a posted lot write-down document"
+      }
+    },
+    {
+      "id": "SQL_FLOOR_CHECK",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "new row for relation \"lot_write_down_documents\" violates check constraint \"chk_lot_write_down_new_positive\"",
+      "evidence": {
+        "error": "new row for relation \"lot_write_down_documents\" violates check constraint \"chk_lot_write_down_new_positive\""
+      }
+    },
+    {
+      "id": "SQL_FLOOR_009",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "new row for relation \"lot_write_down_documents\" violates check constraint \"chk_lot_write_down_new_positive\"",
+      "evidence": {
+        "error": "new row for relation \"lot_write_down_documents\" violates check constraint \"chk_lot_write_down_new_positive\""
+      }
+    },
+    {
+      "id": "SQL_ROLLBACK_ATOMIC",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "after rollback carrying=10000.00 (was 10000.00)",
+      "evidence": {
+        "before": {
+          "cost_price": "10000.00"
+        },
+        "after": {
+          "cost_price": "10000.00"
+        }
+      }
+    },
+    {
+      "id": "SVC_FIRST_WD",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "batch original=10000.000000 carrying=6000.00 qty=10.0000 DR5140=40000 CR1300=40000",
+      "evidence": {
+        "batch": {
+          "remaining_quantity": "10.0000",
+          "cost_price": "6000.00",
+          "original_cost_price": "10000.000000",
+          "status": "ACTIVE"
+        },
+        "journal": [
+          {
+            "account": "5140",
+            "debit": "40000.000000",
+            "credit": "0.000000",
+            "status": "POSTED",
+            "ref": "LOT_WRITE_DOWN",
+            "src": "INVENTORY_MOVE"
+          },
+          {
+            "account": "1300",
+            "debit": "0.000000",
+            "credit": "40000.000000",
+            "status": "POSTED",
+            "ref": "LOT_WRITE_DOWN",
+            "src": "INVENTORY_MOVE"
+          }
+        ],
+        "service": {
+          "documentId": "e19dc8dd-eab5-4e95-87a1-6327cf72e18e",
+          "documentNumber": "LWD-2026-00117",
+          "inventoryBatchId": "5e34948b-8338-498a-92f3-36ca87b3d93f",
+          "productId": "cda8cd13-7718-4880-b46a-72cb426b6b18",
+          "quantity": 10,
+          "originalUnitCost": 10000,
+          "previousCarryingUnitCost": 10000,
+          "newCarryingUnitCost": 6000,
+          "totalAmount": 40000,
+          "expenseAccountCode": "5140",
+          "journalEntryId": "694d4d96-2519-4ace-8111-6137e8b66927",
+          "remainingQuantity": 10
+        }
+      }
+    },
+    {
+      "id": "SVC_SECOND_WD",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "second carrying=3000.00 original=10000.000000 DR5140=30000",
+      "evidence": {
+        "batch": {
+          "remaining_quantity": "10.0000",
+          "cost_price": "3000.00",
+          "original_cost_price": "10000.000000"
+        },
+        "journal": [
+          {
+            "account": "5140",
+            "debit": "30000.000000",
+            "credit": "0.000000"
+          },
+          {
+            "account": "1300",
+            "debit": "0.000000",
+            "credit": "30000.000000"
+          }
+        ]
+      }
+    },
+    {
+      "id": "SQL_AFTER_POSTED_JE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "inventory_batches.cost_price may decrease only via a posted lot write-down document",
+      "evidence": {
+        "error": "inventory_batches.cost_price may decrease only via a posted lot write-down document"
+      }
+    },
+    {
+      "id": "IDEMPOTENT_SAME_COST",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_NOT_BELOW_CARRYING",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_NOT_BELOW_CARRYING"
+      }
+    },
+    {
+      "id": "SVC_FLOOR_0001",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_BELOW_FLOOR",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_BELOW_FLOOR"
+      }
+    },
+    {
+      "id": "SVC_FLOOR_ZERO",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_INVALID_NEW_COST",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_INVALID_NEW_COST"
+      }
+    },
+    {
+      "id": "SVC_FLOOR_NEG",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_INVALID_NEW_COST",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_INVALID_NEW_COST"
+      }
+    },
+    {
+      "id": "SVC_FLOOR_001_OK",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "new=0.01 amount=99999.9",
+      "evidence": {
+        "wdFloorOk": {
+          "documentId": "3d3c5d9e-cd0d-42e5-8f3c-5e9d8dd65cd0",
+          "documentNumber": "LWD-2026-00119",
+          "inventoryBatchId": "c1b4c3cb-2f8b-4a3d-9673-ddcc641ab4ec",
+          "productId": "cda8cd13-7718-4880-b46a-72cb426b6b18",
+          "quantity": 10,
+          "originalUnitCost": 10000,
+          "previousCarryingUnitCost": 10000,
+          "newCarryingUnitCost": 0.01,
+          "totalAmount": 99999.9,
+          "expenseAccountCode": "5140",
+          "journalEntryId": "1e1dab61-7cd7-4ba3-95e9-b88073a7c07b",
+          "remainingQuantity": 10
+        }
+      }
+    },
+    {
+      "id": "ELIG_EXPIRED",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_EXPIRED clean=true",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_EXPIRED",
+        "before": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        },
+        "after": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        }
+      }
+    },
+    {
+      "id": "ELIG_QUARANTINE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_NOT_ACTIVE clean=true",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_NOT_ACTIVE",
+        "before": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        },
+        "after": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        }
+      }
+    },
+    {
+      "id": "ELIG_MISSING",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "Inventory batch not found not found",
+      "evidence": {}
+    },
+    {
+      "id": "FEFO_PREVIEW_EXISTS",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "preview totalCost=30000.00 covered=5.00",
+      "evidence": {
+        "fefoBefore": {
+          "total": "30000",
+          "covered": "5"
+        }
+      }
+    },
+    {
+      "id": "FEFO_BATCH_C_CARRYING",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "C carrying=2500.00",
+      "evidence": {
+        "layers": [
+          {
+            "batch_number": "FORLWD-20260911054055-C",
+            "cost_price": "2500.00",
+            "remaining_quantity": "5.0000",
+            "expiry_date": "2026-09-15"
+          },
+          {
+            "batch_number": "FORLWD-20260911054055-B",
+            "cost_price": "8000.00",
+            "remaining_quantity": "5.0000",
+            "expiry_date": "2026-09-17"
+          },
+          {
+            "batch_number": "FORLWD-20260911054055-A",
+            "cost_price": "10000.00",
+            "remaining_quantity": "5.0000",
+            "expiry_date": "2026-09-18"
+          }
+        ]
+      }
+    },
+    {
+      "id": "FEFO_CONSUME_C",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "consumeLot costPrice=2500",
+      "evidence": {
+        "layers": [
+          {
+            "lotId": "50cf2e4d-9934-4a44-b81e-82b9b0813936",
+            "lotNumber": "FORLWD-20260911054055-C",
+            "quantity": 1,
+            "costPrice": 2500,
+            "productLotId": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "POS_EQ",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "3000 == 3000 allowed",
+      "evidence": {}
+    },
+    {
+      "id": "POS_TOLERANCE_001",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "2999.99 allowed at carrying 3000 (±0.01 policy)",
+      "evidence": {}
+    },
+    {
+      "id": "POS_BELOW",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "BELOW_ALLOCATED_COST",
+      "evidence": {
+        "code": "BELOW_ALLOCATED_COST"
+      }
+    },
+    {
+      "id": "EDGE_COST_SSOT",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "after edge overwrite carrying=3000.00 original=10000.000000",
+      "evidence": {
+        "afterEdge": {
+          "cost_price": "3000.00",
+          "original_cost_price": "10000.000000"
+        }
+      }
+    },
+    {
+      "id": "DECIMAL_RECONCILE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "DR5140=0.200000 expected=0.2 serviceAmount=0.2",
+      "evidence": {
+        "jeDec": [
+          {
+            "debit": "0.200000"
+          }
+        ],
+        "expectedDec": 0.2,
+        "wdDec": {
+          "documentId": "bae75f4c-dec8-4f3c-9734-ad2e7b769858",
+          "documentNumber": "LWD-2026-00121",
+          "inventoryBatchId": "9fa22272-c620-41eb-8d09-5cad9731dc0d",
+          "productId": "cda8cd13-7718-4880-b46a-72cb426b6b18",
+          "quantity": 10,
+          "originalUnitCost": 10000.01,
+          "previousCarryingUnitCost": 10000.01,
+          "newCarryingUnitCost": 9999.99,
+          "totalAmount": 0.2,
+          "expenseAccountCode": "5140",
+          "journalEntryId": "1f0b24bd-00b4-44b9-aa42-831d645652fd",
+          "remainingQuantity": 10
+        }
+      }
+    },
+    {
+      "id": "CONCURRENCY_BOTH_ORDERS",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "n=10",
+      "evidence": {
+        "conc": [
+          {
+            "order": "sale-then-wd",
+            "wdQty": 8,
+            "rem": 8,
+            "carrying": 6000
+          },
+          {
+            "order": "sale-then-wd",
+            "wdQty": 8,
+            "rem": 8,
+            "carrying": 6000
+          },
+          {
+            "order": "sale-then-wd",
+            "wdQty": 8,
+            "rem": 8,
+            "carrying": 6000
+          },
+          {
+            "order": "sale-then-wd",
+            "wdQty": 8,
+            "rem": 8,
+            "carrying": 6000
+          },
+          {
+            "order": "sale-then-wd",
+            "wdQty": 8,
+            "rem": 8,
+            "carrying": 6000
+          },
+          {
+            "order": "wd-then-sale",
+            "wdQty": 10,
+            "rem": 8,
+            "carrying": 6000,
+            "consumeCost": 6000
+          },
+          {
+            "order": "wd-then-sale",
+            "wdQty": 10,
+            "rem": 8,
+            "carrying": 6000,
+            "consumeCost": 6000
+          },
+          {
+            "order": "wd-then-sale",
+            "wdQty": 10,
+            "rem": 8,
+            "carrying": 6000,
+            "consumeCost": 6000
+          },
+          {
+            "order": "wd-then-sale",
+            "wdQty": 10,
+            "rem": 8,
+            "carrying": 6000,
+            "consumeCost": 6000
+          },
+          {
+            "order": "wd-then-sale",
+            "wdQty": 10,
+            "rem": 8,
+            "carrying": 6000,
+            "consumeCost": 6000
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONCURRENCY_DUAL_WD",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "fulfilled=1 rejectedCodes=LOT_WRITE_DOWN_NOT_BELOW_CARRYING carrying=6000.00 docs=1",
+      "evidence": {
+        "dualResults": [
+          {
+            "documentId": "b40a5199-a9e9-4ba2-9de9-83202c0e5c5b",
+            "documentNumber": "LWD-2026-00132",
+            "inventoryBatchId": "1a77f114-7db1-4269-a296-37c63e6f61e5",
+            "productId": "cda8cd13-7718-4880-b46a-72cb426b6b18",
+            "quantity": 10,
+            "originalUnitCost": 10000,
+            "previousCarryingUnitCost": 10000,
+            "newCarryingUnitCost": 6000,
+            "totalAmount": 40000,
+            "expenseAccountCode": "5140",
+            "journalEntryId": "b1a1b485-b7c9-48be-8f92-deefe5b95a20",
+            "remainingQuantity": 10
+          },
+          "Error: New carrying cost must be below the current book cost."
+        ],
+        "dualBatch": {
+          "cost_price": "6000.00",
+          "remaining_quantity": "10.0000"
+        }
+      }
+    },
+    {
+      "id": "ELIG_NO_EXPIRY",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_NO_EXPIRY clean=true",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_NO_EXPIRY",
+        "before": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        },
+        "after": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        }
+      }
+    },
+    {
+      "id": "ELIG_NOT_CRITICAL",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_NOT_CRITICAL clean=true",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_NOT_CRITICAL",
+        "before": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        },
+        "after": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "10.0000"
+        }
+      }
+    },
+    {
+      "id": "ELIG_60_OK",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "60d write-down amount=40000 doc=LWD-2026-00133",
+      "evidence": {
+        "sixty": {
+          "documentId": "8a3a5600-af63-4f14-98bb-32def5be6bd7",
+          "documentNumber": "LWD-2026-00133",
+          "inventoryBatchId": "8be784cf-1937-40ce-a310-f3f2edf83d6f",
+          "productId": "cda8cd13-7718-4880-b46a-72cb426b6b18",
+          "quantity": 10,
+          "originalUnitCost": 10000,
+          "previousCarryingUnitCost": 10000,
+          "newCarryingUnitCost": 6000,
+          "totalAmount": 40000,
+          "expenseAccountCode": "5140",
+          "journalEntryId": "426fdb92-235b-4c10-bfdc-c0b2f582db9a",
+          "remainingQuantity": 10
+        }
+      }
+    },
+    {
+      "id": "ELIG_NO_QTY",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "LOT_WRITE_DOWN_NO_QTY clean=true",
+      "evidence": {
+        "code": "LOT_WRITE_DOWN_NO_QTY",
+        "before": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "0.0000"
+        },
+        "after": {
+          "cost_price": "10000.00",
+          "remaining_quantity": "0.0000"
+        }
+      }
+    },
+    {
+      "id": "ELIG_DAMAGED",
+      "ok": false,
+      "result": "UNPROVEN",
+      "detail": "Could not set DAMAGED status: invalid input value for enum batch_status: \"DAMAGED\"",
+      "evidence": {}
+    },
+    {
+      "id": "SQL_INVENTORY_THEN_GL_ABORT",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "after abort carrying=10000.00 docs=0 err=forensic accounting abort",
+      "evidence": {
+        "before": {
+          "cost_price": "10000.00"
+        },
+        "after": {
+          "cost_price": "10000.00"
+        },
+        "docs": {
+          "n": 0
+        }
+      }
+    },
+    {
+      "id": "POS_6000_EQ",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "after markdown to 6000, 6000 allowed",
+      "evidence": {}
+    },
+    {
+      "id": "POS_6000_01",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "6000.01 allowed at carrying 6000",
+      "evidence": {}
+    },
+    {
+      "id": "POS_5999",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "5999.99 allowed at carrying 6000 (±0.01 policy)",
+      "evidence": {}
+    },
+    {
+      "id": "POS_5998",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "BELOW_ALLOCATED_COST",
+      "evidence": {
+        "code": "BELOW_ALLOCATED_COST"
+      }
+    },
+    {
+      "id": "LIVE_UOM",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "uom=97c8b6ea-1d45-48c8-bf5a-2b738051aa15",
+      "evidence": {}
+    },
+    {
+      "id": "LIVE_SURFACES_WD",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "carrying=6000 je=ec33c7ac-5585-423c-9358-95626b43246d",
+      "evidence": {
+        "wd": {
+          "documentId": "068739b5-a5e5-47c6-9783-2ac95b877e4f",
+          "documentNumber": "LWD-2026-00135",
+          "inventoryBatchId": "03d90b2a-9446-43ae-9fc5-fd7f8a3be9a9",
+          "productId": "5bfe0eca-c0ee-431b-8846-5c243b11f46e",
+          "quantity": 20,
+          "originalUnitCost": 10000,
+          "previousCarryingUnitCost": 10000,
+          "newCarryingUnitCost": 6000,
+          "totalAmount": 80000,
+          "expenseAccountCode": "5140",
+          "journalEntryId": "ec33c7ac-5585-423c-9358-95626b43246d",
+          "remainingQuantity": 20
+        }
+      }
+    },
+    {
+      "id": "CREATE_SALE_6000_01",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "createSale accepted 6000.01 at carrying 6000",
+      "evidence": {
+        "result": {
+          "ok": true,
+          "saleId": "763d815b-ce69-40bd-93c0-7a9135d37c9d"
+        }
+      }
+    },
+    {
+      "id": "CREATE_SALE_6000_00",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "createSale accepted 6000 at carrying 6000",
+      "evidence": {
+        "result": {
+          "ok": true,
+          "saleId": "3fb860e7-dd26-4c3e-a059-1aa7eebb63c3"
+        }
+      }
+    },
+    {
+      "id": "CREATE_SALE_5999_99",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "createSale accepted 5999.99 at carrying 6000",
+      "evidence": {
+        "result": {
+          "ok": true,
+          "saleId": "939e06cf-7240-4f16-b833-fa75246cb806"
+        }
+      }
+    },
+    {
+      "id": "CREATE_SALE_5999_98",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "BELOW_ALLOCATED_COST qty 17.0000→17.0000",
+      "evidence": {
+        "result": {
+          "ok": false,
+          "code": "BELOW_ALLOCATED_COST",
+          "message": "Sale blocked. Selling price cannot be below actual inventory cost."
+        },
+        "before": {
+          "remaining_quantity": "17.0000",
+          "cost_price": "6000.00"
+        },
+        "after": {
+          "remaining_quantity": "17.0000",
+          "cost_price": "6000.00"
+        }
+      }
+    },
+    {
+      "id": "CREATE_SALE_COGS",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "sale 763d815b-ce69-40bd-93c0-7a9135d37c9d DR5000=6000 CR1300=6000 expected 6000 (markdown already on 5140; COGS uses carrying)",
+      "evidence": {
+        "cogs": [
+          {
+            "account": "1010",
+            "debit": "6000.010000",
+            "credit": "0.000000",
+            "ref": "SALE"
+          },
+          {
+            "account": "4000",
+            "debit": "0.000000",
+            "credit": "6000.010000",
+            "ref": "SALE"
+          },
+          {
+            "account": "5000",
+            "debit": "6000.000000",
+            "credit": "0.000000",
+            "ref": "SALE_COGS"
+          },
+          {
+            "account": "1300",
+            "debit": "0.000000",
+            "credit": "6000.000000",
+            "ref": "SALE_COGS"
+          }
+        ]
+      }
+    },
+    {
+      "id": "OFFLINE_STALE_PRICE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "BELOW_ALLOCATED_COST server carrying 6000 won",
+      "evidence": {
+        "offline": {
+          "ok": false,
+          "code": "BELOW_ALLOCATED_COST",
+          "message": "Sale blocked. Selling price cannot be below actual inventory cost."
+        },
+        "before": {
+          "remaining_quantity": "17.0000",
+          "cost_price": "6000.00"
+        },
+        "after": {
+          "remaining_quantity": "17.0000",
+          "cost_price": "6000.00"
+        }
+      }
+    },
+    {
+      "id": "AT_COST_ENGINE_PRICE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "AT_COST finalPrice=6000 carrying=6000",
+      "evidence": {
+        "priced": {
+          "finalPrice": 6000,
+          "basePrice": 7000,
+          "discount": 1000,
+          "atCostLayers": [
+            {
+              "baseQuantity": 1,
+              "unitCostPerBase": 6000,
+              "totalCost": 6000
+            }
+          ],
+          "appliedRule": {
+            "ruleId": null,
+            "ruleName": "At Cost (FIFO issue)",
+            "ruleType": "at_cost",
+            "ruleValue": null,
+            "scope": "at_cost"
+          }
+        }
+      }
+    },
+    {
+      "id": "AT_COST_LIVE_SALE",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "createSale AT_COST at 6000",
+      "evidence": {
+        "atOk": {
+          "ok": true,
+          "saleId": "0e3c0099-ae5b-44d8-8294-c5ac37d95894"
+        }
+      }
+    },
+    {
+      "id": "AT_COST_CLIENT_LOWER",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "BELOW_ALLOCATED_COST",
+      "evidence": {
+        "atLow": {
+          "ok": false,
+          "code": "BELOW_ALLOCATED_COST",
+          "message": "Sale blocked. Selling price cannot be below actual inventory cost."
+        }
+      }
+    },
+    {
+      "id": "QUOTE_CONVERT_BELOW_COST",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "BELOW_ALLOCATED_COST qty unchanged=true",
+      "evidence": {
+        "code": "BELOW_ALLOCATED_COST",
+        "before": {
+          "remaining_quantity": "16.0000",
+          "cost_price": "6000.00"
+        },
+        "after": {
+          "remaining_quantity": "16.0000",
+          "cost_price": "6000.00"
+        },
+        "salesBefore": {
+          "n": "0"
+        },
+        "docs": {
+          "n": "0"
+        }
+      }
+    },
+    {
+      "id": "PERMISSIONS_HTTP",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "cashier POST lot-write-down status=403 body={\"success\":false,\"error\":\"Insufficient permissions\",\"code\":\"PERMISSION_DENIED\"}",
+      "evidence": {
+        "status": 403,
+        "body": "{\"success\":false,\"error\":\"Insufficient permissions\",\"code\":\"PERMISSION_DENIED\"}",
+        "cashierId": "68fdb10d-b281-427b-b392-cbebd7600087",
+        "adminUserId": "2201cbde-f130-460a-97f2-d163080c5798"
+      }
+    },
+    {
+      "id": "TENANT_ISOLATION",
+      "ok": false,
+      "result": "UNPROVEN",
+      "detail": "No second tenant connection string distinct from DATABASE_URL was available.",
+      "evidence": {}
+    },
+    {
+      "id": "FRESH_DB_MIGRATE",
+      "ok": false,
+      "result": "UNPROVEN",
+      "detail": "Could not provision empty DB and run runner: Tenant \"fresh-lwd_fresh_lwdmtwj2szj\" migration failed on 001_create_cost_layers.sql: relation \"products\" does not exist",
+      "evidence": {}
+    },
+    {
+      "id": "FEFO_WALK_USES_MARKDOWN",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "qty=1 FEFO totalCost=2500.00 (expect 2500 from written-down C, not catalog 10000)",
+      "evidence": {
+        "total": "2500",
+        "covered": "1"
+      }
+    },
+    {
+      "id": "DISPOSE_WD",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "markdown amount=40000",
+      "evidence": {
+        "wdDispose": {
+          "documentId": "976faf1f-47f4-4479-aaa5-e2a732bc60be",
+          "documentNumber": "LWD-2026-00136",
+          "inventoryBatchId": "e08993b0-46fa-4da3-8749-689ed892b9a1",
+          "productId": "d7708d7c-5bce-47b3-b588-8483c0ee1ff7",
+          "quantity": 10,
+          "originalUnitCost": 10000,
+          "previousCarryingUnitCost": 10000,
+          "newCarryingUnitCost": 6000,
+          "totalAmount": 40000,
+          "expenseAccountCode": "5140",
+          "journalEntryId": "bf11d25f-0b7a-43f8-a7fe-81b5c36cad54",
+          "remainingQuantity": 10
+        }
+      }
+    },
+    {
+      "id": "DISPOSE_REJECT_ORIGINAL",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "Disposal must use remaining carrying cost 6000; caller supplied 10000. Original acquisition cost is not used after a write-down.",
+      "evidence": {}
+    },
+    {
+      "id": "DISPOSE_CARRYING_NOT_ORIGINAL",
+      "ok": true,
+      "result": "PROVEN",
+      "detail": "DR5130=60000 CR1300=60000 DR5140=0 account=5130",
+      "evidence": {
+        "glDisp": [
+          {
+            "account": "5130",
+            "debit": "60000.000000",
+            "credit": "0.000000"
+          },
+          {
+            "account": "1300",
+            "debit": "0.000000",
+            "credit": "60000.000000"
+          }
+        ],
+        "dispose": {
+          "documentId": "320200be-64b4-45e1-b8d3-3ffd3aed3f1e",
+          "documentNumber": "LDISP-2026-00025",
+          "expenseAccountCode": "5130",
+          "movementId": "bb65f19f-9bc8-428e-9204-9fe58e318864",
+          "movementNumber": "MOV-2026-0326",
+          "batchId": "e08993b0-46fa-4da3-8749-689ed892b9a1",
+          "quantity": 10,
+          "totalAmount": 60000,
+          "journalEntryId": "92987d4e-8a50-44f6-84f7-e933bac72527"
+        }
+      }
+    }
+  ],
+  "summary": {
+    "proven": 66,
+    "failed": 0,
+    "unproven": 4,
+    "partial": 0
+  }
+}

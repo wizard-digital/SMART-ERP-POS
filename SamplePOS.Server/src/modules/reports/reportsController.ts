@@ -27,6 +27,7 @@ import {
   expiryUrgencyLabel,
   type ExpiryBandFilter,
 } from '../../../../shared/reports/expiringItemsSsot.js';
+import { LOT_WRITE_DOWN_MAX_DAYS } from '../../../../shared/inventory-lot/lotWriteDown.js';
 
 /** Map SSOT column ids → PDF defs; never returns empty (fail-closed to defaults / order #). */
 function buildOrdersPdfColumns(
@@ -681,7 +682,7 @@ export const reportsController = {
       res.setHeader('Content-Disposition', `attachment; filename="expiring-items-${fileSuffix}.pdf"`);
       doc.pipe(res);
 
-      const days = params.days_threshold || 30;
+      const days = params.days_threshold || LOT_WRITE_DOWN_MAX_DAYS;
 
       pdfGen.addHeader({
         companyName,

@@ -61,6 +61,11 @@ import {
   type ExpiryBandFilter,
 } from '@shared/reports/expiringItemsSsot';
 import {
+  isNearExpiryWriteDownBand,
+  LOT_WRITE_DOWN_MAX_DAYS,
+  LOT_WRITE_DOWN_MIN_CARRYING,
+} from '@shared/inventory-lot/lotWriteDown';
+import {
   INVENTORY_LEDGER_REPORTS,
   INVENTORY_NETWORK_REPORTS,
   INVENTORY_OPERATIONAL_REPORTS,
@@ -1077,10 +1082,11 @@ export default function ReportsPage() {
   const [expiringBandFilter, setExpiringBandFilter] = useState<ExpiryBandFilter>('all');
   const [expiringQuarantineBusyId, setExpiringQuarantineBusyId] = useState<string | null>(null);
   const [expiringQuarantineMsg, setExpiringQuarantineMsg] = useState<string | null>(null);
+  const [expiringWriteDownBusyId, setExpiringWriteDownBusyId] = useState<string | null>(null);
 
   // Filter states
   const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month' | 'product' | 'customer' | 'payment_method'>('day');
-  const [daysAhead, setDaysAhead] = useState<number>(30);
+  const [daysAhead, setDaysAhead] = useState<number>(LOT_WRITE_DOWN_MAX_DAYS);
   const [limit, setLimit] = useState<number>(20);
   const [threshold, setThreshold] = useState<number>(50);
   const [sortBy, setSortBy] = useState<'REVENUE' | 'ORDERS' | 'PROFIT'>('REVENUE');
@@ -1736,6 +1742,9 @@ export default function ReportsPage() {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Days ahead"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Default {LOT_WRITE_DOWN_MAX_DAYS} days so lots eligible for clearance markdown are listed.
+            </p>
           </div>
         )}
 
@@ -2476,15 +2485,18 @@ export default function ReportsPage() {
               <Link to="/inventory/quarantine" className="text-slate-900 underline font-semibold">
                 Quarantine workqueue
               </Link>
-              .
+              . Still-sellable lots expiring within {LOT_WRITE_DOWN_MAX_DAYS} days can use{' '}
+              <strong>Clearance markdown</strong> so POS can sell below original cost at the new carrying cost.
             </p>
 
             {expiringQuarantineMsg && (
               <p className="text-sm text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-4 py-2">
                 {expiringQuarantineMsg}{' '}
-                <Link to="/inventory/quarantine" className="underline font-semibold">
-                  Open quarantine
-                </Link>
+                {/quarantine/i.test(expiringQuarantineMsg) ? (
+                  <Link to="/inventory/quarantine" className="underline font-semibold">
+                    Open quarantine
+                  </Link>
+                ) : null}
               </p>
             )}
 
@@ -2707,6 +2719,11 @@ export default function ReportsPage() {
                                 : 'bg-slate-100 text-slate-700';
                         const batchId = row.batchId != null ? String(row.batchId) : '';
                         const canQuarantine = band === 'expired' && Boolean(batchId);
+                        const canWriteDown = isNearExpiryWriteDownBand(days) && Boolean(batchId);
+                        const carrying = Number(row.unitCost ?? 0);
+                        const originalCost = Number(
+                          (row as { originalUnitCost?: number }).originalUnitCost ?? carrying,
+                        );
                         return (
                           <tr key={idx} className="hover:bg-slate-50">
                             <td className="px-3 py-2.5">
@@ -2737,7 +2754,12 @@ export default function ReportsPage() {
                               {Number(row.quantityRemaining ?? 0).toLocaleString()}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums text-slate-700">
-                              {formatCurrency(Number(row.unitCost ?? 0))}
+                              {formatCurrency(carrying)}
+                              {originalCost > 0 && Math.abs(originalCost - carrying) > 0.009 ? (
+                                <span className="block text-[10px] text-slate-400 font-normal">
+                                  orig {formatCurrency(originalCost)}
+                                </span>
+                              ) : null}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-amber-900">
                               {formatCurrency(Number(row.potentialLoss ?? 0))}
@@ -2783,6 +2805,56 @@ export default function ReportsPage() {
                                   }}
                                 >
                                   {expiringQuarantineBusyId === batchId ? '…' : 'Quarantine'}
+                                </button>
+                              ) : canWriteDown ? (
+                                <button
+                                  type="button"
+                                  disabled={expiringWriteDownBusyId === batchId}
+                                  data-expiring-write-down-row="true"
+                                  className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-800 hover:bg-rose-50 disabled:opacity-50"
+                                  onClick={async () => {
+                                    const raw = window.prompt(
+                                      `Lot carrying-value write-down (clearance markdown 5140) for ${row.productName ?? 'batch'}?\nCurrent carrying: ${carrying}\nOriginal acquisition: ${originalCost}\nPOS sells at or above the new carrying cost (expires within ${LOT_WRITE_DOWN_MAX_DAYS} days). Not a till below-cost sale.`,
+                                      String(carrying),
+                                    );
+                                    if (raw == null) return;
+                                    const next = Number(raw);
+                                    if (
+                                      !Number.isFinite(next) ||
+                                      next < LOT_WRITE_DOWN_MIN_CARRYING ||
+                                      next >= carrying
+                                    ) {
+                                      setExpiringQuarantineMsg(
+                                        `New carrying cost must be at least ${LOT_WRITE_DOWN_MIN_CARRYING} and below the current book cost.`,
+                                      );
+                                      return;
+                                    }
+                                    setExpiringWriteDownBusyId(batchId);
+                                    setExpiringQuarantineMsg(null);
+                                    try {
+                                      const res = await inventoryApi.inventory.writeDownNearExpiryLot({
+                                        inventoryBatchId: batchId,
+                                        newUnitCost: next,
+                                        memo: 'Near-expiry write-down from Expiring Items',
+                                      });
+                                      const data = (res.data?.data ?? {}) as {
+                                        documentNumber?: string;
+                                        newCarryingUnitCost?: number;
+                                        totalAmount?: number;
+                                      };
+                                      setExpiringQuarantineMsg(
+                                        `Clearance markdown ${data.documentNumber ?? ''} posted. Carrying ${data.newCarryingUnitCost ?? next}. Markdown ${data.totalAmount ?? ''}. Refresh, then sell on POS at or above the new carrying cost.`,
+                                      );
+                                    } catch (err) {
+                                      setExpiringQuarantineMsg(
+                                        err instanceof Error ? err.message : 'Write-down failed',
+                                      );
+                                    } finally {
+                                      setExpiringWriteDownBusyId(null);
+                                    }
+                                  }}
+                                >
+                                  {expiringWriteDownBusyId === batchId ? '…' : 'Clearance markdown'}
                                 </button>
                               ) : (
                                 <span className="text-xs text-slate-400">—</span>

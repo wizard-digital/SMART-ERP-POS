@@ -69,6 +69,8 @@
     "ci:inventory-lot-fitness": "node scripts/ci-inventory-lot-fitness.mjs",
     "ci:inventory-lot-certification": "node scripts/ci-inventory-lot-fitness.mjs --strict",
     "proof:inventory-lot-foundation": "node SamplePOS.Server/scripts/proof-inventory-lot-foundation.mjs",
+    "proof:lot-write-down": "cd SamplePOS.Server && npm run proof:lot-write-down",
+    "proof:lot-write-down:live": "cd SamplePOS.Server && npm run proof:lot-write-down:live",
     "proof:inventory-lot-certification": "node SamplePOS.Server/scripts/proof-inventory-lot-foundation.mjs --strict",
     "proof:inventory-lot-staging": "node SamplePOS.Server/scripts/proof-inventory-lot-staging.mjs",
     "proof:inventory-lot-staging:seed": "node SamplePOS.Server/scripts/seed-inventory-lot-staging.mjs",

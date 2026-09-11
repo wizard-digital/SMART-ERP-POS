@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   atCostCartGroupNeedsUpdate,
+  applyAllocatedCarryingToCartLine,
   buildAtCostBlendedCartLine,
   buildAtCostSplitCartLines,
   canSplitAtCostLayersToSellingUom,
   mustSplitAtCostFifoLayers,
   shouldSplitAtCostFifoLayers,
 } from '../utils/posCartAtCost';
-import { recalcPosCartLineFields } from '../utils/posCartLine';
+import { recalcPosCartLineFields, isPosLineBlockedByCatalogCost } from '../utils/posCartLine';
 
 describe('posCartAtCost FIFO split', () => {
   const template = {
@@ -159,6 +160,40 @@ describe('posCartAtCost — customer reprice preserves inventory cost (SSoT)', (
   it('below-cost edit shows negative margin (not forced to 0%)', () => {
     const edited = recalcPosCartLineFields({ quantity: 1, unitPrice: 500, costPrice: 633 });
     expect(edited.marginPct).toBeLessThan(0);
+  });
+
+  it('walk-in after write-down: catalog 10000, floor 3000, edit to 3000 allowed, 2999.98 blocked', () => {
+    const synced = applyAllocatedCarryingToCartLine(
+      { unitPrice: 10000, costPrice: 5000, quantity: 1 },
+      3000,
+    );
+    expect(synced.unitPrice).toBe(10000);
+    expect(synced.costPrice).toBe(3000);
+    expect(synced.subtotal).toBe(10000);
+    expect(
+      isPosLineBlockedByCatalogCost({
+        unitPrice: synced.unitPrice,
+        costPrice: synced.costPrice,
+        subtotal: synced.subtotal,
+        quantity: 1,
+      }),
+    ).toBe(false);
+    expect(
+      isPosLineBlockedByCatalogCost({
+        unitPrice: 3000,
+        costPrice: 3000,
+        subtotal: 3000,
+        quantity: 1,
+      }),
+    ).toBe(false);
+    expect(
+      isPosLineBlockedByCatalogCost({
+        unitPrice: 2999.98,
+        costPrice: 3000,
+        subtotal: 2999.98,
+        quantity: 1,
+      }),
+    ).toBe(true);
   });
 });
 

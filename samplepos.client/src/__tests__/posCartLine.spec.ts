@@ -50,6 +50,20 @@ describe('posCartLine', () => {
     ).toBe(false);
   });
 
+  it('walk-in write-down floor: 3000 and 2999.99 allowed, 2999.98 blocked', () => {
+    const floorLine = { unitPrice: 10000, costPrice: 3000, subtotal: 10000, quantity: 1 };
+    expect(isPosLineBlockedByCatalogCost(floorLine)).toBe(false);
+    expect(
+      isPosLineBlockedByCatalogCost({ unitPrice: 3000, costPrice: 3000, subtotal: 3000, quantity: 1 }),
+    ).toBe(false);
+    expect(
+      isPosLineBlockedByCatalogCost({ unitPrice: 2999.99, costPrice: 3000, subtotal: 2999.99, quantity: 1 }),
+    ).toBe(false);
+    expect(
+      isPosLineBlockedByCatalogCost({ unitPrice: 2999.98, costPrice: 3000, subtotal: 2999.98, quantity: 1 }),
+    ).toBe(true);
+  });
+
   it('detects below-cost unit and discounted line', () => {
     expect(isPosUnitPriceBelowCatalogCost(500, 1000)).toBe(true);
     expect(isPosLineRevenueBelowCatalogCost(900, 1, 1000)).toBe(true);

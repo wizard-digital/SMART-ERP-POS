@@ -8,6 +8,7 @@ export * from './lotCalculator.js';
 export * from './lotEvents.js';
 export * from './lotAudit.js';
 export * from './lotSelection.js';
+export * from './lotWriteDown.js';
 export * from './fefoEngine.js';
 export * from './fifoEngine.js';
 export * from './lotRepository.js';

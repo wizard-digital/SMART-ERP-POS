@@ -91,6 +91,8 @@ export const AccountCodes = {
   SHRINKAGE: '5110',
   DAMAGE: '5120',
   EXPIRY: '5130',
+  /** Near-expiry lot NRV write-down (qty unchanged). Not 5130 dispose. */
+  CLEARANCE_MARKDOWN: '5140',
 
   // Bad Debt (ADR-006) — uncollectible AR expense (not inventory loss, not CN 4010)
   BAD_DEBT_EXPENSE: '5210',

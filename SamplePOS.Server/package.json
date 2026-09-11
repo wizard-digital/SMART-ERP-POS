@@ -34,6 +34,8 @@
     "proof:supplier-invoice-grn-bounds:live": "npx tsx scripts/proof-supplier-invoice-grn-bounds-live.ts",
     "proof:warehouse-layer-coupling": "node scripts/proof-warehouse-layer-coupling.mjs",
     "proof:inventory-lot-foundation": "node scripts/proof-inventory-lot-foundation.mjs",
+    "proof:lot-write-down": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js src/modules/inventory-lot/lotWriteDown.test.ts src/modules/inventory-lot/lotWriteDown.evidence.test.ts src/modules/inventory-lot/lotWriteDownService.execution.test.ts --runInBand --forceExit",
+    "proof:lot-write-down:live": "npx tsx scripts/proof-lot-write-down-live.ts",
     "proof:kitchen-production-foundation": "node scripts/proof-kitchen-production-foundation.mjs",
     "proof:kitchen-production-certification": "node scripts/proof-kitchen-production-foundation.mjs --strict",
     "proof:kitchen-production-live": "tsx scripts/proof-kitchen-production-live.ts",

@@ -1,0 +1,142 @@
+{
+  "proof": "LOT_WRITE_DOWN_EXECUTED",
+  "passed": true,
+  "asOf": "2026-09-11T07:32:24.344Z",
+  "mode": "service-execution-mock-pg",
+  "gates": [
+    {
+      "id": "EXEC_REQUIRE_USER",
+      "ok": true,
+      "detail": "userId is required for lot write-down"
+    },
+    {
+      "id": "EXEC_DOC",
+      "ok": true,
+      "detail": "documentNumber=LWD-2026-00007"
+    },
+    {
+      "id": "EXEC_QTY_UNCHANGED",
+      "ok": true,
+      "detail": "remaining=10"
+    },
+    {
+      "id": "EXEC_ORIGINAL_KEPT",
+      "ok": true,
+      "detail": "original=10000 carryingNow=6000"
+    },
+    {
+      "id": "EXEC_AMOUNT",
+      "ok": true,
+      "detail": "amount=40000"
+    },
+    {
+      "id": "EXEC_ACCOUNT",
+      "ok": true,
+      "detail": "account=5140"
+    },
+    {
+      "id": "EXEC_GL_CALLED",
+      "ok": true,
+      "detail": "journals=1"
+    },
+    {
+      "id": "EXEC_GL_SOURCE",
+      "ok": true,
+      "detail": "source=INVENTORY_MOVE"
+    },
+    {
+      "id": "EXEC_GL_REF",
+      "ok": true,
+      "detail": "ref=LOT_WRITE_DOWN"
+    },
+    {
+      "id": "EXEC_GL_USER",
+      "ok": true,
+      "detail": "actor not replaced with system user"
+    },
+    {
+      "id": "EXEC_GL_SHAPE",
+      "ok": true,
+      "detail": "DR 5140=40000 CR 1300=40000",
+      "measured": {
+        "entryDate": "2026-09-11",
+        "description": "Lot write-down LWD-2026-00007 — near-expiry NRV",
+        "referenceType": "LOT_WRITE_DOWN",
+        "referenceId": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "referenceNumber": "LWD-2026-00007",
+        "lines": [
+          {
+            "accountCode": "5140",
+            "description": "Clearance markdown LWD-2026-00007",
+            "debitAmount": 40000,
+            "creditAmount": 0
+          },
+          {
+            "accountCode": "1300",
+            "description": "Clearance markdown LWD-2026-00007 batch LWD-EXEC-1",
+            "debitAmount": 0,
+            "creditAmount": 40000
+          }
+        ],
+        "userId": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "idempotencyKey": "LOT_WRITE_DOWN-cccccccc-cccc-cccc-cccc-cccccccccccc",
+        "source": "INVENTORY_MOVE"
+      }
+    },
+    {
+      "id": "EXEC_COUPLING",
+      "ok": true,
+      "detail": "qty × (old−new) = GL 40000"
+    },
+    {
+      "id": "EXEC_NO_QTY_DECREMENT_SQL",
+      "ok": true,
+      "detail": "no qty decrement SQL"
+    },
+    {
+      "id": "EXEC_POS_BELOW_NEW_COST",
+      "ok": true,
+      "detail": "BELOW_ALLOCATED_COST"
+    },
+    {
+      "id": "EXEC_REJECT_QUARANTINE",
+      "ok": true,
+      "detail": "LOT_WRITE_DOWN_NOT_ACTIVE"
+    },
+    {
+      "id": "EXEC_REJECT_EXPIRED",
+      "ok": true,
+      "detail": "LOT_WRITE_DOWN_EXPIRED"
+    },
+    {
+      "id": "EXEC_REJECT_NO_EXPIRY",
+      "ok": true,
+      "detail": "LOT_WRITE_DOWN_NO_EXPIRY"
+    },
+    {
+      "id": "EXEC_REJECT_BEYOND_60",
+      "ok": true,
+      "detail": "LOT_WRITE_DOWN_NOT_CRITICAL"
+    },
+    {
+      "id": "EXEC_REJECT_FLOOR",
+      "ok": true,
+      "detail": "LOT_WRITE_DOWN_BELOW_FLOOR"
+    },
+    {
+      "id": "EXEC_REJECT_NO_GL",
+      "ok": true,
+      "detail": "journalsAfterRejects=0"
+    },
+    {
+      "id": "EXEC_ACCEPT_20",
+      "ok": true,
+      "detail": "posted"
+    },
+    {
+      "id": "EXEC_ACCEPT_60",
+      "ok": true,
+      "detail": "posted"
+    }
+  ]
+}

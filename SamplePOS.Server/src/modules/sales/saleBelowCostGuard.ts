@@ -25,7 +25,9 @@ export interface SaleLineCostCheckInput {
 
 /**
  * Throws BusinessError BELOW_ALLOCATED_COST when revenue is below allocated inventory cost.
- * Allows selling at exact cost (within tolerance).
+ * Intended policy: exact allocated cost is allowed, plus a 0.01 money-cent tolerance
+ * (REVENUE_COST_TOLERANCE). At carrying 6000: 6000.00 and 5999.99 are allowed;
+ * 5999.98 is rejected. Do not change the tolerance to satisfy an old forensic table.
  */
 export function assertSaleLineNotBelowAllocatedCost(input: SaleLineCostCheckInput): void {
   const qty = new Decimal(input.quantity);

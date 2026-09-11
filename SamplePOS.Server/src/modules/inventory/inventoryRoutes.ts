@@ -15,6 +15,7 @@ import { storeTransferRoutes } from './warehouse/storeTransferRoutes.js';
 import { expiryAutomationRoutes } from './warehouse/expiryAutomationRoutes.js';
 import { warehouseReportingRoutes } from './warehouse/warehouseReportingRoutes.js';
 import { lossQuarantineRoutes } from '../loss-quarantine/lossQuarantineRoutes.js';
+import { lotWriteDownRoutes } from '../inventory-lot/lotWriteDownRoutes.js';
 import { storeLocationRoutes } from './warehouse/storeLocationRoutes.js';
 import { productStoreDistributionService } from './warehouse/productStoreDistributionService.js';
 import { productDistributionService } from './warehouse/productDistributionService.js';
@@ -569,6 +570,7 @@ inventoryRoutes.use('/store-transfers', storeTransferRoutes);
 inventoryRoutes.use('/expiry-automation', expiryAutomationRoutes);
 inventoryRoutes.use('/reports', warehouseReportingRoutes);
 inventoryRoutes.use('/loss-quarantine', lossQuarantineRoutes);
+inventoryRoutes.use('/lot-write-down', lotWriteDownRoutes);
 inventoryRoutes.use('/store-locations', storeLocationRoutes);
 
 // ── Inventory Ledger & Reconciliation ────────────────────────

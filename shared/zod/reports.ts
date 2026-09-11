@@ -2,6 +2,7 @@
 // Used by both frontend and backend for validation
 
 import { z } from 'zod';
+import { LOT_WRITE_DOWN_MAX_DAYS } from '../inventory-lot/lotWriteDown.js';
 
 // Report Types
 export const ReportTypeEnum = z.enum([
@@ -115,7 +116,7 @@ export const SalesReportItemSchema = z.object({
 // Expiring Items Report
 export const ExpiringItemsRequestSchema = z.object({
   reportType: z.literal('EXPIRING_ITEMS'),
-  daysAhead: z.number().int().positive().default(30),
+  daysAhead: z.number().int().positive().default(LOT_WRITE_DOWN_MAX_DAYS),
   categoryId: z.string().uuid().optional(),
   format: z.enum(['pdf', 'csv', 'json']).default('json'),
 }).strict();
@@ -365,7 +366,7 @@ export const SalesReportParamsSchema = z.object({
 });
 
 export const ExpiringItemsParamsSchema = z.object({
-  days_threshold: z.coerce.number().int().positive().default(30),
+  days_threshold: z.coerce.number().int().positive().default(LOT_WRITE_DOWN_MAX_DAYS),
   category_id: z.string().uuid().optional(),
   /** KPI band filter for PDF/CSV — matches on-screen register filter. */
   urgency_band: z.enum(['all', 'expired', 'critical', 'warning', 'watch']).optional(),

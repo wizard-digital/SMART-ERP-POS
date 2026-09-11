@@ -465,6 +465,8 @@ export interface ExpiringItemRow {
     daysUntilExpiry: number;
     quantityRemaining: number;
     unitCost: number;
+    /** Acquisition cost when a write-down has occurred; else same as unitCost. */
+    originalUnitCost: number;
     potentialLoss: number;
     /** expired | critical | warning | watch */
     urgency: string;
