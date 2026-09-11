@@ -68,6 +68,13 @@ export interface StockMovementParams {
   warehouseId?: string | null;
   // Optional: explicit multistore destination for inbound lot returns/adjustments
   targetStoreLocationId?: string | null;
+  /** Multistore: source store for outbound consume (ADJUSTMENT_OUT / WRITE_OFF / disposal) */
+  sourceStoreLocationId?: string | null;
+  /**
+   * Legacy: caller already decremented inventory_balances.
+   * Prefer sourceStoreLocationId / default cross-store deduct instead.
+   */
+  balancesAlreadyAdjusted?: boolean;
   // Optional: for UOM conversions (future)
   uomId?: string | null;
   conversionFactor?: number;
@@ -180,11 +187,14 @@ export class StockMovementHandler {
           userId: params.userId,
         });
       } else if (changeQty.lt(0)) {
+        // INV-002 dual-write: pass source store, or let consumeLot deduct across all stores.
         await lotService.consumeLot(client, {
           productId: params.productId,
           quantity: absQtyDec.toNumber(),
           specificLotId: batch.id,
           selectionPolicy: 'MANUAL',
+          storeLocationId: params.sourceStoreLocationId ?? undefined,
+          skipStoreBalanceDeduction: params.balancesAlreadyAdjusted === true,
           recordMovement: false,
           syncProduct: false,
           referenceType: params.referenceType || params.movementType,
