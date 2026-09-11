@@ -46,7 +46,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
-import { api as inventoryApi } from '../utils/api';
+import { api as inventoryApi, getErrorMessage } from '../utils/api';
 import CustomerAgingReport from '../components/reports/CustomerAgingReport';
 import ReportCustomerCombobox from '../components/reports/ReportCustomerCombobox';
 import ReportSupplierCombobox from '../components/reports/ReportSupplierCombobox';
@@ -2814,18 +2814,20 @@ export default function ReportsPage() {
                                   className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-800 hover:bg-rose-50 disabled:opacity-50"
                                   onClick={async () => {
                                     const raw = window.prompt(
-                                      `Lot carrying-value write-down (clearance markdown 5140) for ${row.productName ?? 'batch'}?\nCurrent carrying: ${carrying}\nOriginal acquisition: ${originalCost}\nPOS sells at or above the new carrying cost (expires within ${LOT_WRITE_DOWN_MAX_DAYS} days). Not a till below-cost sale.`,
+                                      `Lot carrying-value write-down (clearance markdown 5140) for ${row.productName ?? 'batch'}?\nCurrent carrying: ${carrying}\nOriginal acquisition: ${originalCost}\nEnter the NEW carrying cost (must be lower). POS will then allow selling at or above that new cost.`,
                                       String(carrying),
                                     );
                                     if (raw == null) return;
-                                    const next = Number(raw);
+                                    // Accept 20000, 20,000, 20000.50 — commas break Number().
+                                    const cleaned = String(raw).replace(/,/g, '').trim();
+                                    const next = Number(cleaned);
                                     if (
                                       !Number.isFinite(next) ||
                                       next < LOT_WRITE_DOWN_MIN_CARRYING ||
                                       next >= carrying
                                     ) {
                                       setExpiringQuarantineMsg(
-                                        `New carrying cost must be at least ${LOT_WRITE_DOWN_MIN_CARRYING} and below the current book cost.`,
+                                        `New carrying cost must be a number at least ${LOT_WRITE_DOWN_MIN_CARRYING} and below the current book cost (${carrying}). You entered: ${raw}`,
                                       );
                                       return;
                                     }
@@ -2840,15 +2842,36 @@ export default function ReportsPage() {
                                       const data = (res.data?.data ?? {}) as {
                                         documentNumber?: string;
                                         newCarryingUnitCost?: number;
+                                        originalUnitCost?: number;
                                         totalAmount?: number;
                                       };
+                                      const newCarrying = Number(data.newCarryingUnitCost ?? next);
+                                      const orig = Number(data.originalUnitCost ?? originalCost);
+                                      // Patch the open report immediately — do not wait for manual refresh.
+                                      setReportData((prev) => {
+                                        if (!prev?.data || !Array.isArray(prev.data)) return prev;
+                                        return {
+                                          ...prev,
+                                          data: prev.data.map((r) => {
+                                            const id = String((r as { batchId?: string }).batchId ?? '');
+                                            if (id !== batchId) return r;
+                                            const qty = Number(
+                                              (r as { quantityRemaining?: number }).quantityRemaining ?? 0,
+                                            );
+                                            return {
+                                              ...r,
+                                              unitCost: newCarrying,
+                                              originalUnitCost: orig,
+                                              potentialLoss: qty * newCarrying,
+                                            };
+                                          }),
+                                        };
+                                      });
                                       setExpiringQuarantineMsg(
-                                        `Clearance markdown ${data.documentNumber ?? ''} posted. Carrying ${data.newCarryingUnitCost ?? next}. Markdown ${data.totalAmount ?? ''}. Refresh, then sell on POS at or above the new carrying cost.`,
+                                        `Clearance markdown ${data.documentNumber ?? ''} posted. Carrying now ${formatCurrency(newCarrying)} (original ${formatCurrency(orig)}). Sell on POS at or above the new carrying cost.`,
                                       );
                                     } catch (err) {
-                                      setExpiringQuarantineMsg(
-                                        err instanceof Error ? err.message : 'Write-down failed',
-                                      );
+                                      setExpiringQuarantineMsg(getErrorMessage(err));
                                     } finally {
                                       setExpiringWriteDownBusyId(null);
                                     }

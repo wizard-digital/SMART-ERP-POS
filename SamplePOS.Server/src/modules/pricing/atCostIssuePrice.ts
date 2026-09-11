@@ -199,19 +199,22 @@ export interface FefoIssueLayerSegment {
 export async function previewFefoIssueCostForBaseQty(
     conn: Pool | PoolClient,
     productId: string,
-    baseQty: Decimal,
-    masterCostPerBase: Decimal = new Decimal(0),
+    baseQty: Decimal | number,
+    masterCostPerBase: Decimal | number = new Decimal(0),
     options: LoadSaleFefoBatchesOptions = {},
 ): Promise<FefoIssuePreview> {
+    const qty = baseQty instanceof Decimal ? baseQty : new Decimal(baseQty);
+    const master =
+      masterCostPerBase instanceof Decimal ? masterCostPerBase : new Decimal(masterCostPerBase);
     const batchRows = await loadNormalizedFefoBatches(
         conn,
         productId,
-        baseQty,
-        masterCostPerBase,
+        qty,
+        master,
         options.minDaysBeforeExpiry ?? 0,
     );
 
-    let remainingForCost = baseQty;
+    let remainingForCost = qty;
     let totalCost = new Decimal(0);
 
     for (const b of batchRows) {
@@ -222,7 +225,7 @@ export async function previewFefoIssueCostForBaseQty(
         remainingForCost = remainingForCost.minus(take);
     }
 
-    const coveredQty = baseQty.minus(remainingForCost);
+    const coveredQty = qty.minus(remainingForCost);
     return {
         totalCost,
         coveredQty,
@@ -236,20 +239,23 @@ export async function previewFefoIssueCostForBaseQty(
 export async function previewFefoIssueLayers(
     conn: Pool | PoolClient,
     productId: string,
-    baseQty: Decimal,
-    masterCostPerBase: Decimal = new Decimal(0),
+    baseQty: Decimal | number,
+    masterCostPerBase: Decimal | number = new Decimal(0),
     options: LoadSaleFefoBatchesOptions = {},
 ): Promise<FefoIssueLayerSegment[]> {
+    const qty = baseQty instanceof Decimal ? baseQty : new Decimal(baseQty);
+    const master =
+      masterCostPerBase instanceof Decimal ? masterCostPerBase : new Decimal(masterCostPerBase);
     const batchRows = await loadNormalizedFefoBatches(
         conn,
         productId,
-        baseQty,
-        masterCostPerBase,
+        qty,
+        master,
         options.minDaysBeforeExpiry ?? 0,
     );
 
     const segments: FefoIssueLayerSegment[] = [];
-    let remainingForCost = baseQty;
+    let remainingForCost = qty;
 
     for (const b of batchRows) {
         if (remainingForCost.lessThanOrEqualTo(0)) break;
