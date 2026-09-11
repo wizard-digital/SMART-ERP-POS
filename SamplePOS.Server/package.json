@@ -34,7 +34,8 @@
     "proof:supplier-invoice-grn-bounds:live": "npx tsx scripts/proof-supplier-invoice-grn-bounds-live.ts",
     "proof:warehouse-layer-coupling": "node scripts/proof-warehouse-layer-coupling.mjs",
     "proof:inventory-lot-foundation": "node scripts/proof-inventory-lot-foundation.mjs",
-    "proof:lot-write-down": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js src/modules/inventory-lot/lotWriteDown.test.ts src/modules/inventory-lot/lotWriteDown.evidence.test.ts src/modules/inventory-lot/lotWriteDownService.execution.test.ts --runInBand --forceExit",
+    "proof:lot-write-down": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js src/modules/inventory-lot/lotWriteDown.test.ts src/modules/inventory-lot/lotWriteDown.evidence.test.ts src/modules/inventory-lot/lotWriteDownAdminOnly.evidence.test.ts src/modules/inventory-lot/lotWriteDownService.execution.test.ts --runInBand --forceExit",
+    "proof:lot-write-down:admin": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js src/modules/inventory-lot/lotWriteDownAdminOnly.evidence.test.ts --runInBand --forceExit",
     "proof:lot-write-down:live": "npx tsx scripts/proof-lot-write-down-live.ts",
     "verify:lot-write-down:prod": "npx tsx scripts/verify-lot-write-down-prod-consistency.ts",
     "proof:mgmt-pnl-category": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js src/services/businessReport.mgmtPl.evidence.test.ts --runInBand --forceExit",
@@ -148,4 +149,3 @@
     "typescript-eslint": "^8.46.2"
   }
 }
-

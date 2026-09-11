@@ -1,7 +1,7 @@
 {
   "proof": "LOT_WRITE_DOWN_NRV",
   "passed": true,
-  "asOf": "2026-09-11T18:41:06.455Z",
+  "asOf": "2026-09-11T21:30:23.270Z",
   "claims": [
     "Still-sellable lots expiring within 60 days may be written down; original cost is preserved.",
     "Carrying cost_price is the POS/FEFO/AT_COST floor; no till override.",
@@ -138,6 +138,11 @@
       "detail": "named clearance markdown not below-cost sale"
     },
     {
+      "id": "UI_ADMIN_ONLY",
+      "ok": true,
+      "detail": "Clearance markdown UI gated to absolute ADMIN"
+    },
+    {
       "id": "UI_60_DAY_WINDOW",
       "ok": true,
       "detail": "UI uses 60-day write-down SSOT"
@@ -196,6 +201,21 @@
       "id": "FEFO_COERCE_DECIMAL",
       "ok": true,
       "detail": "FEFO preview coerces numeric qty to Decimal (no lessThanOrEqualTo crash)"
+    },
+    {
+      "id": "ROUTE_NOT_INVENTORY_ADJUST",
+      "ok": true,
+      "detail": "HTTP route is ADMIN-only — inventory.adjust cannot authorize write-down"
+    },
+    {
+      "id": "SERVICE_DB_ROLE_GATE",
+      "ok": true,
+      "detail": "service re-checks users.role inside the posting transaction"
+    },
+    {
+      "id": "SSOT_ADMIN_HELPERS",
+      "ok": true,
+      "detail": "shared SSOT exports ADMIN-only helpers"
     }
   ]
 }

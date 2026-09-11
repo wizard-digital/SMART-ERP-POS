@@ -454,70 +454,122 @@ export async function runLotWriteDownLiveSurfaces(opts: {
     rec('LIVE_SURFACES_SEED', false, 'FAILED', errMsg(e));
   }
 
-  await probeHttpCashier(pool, rec, stamp, userId, batchId);
+  await probeHttpRole(pool, rec, stamp, userId, batchId, 'CASHIER', 'PERMISSIONS_HTTP', 'cashier');
+  await probeHttpRole(pool, rec, stamp, userId, batchId, 'MANAGER', 'PERMISSIONS_HTTP_MANAGER', 'manager');
+  await probeServiceNonAdmin(pool, rec, stamp, batchId);
   await probeTenantIsolation(pool, rec, databaseUrl, batchId);
   await probeFreshMigrate(rec, databaseUrl);
 }
 
-async function probeHttpCashier(
+async function insertActorUser(
+  pool: Pool,
+  stamp: string,
+  role: 'CASHIER' | 'MANAGER',
+): Promise<string> {
+  const actorId = randomUUID();
+  const userCols = await pool.query<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'users'`,
+  );
+  const uc = new Set(userCols.rows.map((r) => r.column_name));
+  const prefix = role === 'MANAGER' ? 'mgr' : 'cashier';
+  const fields = ['id'];
+  const values: unknown[] = [actorId];
+  if (uc.has('email')) {
+    fields.push('email');
+    values.push(`${prefix}-lwd-${stamp}@forensic.local`);
+  }
+  if (uc.has('username')) {
+    fields.push('username');
+    values.push(`${prefix}_lwd_${stamp}`);
+  }
+  if (uc.has('password_hash')) {
+    fields.push('password_hash');
+    values.push('forensic-no-login');
+  }
+  if (uc.has('full_name')) {
+    fields.push('full_name');
+    values.push(`${role} LWD ${stamp}`);
+  }
+  if (uc.has('role')) {
+    fields.push('role');
+    values.push(role);
+  }
+  if (uc.has('is_active')) {
+    fields.push('is_active');
+    values.push(true);
+  }
+  if (uc.has('user_number')) {
+    fields.push('user_number');
+    values.push(`${prefix.slice(0, 3).toUpperCase()}${stamp.slice(-10)}`);
+  }
+  await pool.query(
+    `INSERT INTO users (${fields.join(',')}) VALUES (${values.map((_, i) => `$${i + 1}`).join(',')})`,
+    values,
+  );
+  return actorId;
+}
+
+async function probeServiceNonAdmin(
   pool: Pool,
   rec: RecFn,
   stamp: string,
-  userId: string,
   batchId: string,
+): Promise<void> {
+  try {
+    const managerId = await insertActorUser(pool, `${stamp}svc`, 'MANAGER');
+    try {
+      await writeDownNearExpiryLot(pool, {
+        inventoryBatchId: batchId,
+        newUnitCost: 5000,
+        memo: `service manager deny ${stamp}`,
+        userId: managerId,
+      });
+      rec(
+        'PERMISSIONS_SERVICE_MANAGER',
+        false,
+        'FAILED',
+        'MANAGER writeDownNearExpiryLot unexpectedly succeeded',
+        { managerId },
+      );
+    } catch (e) {
+      const code = bizCode(e);
+      const ok = code === 'ERR_LOT_WRITE_DOWN_ADMIN_ONLY';
+      rec(
+        'PERMISSIONS_SERVICE_MANAGER',
+        ok,
+        ok ? 'PROVEN' : 'FAILED',
+        `manager service write-down code=${code || 'none'} msg=${errMsg(e).slice(0, 120)}`,
+        { managerId, code },
+      );
+    }
+  } catch (e) {
+    rec('PERMISSIONS_SERVICE_MANAGER', false, 'UNPROVEN', `service probe failed: ${errMsg(e)}`);
+  }
+}
+
+async function probeHttpRole(
+  pool: Pool,
+  rec: RecFn,
+  stamp: string,
+  adminUserId: string,
+  batchId: string,
+  role: 'CASHIER' | 'MANAGER',
+  gateId: string,
+  label: string,
 ): Promise<void> {
   try {
     const { initializeRbacMiddleware } = await import('../src/rbac/middleware.js');
     const { lotWriteDownRoutes } = await import('../src/modules/inventory-lot/lotWriteDownRoutes.js');
     initializeRbacMiddleware(pool);
 
-    const cashierId = randomUUID();
-    const userCols = await pool.query<{ column_name: string }>(
-      `SELECT column_name FROM information_schema.columns WHERE table_name = 'users'`,
-    );
-    const uc = new Set(userCols.rows.map((r) => r.column_name));
-    const fields = ['id'];
-    const values: unknown[] = [cashierId];
-    if (uc.has('email')) {
-      fields.push('email');
-      values.push(`cashier-lwd-${stamp}@forensic.local`);
-    }
-    if (uc.has('username')) {
-      fields.push('username');
-      values.push(`cashier_lwd_${stamp}`);
-    }
-    if (uc.has('password_hash')) {
-      fields.push('password_hash');
-      values.push('forensic-no-login');
-    }
-    if (uc.has('full_name')) {
-      fields.push('full_name');
-      values.push(`Cashier LWD ${stamp}`);
-    }
-    if (uc.has('role')) {
-      fields.push('role');
-      values.push('CASHIER');
-    }
-    if (uc.has('is_active')) {
-      fields.push('is_active');
-      values.push(true);
-    }
-    if (uc.has('user_number')) {
-      fields.push('user_number');
-      values.push(`CSH${stamp.slice(-10)}`);
-    }
-    await pool.query(
-      `INSERT INTO users (${fields.join(',')}) VALUES (${values.map((_, i) => `$${i + 1}`).join(',')})`,
-      values,
-    );
-
+    const actorId = await insertActorUser(pool, `${stamp}${label}`, role);
     const secret = process.env.JWT_SECRET || 'dev-only-insecure-key-change-me-32ch';
     const token = jwt.sign(
       {
-        userId: cashierId,
-        email: `cashier-lwd-${stamp}@forensic.local`,
-        fullName: `Cashier LWD ${stamp}`,
-        role: 'CASHIER',
+        userId: actorId,
+        email: `${label}-lwd-${stamp}@forensic.local`,
+        fullName: `${role} LWD ${stamp}`,
+        role,
         type: 'access',
       },
       secret,
@@ -539,19 +591,24 @@ async function probeHttpCashier(
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ inventoryBatchId: batchId, newUnitCost: 5000, memo: `http cashier ${stamp}` }),
+      body: JSON.stringify({
+        inventoryBatchId: batchId,
+        newUnitCost: 5000,
+        memo: `http ${label} ${stamp}`,
+      }),
     });
     const body = await res.text();
+    const ok = res.status === 403 && body.includes('ERR_LOT_WRITE_DOWN_ADMIN_ONLY');
     rec(
-      'PERMISSIONS_HTTP',
-      res.status === 403,
-      res.status === 403 ? 'PROVEN' : 'FAILED',
-      `cashier POST lot-write-down status=${res.status} body=${body.slice(0, 180)}`,
-      { status: res.status, body: body.slice(0, 300), cashierId, adminUserId: userId },
+      gateId,
+      ok,
+      ok ? 'PROVEN' : 'FAILED',
+      `${label} POST lot-write-down status=${res.status} body=${body.slice(0, 180)}`,
+      { status: res.status, body: body.slice(0, 300), actorId, adminUserId, role },
     );
     await new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())));
   } catch (e) {
-    rec('PERMISSIONS_HTTP', false, 'UNPROVEN', `HTTP probe failed: ${errMsg(e)}`);
+    rec(gateId, false, 'UNPROVEN', `HTTP ${label} probe failed: ${errMsg(e)}`);
   }
 }
 

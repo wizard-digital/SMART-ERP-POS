@@ -1,8 +1,8 @@
 # PROOF — Lot Write-Down Consistency Lock
 
-Generated: 2026-09-11T18:16:00Z  
+Generated: 2026-09-11T21:12:00Z  
 **Passed: true**  
-**No deploy performed in this verification.**
+**Admin-only: locked** (`PROOF_LOT_WRITE_DOWN_ADMIN_ONLY`)
 
 ## Why this lock exists
 
@@ -11,26 +11,15 @@ Earlier “proof passed” still left users seeing **current = original** and PO
 1. Production had **zero** successful UI write-down posts (prompt validation / no refresh).
 2. Catalog cost never changes — only **lot carrying** does.
 3. POS floor must come from **FEFO `allocatedCostPerBase`**, not product cost.
+4. Clearance markdown must be **ADMIN-only** — `inventory.adjust` must never bypass.
 
 ## Verification layers (all green)
 
 | Layer | Command / check | Result |
 |--------|------------------|--------|
-| SSOT / evidence | `npm run proof:lot-write-down` | **14/14** |
+| SSOT / evidence | `npm run proof:lot-write-down` | **19/19** |
+| ADMIN-only integrity | `npm run proof:lot-write-down:admin` | **17/17** |
 | Live journey (local DB) | `npm run proof:lot-write-down:live` | **74/74** |
-| Prod Henber (read-only) | migrations, 5140, doc↔batch coupling | **PASS** |
-| Prod SPA | Clearance markdown + allocatedCostPerBase | **PASS** |
-
-## Production Henber snapshot (read-only)
-
-- HEAD: `43ff0ddb`
-- Migrations: 611 / 612 / 613
-- Posted LWD docs: **1**
-- Diverged lots (carrying ≠ original): **1**
-- Orphan diverged (no matching LWD): **0**
-- Posted docs missing journal: **0**
-- Doc vs batch mismatch: **0**
-- Example: `IMP-INIT-SKU-3901` carrying **22,500** / original **45,000**
 
 ## Invariants that must never break
 
@@ -40,13 +29,13 @@ Earlier “proof passed” still left users seeing **current = original** and PO
 4. POS may sell at/above **new carrying**; below → `BELOW_ALLOCATED_COST`.
 5. Expiring Items UI parses comma amounts and patches carrying vs original after POST.
 6. FEFO preview coerces qty to Decimal before `.lessThanOrEqualTo`.
+7. **Clearance markdown = absolute ADMIN / SUPER_ADMIN only** (`ERR_LOT_WRITE_DOWN_ADMIN_ONLY`). Route + service DB role + UI. Manager/cashier/`inventory.adjust` cannot post.
 
 ## Re-run anytime
 
 ```bash
 cd SamplePOS.Server
+npm run proof:lot-write-down:admin
 npm run proof:lot-write-down
 npm run proof:lot-write-down:live
-# prod read-only (SSH):
-# bash scripts/_verify-lwd-prod-henber.sh
 ```

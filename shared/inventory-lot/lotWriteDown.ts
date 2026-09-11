@@ -8,6 +8,7 @@
  * Carrying cost (inventory_batches.cost_price) may fall; original_cost_price never does.
  */
 
+import { isAbsoluteAdminRole } from '../authorization/agedSaleReturnPolicy.js';
 import { classifyExpiryUrgency } from '../reports/expiringItemsSsot.js';
 import { DEFAULT_LOT_POLICY } from './lotPolicy.js';
 import { isLotEligibleForSale, normalizeLotDate } from './lotRules.js';
@@ -20,6 +21,20 @@ export const LOT_WRITE_DOWN_REFERENCE_TYPE = 'LOT_WRITE_DOWN';
 export const LOT_WRITE_DOWN_MIN_CARRYING = 0.01;
 /** Still-sellable lots with 1..60 days until expiry. Independent of Critical (≤7d) KPI. */
 export const LOT_WRITE_DOWN_MAX_DAYS = 60;
+
+/**
+ * Clearance markdown is ADMIN-only (same absolute-admin convention as aged returns).
+ * inventory.adjust / manager / cashier must never bypass — server looks up users.role.
+ */
+export const ERR_LOT_WRITE_DOWN_ADMIN_ONLY = 'ERR_LOT_WRITE_DOWN_ADMIN_ONLY';
+
+export function canPerformLotWriteDown(actorRole: string | null | undefined): boolean {
+  return isAbsoluteAdminRole(actorRole);
+}
+
+export function lotWriteDownAdminDeniedMessage(): string {
+  return 'Clearance markdown (lot write-down) can only be performed by an ADMIN.';
+}
 
 export type LotWriteDownRejectReason =
   | 'NO_EXPIRY'

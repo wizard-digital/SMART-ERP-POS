@@ -3,6 +3,7 @@
  */
 import {
   assertWriteDownBandMatchesLotPolicy,
+  canPerformLotWriteDown,
   evaluateLotWriteDownGate,
   isNearExpiryWriteDownBand,
   LOT_WRITE_DOWN_EXPENSE_ACCOUNT,
@@ -28,6 +29,16 @@ function base(over: Partial<Parameters<typeof evaluateLotWriteDownGate>[0]> = {}
 }
 
 describe('lot write-down eligibility SSOT', () => {
+  it('clearance markdown is absolute ADMIN only — no manager/cashier bypass', () => {
+    expect(canPerformLotWriteDown('ADMIN')).toBe(true);
+    expect(canPerformLotWriteDown('admin')).toBe(true);
+    expect(canPerformLotWriteDown('SUPER_ADMIN')).toBe(true);
+    expect(canPerformLotWriteDown('MANAGER')).toBe(false);
+    expect(canPerformLotWriteDown('CASHIER')).toBe(false);
+    expect(canPerformLotWriteDown('STAFF')).toBe(false);
+    expect(canPerformLotWriteDown(null)).toBe(false);
+  });
+
   it('clearance window is 1–60 days; Critical KPI band stays 7', () => {
     expect(assertWriteDownBandMatchesLotPolicy()).toBe(true);
     expect(LOT_WRITE_DOWN_MAX_DAYS).toBe(60);

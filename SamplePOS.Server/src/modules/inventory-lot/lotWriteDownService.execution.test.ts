@@ -108,7 +108,7 @@ function makeBatch(over: Record<string, string | number | null> = {}) {
   };
 }
 
-function makePool(batch: ReturnType<typeof makeBatch>) {
+function makePool(batch: ReturnType<typeof makeBatch>, actorRole = 'ADMIN') {
   const sqlLog: string[] = [];
   const live = { ...batch };
   const client = {
@@ -117,6 +117,9 @@ function makePool(batch: ReturnType<typeof makeBatch>) {
       sqlLog.push(s);
       if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') {
         return { rows: [], rowCount: 0 };
+      }
+      if (s.includes('SELECT role FROM users')) {
+        return { rows: [{ role: actorRole }], rowCount: 1 };
       }
       if (s.includes('FOR UPDATE OF b')) {
         return { rows: [live], rowCount: 1 };
@@ -185,6 +188,44 @@ describe('EXECUTED lot write-down service', () => {
       const msg = errorMessage(e);
       if (!msg.includes('userId is required')) throw e;
       gate('EXEC_REQUIRE_USER', true, msg);
+    }
+  });
+
+  it('rejects non-ADMIN actor (inventory.adjust cannot bypass)', async () => {
+    const { pool } = makePool(makeBatch(), 'MANAGER');
+    try {
+      await writeDownNearExpiryLot(pool as never, {
+        inventoryBatchId: BATCH_ID,
+        newUnitCost: NEW_COST,
+        userId: USER_ID,
+      });
+      gate('EXEC_ADMIN_ONLY', false, 'MANAGER should be rejected');
+    } catch (e) {
+      const code = businessCode(e);
+      gate(
+        'EXEC_ADMIN_ONLY',
+        code === 'ERR_LOT_WRITE_DOWN_ADMIN_ONLY',
+        `code=${code ?? 'none'}`,
+      );
+    }
+  });
+
+  it('rejects CASHIER actor', async () => {
+    const { pool } = makePool(makeBatch(), 'CASHIER');
+    try {
+      await writeDownNearExpiryLot(pool as never, {
+        inventoryBatchId: BATCH_ID,
+        newUnitCost: NEW_COST,
+        userId: USER_ID,
+      });
+      gate('EXEC_CASHIER_BLOCKED', false, 'CASHIER should be rejected');
+    } catch (e) {
+      const code = businessCode(e);
+      gate(
+        'EXEC_CASHIER_BLOCKED',
+        code === 'ERR_LOT_WRITE_DOWN_ADMIN_ONLY',
+        `code=${code ?? 'none'}`,
+      );
     }
   });
 

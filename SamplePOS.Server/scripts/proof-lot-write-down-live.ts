@@ -172,14 +172,19 @@ async function main(): Promise<void> {
 
   await ensureLotWriteDownSchema();
 
-  const userRes = await pool.query<{ id: string }>(
-    `SELECT id::text AS id FROM users
+  const userRes = await pool.query<{ id: string; role: string | null }>(
+    `SELECT id::text AS id, role::text AS role FROM users
      WHERE id::text <> '00000000-0000-0000-0000-000000000000'
+       AND UPPER(COALESCE(role::text, '')) IN ('ADMIN', 'SUPER_ADMIN')
      ORDER BY created_at NULLS LAST
      LIMIT 1`,
   );
   const userId = userRes.rows[0]?.id;
-  requireGate('USER', Boolean(userId), userId ? `userId=${userId}` : 'no usable user');
+  requireGate(
+    'USER',
+    Boolean(userId),
+    userId ? `adminUserId=${userId} role=${userRes.rows[0]?.role}` : 'no ADMIN/SUPER_ADMIN user',
+  );
 
   const accounts = await pool.query<{ code: string }>(
     `SELECT "AccountCode" AS code FROM accounts

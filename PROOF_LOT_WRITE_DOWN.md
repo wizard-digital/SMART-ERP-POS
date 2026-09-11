@@ -1,7 +1,7 @@
 # PROOF: Near-expiry lot write-down (NRV)
 
 **Result:** PASS
-**As of:** 2026-09-11T18:41:06.455Z
+**As of:** 2026-09-11T21:30:23.270Z
 
 ## Claims
 - Still-sellable lots expiring within 60 days may be written down; original cost is preserved.
@@ -38,6 +38,7 @@
 - PASS `NO_EXPIRY_BLOCK` — no expiry (in-transit damage path) blocked
 - PASS `UI_WRITE_DOWN` — write-down on Expiring Items
 - PASS `UI_CLEARANCE_NAME` — named clearance markdown not below-cost sale
+- PASS `UI_ADMIN_ONLY` — Clearance markdown UI gated to absolute ADMIN
 - PASS `UI_60_DAY_WINDOW` — UI uses 60-day write-down SSOT
 - PASS `UI_QUARANTINE_EXPIRED` — quarantine still expired-only
 - PASS `EXPENSE_ACCOUNT` — 5140 constant
@@ -50,6 +51,9 @@
 - PASS `UI_COMMA_PARSE` — write-down prompt strips commas before Number()
 - PASS `UI_PATCH_AFTER_POST` — after POST: patch carrying vs original in open report + surface API errors
 - PASS `FEFO_COERCE_DECIMAL` — FEFO preview coerces numeric qty to Decimal (no lessThanOrEqualTo crash)
+- PASS `ROUTE_NOT_INVENTORY_ADJUST` — HTTP route is ADMIN-only — inventory.adjust cannot authorize write-down
+- PASS `SERVICE_DB_ROLE_GATE` — service re-checks users.role inside the posting transaction
+- PASS `SSOT_ADMIN_HELPERS` — shared SSOT exports ADMIN-only helpers
 
 ## Executed / live (not source greps)
 

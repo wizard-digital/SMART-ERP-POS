@@ -12,7 +12,10 @@ import { AccountingCore } from '../../services/accountingCore.js';
 import { AccountCodes } from '../../services/glEntryService.js';
 import {
   assertWriteDownCouplesSubledger,
+  canPerformLotWriteDown,
   evaluateLotWriteDownGate,
+  ERR_LOT_WRITE_DOWN_ADMIN_ONLY,
+  lotWriteDownAdminDeniedMessage,
   lotWriteDownErrorCode,
   LOT_WRITE_DOWN_EXPENSE_ACCOUNT,
   LOT_WRITE_DOWN_REASON,
@@ -67,6 +70,19 @@ export async function writeDownNearExpiryLot(
   const businessDate = getBusinessDate();
 
   return UnitOfWork.run(pool, async (client) => {
+    // Authoritative ADMIN gate — DB role, not JWT claim or inventory.adjust.
+    const roleRes = await client.query<{ role: string | null }>(
+      `SELECT role FROM users WHERE id = $1`,
+      [input.userId],
+    );
+    const actorRole = roleRes.rows[0]?.role ?? null;
+    if (!canPerformLotWriteDown(actorRole)) {
+      throw new BusinessError(lotWriteDownAdminDeniedMessage(), ERR_LOT_WRITE_DOWN_ADMIN_ONLY, {
+        actorRole,
+        requiresAdmin: true,
+      });
+    }
+
     const batchRes = await client.query<{
       id: string;
       product_id: string;

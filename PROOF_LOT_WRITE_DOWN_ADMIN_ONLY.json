@@ -1,0 +1,99 @@
+{
+  "feature": "LOT_WRITE_DOWN_ADMIN_ONLY",
+  "provenAt": "2026-09-11T21:30:21.988Z",
+  "contract": "Clearance markdown (lot write-down) is absolute ADMIN/SUPER_ADMIN only. inventory.adjust must never authorize. Route + service DB role + UI gate + live HTTP 403.",
+  "errorCode": "ERR_LOT_WRITE_DOWN_ADMIN_ONLY",
+  "gates": [
+    {
+      "id": "ERR_CODE",
+      "ok": true,
+      "detail": "ERR_LOT_WRITE_DOWN_ADMIN_ONLY"
+    },
+    {
+      "id": "MSG",
+      "ok": true,
+      "detail": "Clearance markdown (lot write-down) can only be performed by an ADMIN."
+    },
+    {
+      "id": "ADMIN_OK",
+      "ok": true,
+      "detail": "ADMIN"
+    },
+    {
+      "id": "SUPER_ADMIN_OK",
+      "ok": true,
+      "detail": "SUPER_ADMIN"
+    },
+    {
+      "id": "MANAGER_DENY",
+      "ok": true,
+      "detail": "MANAGER denied"
+    },
+    {
+      "id": "CASHIER_DENY",
+      "ok": true,
+      "detail": "CASHIER/STAFF denied"
+    },
+    {
+      "id": "NULL_DENY",
+      "ok": true,
+      "detail": "null/undefined denied"
+    },
+    {
+      "id": "ROUTE_NO_INVENTORY_ADJUST",
+      "ok": true,
+      "detail": "route never grants via requirePermission(inventory.adjust)"
+    },
+    {
+      "id": "ROUTE_ADMIN_MIDDLEWARE",
+      "ok": true,
+      "detail": "HTTP middleware checks users.role + ADMIN SSOT"
+    },
+    {
+      "id": "SERVICE_DB_ROLE",
+      "ok": true,
+      "detail": "posting transaction re-checks DB role (JWT alone insufficient)"
+    },
+    {
+      "id": "UI_ADMIN_GATE",
+      "ok": true,
+      "detail": "Clearance markdown button requires ADMIN"
+    },
+    {
+      "id": "SSOT_DOCUMENTED",
+      "ok": true,
+      "detail": "SSOT documents no adjust bypass"
+    },
+    {
+      "id": "LIVE_USES_ADMIN_USER",
+      "ok": true,
+      "detail": "live proof posts only as ADMIN/SUPER_ADMIN"
+    },
+    {
+      "id": "LIVE_HTTP_CASHIER_403",
+      "ok": true,
+      "detail": "live surfaces prove cashier HTTP → 403"
+    },
+    {
+      "id": "LIVE_HTTP_MANAGER_403",
+      "ok": true,
+      "detail": "live surfaces prove manager HTTP → 403 (adjust cannot bypass)"
+    },
+    {
+      "id": "LIVE_SERVICE_MANAGER_DENY",
+      "ok": true,
+      "detail": "live surfaces prove MANAGER service call rejected with ADMIN-only code"
+    },
+    {
+      "id": "EXEC_MANAGER_CASHIER",
+      "ok": true,
+      "detail": "execution proof rejects MANAGER and CASHIER codes"
+    }
+  ],
+  "summary": {
+    "total": 17,
+    "passed": 17,
+    "failed": 0,
+    "verdict": "PASS"
+  }
+}

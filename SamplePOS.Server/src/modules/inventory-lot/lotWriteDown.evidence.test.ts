@@ -156,6 +156,13 @@ describe('PROOF lot write-down NRV', () => {
     gate('UI_WRITE_DOWN', page.includes('data-expiring-write-down-row') && page.includes('writeDownNearExpiryLot'), 'write-down on Expiring Items');
     gate('UI_CLEARANCE_NAME', page.includes('Lot carrying-value write-down') && page.includes('Clearance markdown'), 'named clearance markdown not below-cost sale');
     gate(
+      'UI_ADMIN_ONLY',
+      page.includes('canPerformLotWriteDown') &&
+        page.includes('canClearanceMarkdown') &&
+        page.includes('(ADMIN only)'),
+      'Clearance markdown UI gated to absolute ADMIN',
+    );
+    gate(
       'UI_60_DAY_WINDOW',
       page.includes('isNearExpiryWriteDownBand') && page.includes('LOT_WRITE_DOWN_MAX_DAYS') && page.includes('canWriteDown'),
       'UI uses 60-day write-down SSOT',
@@ -243,6 +250,31 @@ describe('PROOF lot write-down NRV', () => {
       'FEFO_COERCE_DECIMAL',
       fefo.includes('baseQty instanceof Decimal ? baseQty : new Decimal(baseQty)'),
       'FEFO preview coerces numeric qty to Decimal (no lessThanOrEqualTo crash)',
+    );
+
+    const routes = readRel('SamplePOS.Server/src/modules/inventory-lot/lotWriteDownRoutes.ts');
+    const svc = readRel('SamplePOS.Server/src/modules/inventory-lot/lotWriteDownService.ts');
+    gate(
+      'ROUTE_NOT_INVENTORY_ADJUST',
+      !routes.includes("requirePermission('inventory.adjust')") &&
+        routes.includes('requireLotWriteDownAdmin') &&
+        routes.includes('ERR_LOT_WRITE_DOWN_ADMIN_ONLY') &&
+        routes.includes('canPerformLotWriteDown'),
+      'HTTP route is ADMIN-only — inventory.adjust cannot authorize write-down',
+    );
+    gate(
+      'SERVICE_DB_ROLE_GATE',
+      svc.includes('SELECT role FROM users') &&
+        svc.includes('canPerformLotWriteDown') &&
+        svc.includes('ERR_LOT_WRITE_DOWN_ADMIN_ONLY'),
+      'service re-checks users.role inside the posting transaction',
+    );
+    gate(
+      'SSOT_ADMIN_HELPERS',
+      ssot.includes('ERR_LOT_WRITE_DOWN_ADMIN_ONLY') &&
+        ssot.includes('canPerformLotWriteDown') &&
+        ssot.includes('isAbsoluteAdminRole'),
+      'shared SSOT exports ADMIN-only helpers',
     );
   });
 });

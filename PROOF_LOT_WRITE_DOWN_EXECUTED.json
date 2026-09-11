@@ -1,13 +1,23 @@
 {
   "proof": "LOT_WRITE_DOWN_EXECUTED",
   "passed": true,
-  "asOf": "2026-09-11T07:32:24.344Z",
+  "asOf": "2026-09-11T21:30:22.871Z",
   "mode": "service-execution-mock-pg",
   "gates": [
     {
       "id": "EXEC_REQUIRE_USER",
       "ok": true,
       "detail": "userId is required for lot write-down"
+    },
+    {
+      "id": "EXEC_ADMIN_ONLY",
+      "ok": true,
+      "detail": "code=ERR_LOT_WRITE_DOWN_ADMIN_ONLY"
+    },
+    {
+      "id": "EXEC_CASHIER_BLOCKED",
+      "ok": true,
+      "detail": "code=ERR_LOT_WRITE_DOWN_ADMIN_ONLY"
     },
     {
       "id": "EXEC_DOC",
@@ -59,7 +69,7 @@
       "ok": true,
       "detail": "DR 5140=40000 CR 1300=40000",
       "measured": {
-        "entryDate": "2026-09-11",
+        "entryDate": "2026-09-12",
         "description": "Lot write-down LWD-2026-00007 — near-expiry NRV",
         "referenceType": "LOT_WRITE_DOWN",
         "referenceId": "cccccccc-cccc-cccc-cccc-cccccccccccc",

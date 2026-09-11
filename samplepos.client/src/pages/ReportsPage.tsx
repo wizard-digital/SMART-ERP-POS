@@ -47,6 +47,7 @@ import Layout from '../components/Layout';
 import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
 import { api as inventoryApi, getErrorMessage } from '../utils/api';
+import { useAuth } from '../hooks/useAuth';
 import CustomerAgingReport from '../components/reports/CustomerAgingReport';
 import ReportCustomerCombobox from '../components/reports/ReportCustomerCombobox';
 import ReportSupplierCombobox from '../components/reports/ReportSupplierCombobox';
@@ -63,6 +64,7 @@ import {
   type ExpiryBandFilter,
 } from '@shared/reports/expiringItemsSsot';
 import {
+  canPerformLotWriteDown,
   isNearExpiryWriteDownBand,
   LOT_WRITE_DOWN_MAX_DAYS,
   LOT_WRITE_DOWN_MIN_CARRYING,
@@ -1074,6 +1076,9 @@ interface ReportData {
 
 export default function ReportsPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  /** Clearance markdown is ADMIN-only — UI mirrors server; inventory.adjust cannot unlock it. */
+  const canClearanceMarkdown = canPerformLotWriteDown(user?.role);
   const [selectedReport, setSelectedReport] = useState<ReportType | null>(null);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
@@ -2493,7 +2498,7 @@ export default function ReportsPage() {
                 Quarantine workqueue
               </Link>
               . Still-sellable lots expiring within {LOT_WRITE_DOWN_MAX_DAYS} days can use{' '}
-              <strong>Clearance markdown</strong> so POS can sell below original cost at the new carrying cost.
+              <strong>Clearance markdown</strong> (ADMIN only) so POS can sell below original cost at the new carrying cost.
             </p>
 
             {expiringQuarantineMsg && (
@@ -2766,7 +2771,8 @@ export default function ReportsPage() {
                                 : 'bg-slate-100 text-slate-700';
                         const batchId = row.batchId != null ? String(row.batchId) : '';
                         const canQuarantine = band === 'expired' && Boolean(batchId);
-                        const canWriteDown = isNearExpiryWriteDownBand(days) && Boolean(batchId);
+                        const canWriteDown =
+                          canClearanceMarkdown && isNearExpiryWriteDownBand(days) && Boolean(batchId);
                         const carrying = Number(row.unitCost ?? 0);
                         const originalCost = Number(
                           (row as { originalUnitCost?: number }).originalUnitCost ?? carrying,
