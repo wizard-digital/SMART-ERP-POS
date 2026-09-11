@@ -1,7 +1,7 @@
 {
   "proof": "LOT_WRITE_DOWN_NRV",
   "passed": true,
-  "asOf": "2026-09-11T07:32:23.860Z",
+  "asOf": "2026-09-11T18:41:06.455Z",
   "claims": [
     "Still-sellable lots expiring within 60 days may be written down; original cost is preserved.",
     "Carrying cost_price is the POS/FEFO/AT_COST floor; no till override.",
@@ -181,6 +181,21 @@
       "id": "SSOT_POS_ALLOCATED_FLOOR",
       "ok": true,
       "detail": "POS walk-in syncs cart cost floor from allocated FEFO carrying"
+    },
+    {
+      "id": "UI_COMMA_PARSE",
+      "ok": true,
+      "detail": "write-down prompt strips commas before Number()"
+    },
+    {
+      "id": "UI_PATCH_AFTER_POST",
+      "ok": true,
+      "detail": "after POST: patch carrying vs original in open report + surface API errors"
+    },
+    {
+      "id": "FEFO_COERCE_DECIMAL",
+      "ok": true,
+      "detail": "FEFO preview coerces numeric qty to Decimal (no lessThanOrEqualTo crash)"
     }
   ]
 }

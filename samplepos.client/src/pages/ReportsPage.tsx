@@ -56,7 +56,9 @@ import { formatTimestamp, formatTimestampDate, getBusinessDate } from '../utils/
 import {
   expiryUrgencyLabel,
   expiringBandFilterLabel,
+  filterExpiringRegisterRows,
   filterExpiringRowsByBand,
+  filterExpiringRowsBySearch,
   resolveExpiryRowBand,
   type ExpiryBandFilter,
 } from '@shared/reports/expiringItemsSsot';
@@ -1080,6 +1082,8 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   /** Expiring Items KPI card → register filter (all | expired | critical | warning | watch). */
   const [expiringBandFilter, setExpiringBandFilter] = useState<ExpiryBandFilter>('all');
+  /** Smart find: product / SKU / batch (client filter; KPIs stay full-horizon). */
+  const [expiringSearch, setExpiringSearch] = useState('');
   const [expiringQuarantineBusyId, setExpiringQuarantineBusyId] = useState<string | null>(null);
   const [expiringQuarantineMsg, setExpiringQuarantineMsg] = useState<string | null>(null);
   const [expiringWriteDownBusyId, setExpiringWriteDownBusyId] = useState<string | null>(null);
@@ -1400,6 +1404,7 @@ export default function ReportsPage() {
       const { data: result } = await api.post('/reports/generate', params);
 
       setExpiringBandFilter('all');
+      setExpiringSearch('');
       setReportData(result.data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to generate report');
@@ -1606,7 +1611,7 @@ export default function ReportsPage() {
 
     const exportRows =
       reportData.reportType === 'EXPIRING_ITEMS'
-        ? filterExpiringRowsByBand(reportData.data, expiringBandFilter)
+        ? filterExpiringRegisterRows(reportData.data, expiringBandFilter, expiringSearch)
         : reportData.data;
 
     if (!exportRows.length) {
@@ -2461,7 +2466,9 @@ export default function ReportsPage() {
         {/* Expiring Items — shelf-life / expiry register (SSOT) */}
         {reportData.reportType === 'EXPIRING_ITEMS' && reportData.summary && (() => {
           const allRows = Array.isArray(reportData.data) ? reportData.data : [];
-          const filteredRows = filterExpiringRowsByBand(allRows, expiringBandFilter);
+          const bandRows = filterExpiringRowsByBand(allRows, expiringBandFilter);
+          const filteredRows = filterExpiringRowsBySearch(bandRows, expiringSearch);
+          const searchActive = Boolean(expiringSearch.trim());
           const selectBand = (band: ExpiryBandFilter) => {
             setExpiringBandFilter((prev) => (prev === band ? 'all' : band));
             requestAnimationFrame(() => {
@@ -2479,8 +2486,8 @@ export default function ReportsPage() {
             <p className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3">
               <span className="font-semibold text-slate-800">Shelf-life register: </span>
               Active batches still on hand that are <strong>already expired</strong> or expire within
-              the horizon. Value at risk = remaining qty × unit cost (inventory cost). Click a KPI card
-              to show only that band in the list (click again to show all).{' '}
+              the horizon (including <strong>0 days left / expires today</strong> under Expired). Value at risk = remaining qty × unit cost (inventory cost). Click a KPI card
+              to show only that band in the list (click again to show all). Use search to jump to a product, SKU, or batch.{' '}
               <strong>Expired</strong> rows can be sent to quarantine (no P&amp;L) — then dispose from the{' '}
               <Link to="/inventory/quarantine" className="text-slate-900 underline font-semibold">
                 Quarantine workqueue
@@ -2586,6 +2593,7 @@ export default function ReportsPage() {
                   <h4 className="text-base font-semibold text-white">Expiry register</h4>
                   <p className="text-slate-300 text-xs mt-0.5">
                     Showing: {filterLabel}
+                    {searchActive ? ` · search “${expiringSearch.trim()}”` : ''}
                     {expiringBandFilter !== 'all' ? (
                       <>
                         {' '}
@@ -2604,6 +2612,18 @@ export default function ReportsPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
+                  <label className="relative block min-w-[12rem] flex-1 sm:flex-none sm:w-64">
+                    <span className="sr-only">Search product, SKU, or batch</span>
+                    <input
+                      type="search"
+                      value={expiringSearch}
+                      onChange={(e) => setExpiringSearch(e.target.value)}
+                      placeholder="Find product, SKU, or batch…"
+                      data-expiring-search="true"
+                      className="w-full rounded-lg border border-slate-500 bg-slate-900/60 px-3 py-1.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      autoComplete="off"
+                    />
+                  </label>
                   {(() => {
                     const expiredIds = filteredRows
                       .filter((r) => resolveExpiryRowBand({
@@ -2666,7 +2686,10 @@ export default function ReportsPage() {
                   </Link>
                   <span className="text-slate-300 text-xs">
                     {filteredRows.length}
-                    {expiringBandFilter !== 'all' ? ` of ${allRows.length}` : ''} batches
+                    {expiringBandFilter !== 'all' || searchActive
+                      ? ` of ${searchActive && expiringBandFilter === 'all' ? allRows.length : bandRows.length}`
+                      : ''}{' '}
+                    batches
                   </span>
                 </div>
               </div>
@@ -2674,7 +2697,7 @@ export default function ReportsPage() {
                 <div className="p-8 text-center text-sm text-slate-500">
                   No expired or near-expiry stock on hand in this horizon.
                 </div>
-              ) : !filteredRows.length ? (
+              ) : !bandRows.length ? (
                 <div className="p-8 text-center text-sm text-slate-500">
                   No batches in this band.{' '}
                   <button
@@ -2684,6 +2707,30 @@ export default function ReportsPage() {
                   >
                     Show all
                   </button>
+                </div>
+              ) : !filteredRows.length ? (
+                <div className="p-8 text-center text-sm text-slate-500" data-expiring-search-empty="true">
+                  No match for “{expiringSearch.trim()}”.{' '}
+                  <button
+                    type="button"
+                    onClick={() => setExpiringSearch('')}
+                    className="underline text-slate-700"
+                  >
+                    Clear search
+                  </button>
+                  {' '}
+                  · Day-0 (expires today) lots appear under{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExpiringBandFilter('expired');
+                      setExpiringSearch('');
+                    }}
+                    className="underline text-slate-700"
+                  >
+                    Expired
+                  </button>
+                  .
                 </div>
               ) : (
                 <div className="overflow-x-auto">

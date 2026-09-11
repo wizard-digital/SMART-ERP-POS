@@ -9,7 +9,10 @@ import {
   assertExpiringKpiFilterConsistency,
   classifyExpiryUrgency,
   expiringPdfFilterSubtitle,
+  filterExpiringRegisterRows,
   filterExpiringRowsByBand,
+  filterExpiringRowsBySearch,
+  matchesExpiringItemSearch,
   resolveExpiryRowBand,
   summarizeExpiringItems,
   type ExpiringItemLike,
@@ -75,6 +78,49 @@ describe('EVIDENCE — Expiring items shelf-life SSOT', () => {
     gate('CRITICAL', classifyExpiryUrgency(5) === 'critical', '5 days → critical');
     gate('WARNING', classifyExpiryUrgency(20) === 'warning', '20 days → warning');
     gate('WATCH', classifyExpiryUrgency(45) === 'watch', '45 days → watch');
+
+    gate(
+      'SEARCH_NAME',
+      matchesExpiringItemSearch({ productName: 'France Liat', sku: 'SKU-1', batchNumber: 'B1' }, 'liat'),
+      'search matches product name',
+    );
+    gate(
+      'SEARCH_SKU',
+      matchesExpiringItemSearch({ productName: 'X', sku: 'IMP-INIT-SKU-3901', batchNumber: 'B1' }, '3901'),
+      'search matches SKU',
+    );
+    gate(
+      'SEARCH_DAY0_FINDABLE',
+      filterExpiringRegisterRows(
+        [
+          {
+            productName: 'Zero Day Lot',
+            sku: 'ZD-1',
+            batchNumber: 'LOT-0',
+            daysUntilExpiry: 0,
+            urgency: 'expired',
+          },
+          {
+            productName: 'Other',
+            sku: 'ZZ',
+            batchNumber: 'LOT-9',
+            daysUntilExpiry: 9,
+            urgency: 'critical',
+          },
+        ],
+        'all',
+        'Zero Day',
+      ).length === 1,
+      'day-0 (expires today) remains findable via search',
+    );
+    gate(
+      'SEARCH_EMPTY_PASSTHROUGH',
+      filterExpiringRowsBySearch(
+        [{ productName: 'A', sku: '1', batchNumber: 'B' }],
+        '   ',
+      ).length === 1,
+      'blank search keeps all rows',
+    );
 
     const sum = summarizeExpiringItems([
       { daysUntilExpiry: -2, quantityRemaining: 1, potentialLoss: 100 },
@@ -175,6 +221,19 @@ describe('EVIDENCE — Expiring items shelf-life SSOT', () => {
       slice.includes('classifyExpiryUrgency(daysUntilExpiry)'),
       'repository stamps urgency from same classifier',
     );
+
+    const catStart = repo.indexOf('async getCategoryExpiryExposure');
+    const cat = repo.slice(catStart, catStart + 2200);
+    gate(
+      'AI_EXPIRY_BIZ_DATE',
+      cat.includes('getBusinessDate') && cat.includes('expiry_date::date <=') && !cat.includes('CURRENT_DATE'),
+      'Category AI expiry uses business as-of (not CURRENT_DATE)',
+    );
+    gate(
+      'AI_EXPIRY_QTY_ON_HAND',
+      cat.includes('remaining_quantity > 0'),
+      'Category AI expiry same on-hand rule as Expiring Items',
+    );
   });
 
   it('UI wires KPI click → filterExpiringRowsByBand; reset on regenerate', () => {
@@ -212,8 +271,22 @@ describe('EVIDENCE — Expiring items shelf-life SSOT', () => {
     );
     gate(
       'UI_RESET_ON_GENERATE',
-      /setExpiringBandFilter\('all'\);\s*\n\s*setReportData\(result\.data\)/.test(page),
-      'regenerate resets band filter to all',
+      page.includes("setExpiringBandFilter('all')") &&
+        page.includes("setExpiringSearch('')") &&
+        /setExpiringBandFilter\('all'\);[\s\S]{0,80}setReportData\(result\.data\)/.test(page),
+      'regenerate resets band filter + search to all',
+    );
+    gate(
+      'UI_SMART_SEARCH',
+      page.includes('data-expiring-search') &&
+        page.includes('filterExpiringRowsBySearch') &&
+        page.includes('Find product, SKU, or batch'),
+      'Expiring Items has smart product/SKU/batch search',
+    );
+    gate(
+      'CSV_RESPECTS_SEARCH',
+      page.includes('filterExpiringRegisterRows(reportData.data, expiringBandFilter, expiringSearch)'),
+      'CSV export uses band + search (same as on-screen register)',
     );
     gate(
       'PDF_PASSES_BAND',
@@ -223,7 +296,8 @@ describe('EVIDENCE — Expiring items shelf-life SSOT', () => {
     );
     gate(
       'CSV_RESPECTS_FILTER',
-      page.includes('filterExpiringRowsByBand(reportData.data, expiringBandFilter)'),
+      page.includes('filterExpiringRegisterRows') ||
+        page.includes('filterExpiringRowsByBand(reportData.data, expiringBandFilter)'),
       'CSV export uses same filtered rows as on-screen register',
     );
     gate(
@@ -260,6 +334,29 @@ describe('EVIDENCE — Expiring items shelf-life SSOT', () => {
     gate('PDF_QTY_KEY', pdf.includes("key: 'quantityRemaining'"), 'PDF uses quantityRemaining');
     gate('PDF_LOSS_KEY', pdf.includes("key: 'potentialLoss'"), 'PDF uses potentialLoss');
     gate('NO_BRAND', !/\b(SAP|Odoo|Tally|QuickBooks)\b/i.test(page), 'no competitor brand in ReportsPage');
+
+    const catUi = read('samplepos.client/src/pages/reports/CategoryIntelligencePage.tsx');
+    gate(
+      'AI_EXPIRY_SEARCH',
+      catUi.includes('data-category-expiry-search') &&
+        catUi.includes('filterExpiringRowsBySearch') &&
+        catUi.includes('classifyExpiryUrgency'),
+      'Category Intelligence expiry uses same search + urgency SSOT',
+    );
+    gate(
+      'AI_EXPIRY_DAY0_KPI',
+      catUi.includes('Expired (≤0 days)') && catUi.includes('expirySummary.expiredCount'),
+      'Category AI surfaces expired/day-0 count like Expiring Items',
+    );
+
+    const reorderUi = read('samplepos.client/src/pages/reports/ReorderDashboardPage.tsx');
+    gate(
+      'AI_REORDER_SEARCH',
+      reorderUi.includes('data-reorder-search') &&
+        reorderUi.includes('itemSearch') &&
+        reorderUi.includes('stock 0'),
+      'Smart Reorder AI has product/SKU search including stock-0 lines',
+    );
   });
 
   it('writes PROOF artifacts', () => {
@@ -268,7 +365,7 @@ describe('EVIDENCE — Expiring items shelf-life SSOT', () => {
       feature: 'EXPIRING_ITEMS_SSOT',
       provenAt: new Date().toISOString(),
       contract:
-        'shelf-life register; KPI card click filters list; PDF/CSV export same band filter; card count/value === filtered rows (days-authoritative classify); ACTIVE; include expired; PDF keys match',
+        'shelf-life register; smart product/SKU/batch search; KPI↔list; PDF/CSV band(+search CSV); day-0=expired; Category AI expiry same business-date SSOT; Reorder AI searchable',
       gates,
       summary: {
         total: gates.length,

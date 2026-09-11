@@ -78,6 +78,58 @@ export function filterExpiringRowsByBand<
   return rows.filter((row) => resolveExpiryRowBand(row) === filter);
 }
 
+/** Searchable fields for shelf-life / AI expiry registers (product · SKU · batch). */
+export type ExpiringItemSearchable = {
+  productName?: string | null;
+  sku?: string | null;
+  batchNumber?: string | null;
+  /** Category Intelligence alias */
+  batch_number?: string | null;
+};
+
+/**
+ * Smart find: match product name, SKU, or batch (case-insensitive substring).
+ * Empty query → all rows. Day-0 / expired rows remain searchable like any other band.
+ */
+export function matchesExpiringItemSearch(
+  row: ExpiringItemSearchable,
+  query: string | null | undefined,
+): boolean {
+  const q = String(query ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/,/g, '');
+  if (!q) return true;
+  const hay = [
+    row.productName,
+    row.sku,
+    row.batchNumber,
+    row.batch_number,
+  ]
+    .map((v) => String(v ?? '').toLowerCase())
+    .join(' ');
+  return hay.includes(q) || q.split(/\s+/).every((token) => token && hay.includes(token));
+}
+
+export function filterExpiringRowsBySearch<T extends ExpiringItemSearchable>(
+  rows: T[],
+  query: string | null | undefined,
+): T[] {
+  const q = String(query ?? '').trim();
+  if (!q) return rows;
+  return rows.filter((row) => matchesExpiringItemSearch(row, q));
+}
+
+/** Band then search — same order as Expiring Items + Category Expiry UI. */
+export function filterExpiringRegisterRows<
+  T extends ExpiringItemSearchable & {
+    urgency?: string | null;
+    daysUntilExpiry?: number | null;
+  },
+>(rows: T[], band: ExpiryBandFilter, query?: string | null): T[] {
+  return filterExpiringRowsBySearch(filterExpiringRowsByBand(rows, band), query);
+}
+
 export function summarizeExpiringItems(rows: ExpiringItemLike[]): {
   totalItems: number;
   totalQuantityAtRisk: number;

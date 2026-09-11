@@ -95,6 +95,8 @@ export default function ReorderDashboardPage() {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
     const [exporting, setExporting] = useState<'pdf' | 'csv' | null>(null);
+    /** Find out-of-stock (qty 0) and other lines by name / SKU / category. */
+    const [itemSearch, setItemSearch] = useState('');
 
     const fetchDashboard = useCallback(async () => {
         setLoading(true);
@@ -105,6 +107,7 @@ export default function ReorderDashboardPage() {
             const json = await resp.json();
             if (!json.success) throw new Error(json.error || 'Failed to load');
             setData(json.data);
+            setItemSearch('');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Unknown error');
         } finally {
@@ -116,7 +119,12 @@ export default function ReorderDashboardPage() {
 
     const fullTabItems = useMemo(() => {
         if (!data) return [];
-        const items = data[activeTab] ?? [];
+        const q = itemSearch.trim().toLowerCase();
+        const items = (data[activeTab] ?? []).filter((a) => {
+            if (!q) return true;
+            const hay = `${a.name} ${a.sku} ${a.category ?? ''}`.toLowerCase();
+            return hay.includes(q) || q.split(/\s+/).every((t) => t && hay.includes(t));
+        });
         return [...items].sort((a, b) => {
             let aVal: number | string = 0;
             let bVal: number | string = 0;
@@ -131,7 +139,7 @@ export default function ReorderDashboardPage() {
             if (typeof aVal === 'string') return sortAsc ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
             return sortAsc ? aVal - (bVal as number) : (bVal as number) - aVal;
         });
-    }, [data, activeTab, sortField, sortAsc]);
+    }, [data, activeTab, sortField, sortAsc, itemSearch]);
 
     const totalInTab = fullTabItems.length;
     const totalPages = Math.max(1, Math.ceil(totalInTab / pageSize));
@@ -144,7 +152,7 @@ export default function ReorderDashboardPage() {
 
     useEffect(() => {
         setPage(1);
-    }, [activeTab, pageSize]);
+    }, [activeTab, pageSize, itemSearch]);
 
     /** All items across tabs — used for cross-tab PO creation */
     const allDashboardItems = useMemo(() => {
@@ -460,11 +468,27 @@ export default function ReorderDashboardPage() {
 
                 {/* ── Bulk Actions ── */}
                 <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm text-gray-700">
-                        {totalInTab === 0
-                            ? 'No items in this tab'
-                            : `Showing ${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, totalInTab)} of ${totalInTab}`}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[12rem]">
+                        <label className="relative block w-full sm:max-w-xs">
+                            <span className="sr-only">Search product or SKU</span>
+                            <input
+                                type="search"
+                                value={itemSearch}
+                                onChange={(e) => setItemSearch(e.target.value)}
+                                placeholder="Find product, SKU, or category (incl. stock 0)…"
+                                data-reorder-search="true"
+                                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                autoComplete="off"
+                            />
+                        </label>
+                        <span className="text-sm text-gray-700">
+                            {totalInTab === 0
+                                ? itemSearch.trim()
+                                    ? `No match for “${itemSearch.trim()}” in this tab`
+                                    : 'No items in this tab'
+                                : `Showing ${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, totalInTab)} of ${totalInTab}`}
+                        </span>
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <label className="text-xs text-gray-600 flex items-center gap-1">
                             Per page

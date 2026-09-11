@@ -1,0 +1,46 @@
+{
+  "proof": "lot-write-down-consistency-lock",
+  "generatedAt": "2026-09-11T18:16:00.000Z",
+  "passed": true,
+  "noDeploy": true,
+  "layers": {
+    "ssot": { "command": "npm run proof:lot-write-down", "result": "14/14 tests passed" },
+    "liveLocal": { "command": "npm run proof:lot-write-down:live", "result": "74/74 gates passed" },
+    "prodHenberReadOnly": {
+      "head": "43ff0ddb",
+      "db": "pos_tenant_henber_pharmacy",
+      "migrations": ["611", "612", "613"],
+      "account5140": 1,
+      "postedDocs": 1,
+      "divergedBatches": 1,
+      "orphanDiverged": 0,
+      "docMismatch": 0,
+      "postedMissingJournal": 0,
+      "nearExpiryActive": 68,
+      "sample": {
+        "batch": "IMP-INIT-SKU-3901",
+        "carrying": 22500,
+        "original": 45000
+      }
+    },
+    "prodSpa": {
+      "clearanceMarkdown": true,
+      "writeDownApi": true,
+      "allocatedCostPerBase": true,
+      "belowAllocatedCost": true
+    }
+  },
+  "invariantsLocked": [
+    "original_cost_price immutable; carrying may fall only via POSTED LWD + JE DR5140/CR1300",
+    "qty unchanged; catalog product cost unchanged",
+    "POS floor = FEFO batch carrying (allocatedCostPerBase), not catalog",
+    "sell at/above new carrying allowed; below new carrying = BELOW_ALLOCATED_COST",
+    "UI strips commas; patches carrying vs original after successful POST",
+    "FEFO preview coerces numeric qty to Decimal"
+  ],
+  "howToReRun": [
+    "cd SamplePOS.Server && npm run proof:lot-write-down",
+    "cd SamplePOS.Server && npm run proof:lot-write-down:live",
+    "bash scripts/_verify-lwd-prod-henber.sh (via SSH to prod; read-only)"
+  ]
+}

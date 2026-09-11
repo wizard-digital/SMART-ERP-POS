@@ -5743,8 +5743,10 @@ export const reportsRepository = {
    */
   async getCategoryExpiryExposure(
     pool: Pool,
-    options: { category: string; daysAhead: number }
+    options: { category: string; daysAhead: number; asOfDate?: string }
   ): Promise<CategoryExpiryExposureRow[]> {
+    // Same horizon rule as getExpiringItems (business as-of, include day-0 / past-due).
+    const asOf = options.asOfDate || getBusinessDate();
     const query = `
       SELECT
         p.id               AS product_id,
@@ -5762,13 +5764,13 @@ export const reportsRepository = {
       LEFT JOIN product_uoms pu ON pu.product_id = p.id AND pu.is_default = TRUE
       LEFT JOIN uoms u ON u.id = pu.uom_id
       WHERE ${categoryMatchClause('p.category', 1)}
-        AND ib.status = 'ACTIVE'
+        AND COALESCE(ib.status, 'ACTIVE') = 'ACTIVE'
         AND ib.expiry_date IS NOT NULL
-        AND ib.expiry_date <= CURRENT_DATE + ($2 || ' days')::INTERVAL
+        AND ib.expiry_date::date <= ($2::date + ($3::text || ' days')::interval)
         AND ib.remaining_quantity > 0
       ORDER BY ib.expiry_date ASC, exposed_value DESC
     `;
-    const result = await pool.query(query, [options.category, options.daysAhead]);
+    const result = await pool.query(query, [options.category, asOf, options.daysAhead]);
     return result.rows.map((row) => ({
       productId: row.product_id,
       sku: row.sku || null,

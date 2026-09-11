@@ -1,7 +1,7 @@
 {
   "feature": "EXPIRING_ITEMS_SSOT",
-  "provenAt": "2026-08-23T13:40:55.140Z",
-  "contract": "shelf-life register; KPI card click filters list; PDF/CSV export same band filter; card count/value === filtered rows (days-authoritative classify); ACTIVE; include expired; PDF keys match",
+  "provenAt": "2026-09-11T18:40:39.208Z",
+  "contract": "shelf-life register; smart product/SKU/batch search; KPI↔list; PDF/CSV band(+search CSV); day-0=expired; Category AI expiry same business-date SSOT; Reorder AI searchable",
   "gates": [
     {
       "id": "EXPIRED",
@@ -22,6 +22,26 @@
       "id": "WATCH",
       "ok": true,
       "detail": "45 days → watch"
+    },
+    {
+      "id": "SEARCH_NAME",
+      "ok": true,
+      "detail": "search matches product name"
+    },
+    {
+      "id": "SEARCH_SKU",
+      "ok": true,
+      "detail": "search matches SKU"
+    },
+    {
+      "id": "SEARCH_DAY0_FINDABLE",
+      "ok": true,
+      "detail": "day-0 (expires today) remains findable via search"
+    },
+    {
+      "id": "SEARCH_EMPTY_PASSTHROUGH",
+      "ok": true,
+      "detail": "blank search keeps all rows"
     },
     {
       "id": "SUM_EXPIRED",
@@ -134,6 +154,16 @@
       "detail": "repository stamps urgency from same classifier"
     },
     {
+      "id": "AI_EXPIRY_BIZ_DATE",
+      "ok": true,
+      "detail": "Category AI expiry uses business as-of (not CURRENT_DATE)"
+    },
+    {
+      "id": "AI_EXPIRY_QTY_ON_HAND",
+      "ok": true,
+      "detail": "Category AI expiry same on-hand rule as Expiring Items"
+    },
+    {
       "id": "IN_SSOT",
       "ok": true,
       "detail": "EXPIRING_ITEMS in FINANCIAL_SSOT_REPORTS"
@@ -149,6 +179,11 @@
       "detail": "KPI cards click-filter register"
     },
     {
+      "id": "P3_QUARANTINE_BRIDGE",
+      "ok": true,
+      "detail": "Expiring Items quarantine action + workqueue link"
+    },
+    {
       "id": "UI_MAPS_FILTERED",
       "ok": true,
       "detail": "table maps filteredRows only"
@@ -156,7 +191,17 @@
     {
       "id": "UI_RESET_ON_GENERATE",
       "ok": true,
-      "detail": "regenerate resets band filter to all"
+      "detail": "regenerate resets band filter + search to all"
+    },
+    {
+      "id": "UI_SMART_SEARCH",
+      "ok": true,
+      "detail": "Expiring Items has smart product/SKU/batch search"
+    },
+    {
+      "id": "CSV_RESPECTS_SEARCH",
+      "ok": true,
+      "detail": "CSV export uses band + search (same as on-screen register)"
     },
     {
       "id": "PDF_PASSES_BAND",
@@ -212,11 +257,26 @@
       "id": "NO_BRAND",
       "ok": true,
       "detail": "no competitor brand in ReportsPage"
+    },
+    {
+      "id": "AI_EXPIRY_SEARCH",
+      "ok": true,
+      "detail": "Category Intelligence expiry uses same search + urgency SSOT"
+    },
+    {
+      "id": "AI_EXPIRY_DAY0_KPI",
+      "ok": true,
+      "detail": "Category AI surfaces expired/day-0 count like Expiring Items"
+    },
+    {
+      "id": "AI_REORDER_SEARCH",
+      "ok": true,
+      "detail": "Smart Reorder AI has product/SKU search including stock-0 lines"
     }
   ],
   "summary": {
-    "total": 42,
-    "passed": 42,
+    "total": 54,
+    "passed": 54,
     "failed": 0,
     "verdict": "PASS"
   }

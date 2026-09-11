@@ -8,7 +8,7 @@
  * All numbers derived from ledger/stock tables — never from UI grouping.
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     Download,
     Layers,
@@ -18,6 +18,7 @@ import {
     AlertTriangle,
     FileText,
     RefreshCw,
+    Search,
 } from 'lucide-react';
 import Layout from '../../components/Layout';
 import { ResponsiveTableWrapper } from '../../components/ui/ResponsiveTableWrapper';
@@ -26,6 +27,10 @@ import { DatePicker } from '../../components/ui/date-picker';
 import { formatCurrency } from '../../utils/currency';
 import apiClient from '../../utils/api';
 import { downloadFile } from '../../utils/download';
+import {
+    classifyExpiryUrgency,
+    filterExpiringRowsBySearch,
+} from '@shared/reports/expiringItemsSsot';
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -173,6 +178,13 @@ export default function CategoryIntelligencePage() {
     const [data, setData] = useState<CategoryIntelligenceReport | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    /** Same smart find as Expiring Items (product / SKU / batch). */
+    const [expirySearch, setExpirySearch] = useState('');
+
+    const filteredExpiryRows = useMemo(() => {
+        if (!data?.expiry) return [];
+        return filterExpiringRowsBySearch(data.expiry, expirySearch);
+    }, [data?.expiry, expirySearch]);
 
     // Load category list on mount
     useEffect(() => {
@@ -191,6 +203,7 @@ export default function CategoryIntelligencePage() {
         setLoading(true);
         setError(null);
         setData(null);
+        setExpirySearch('');
         apiClient
             .get('/reports/category-intelligence', {
                 params: {
@@ -266,10 +279,10 @@ export default function CategoryIntelligencePage() {
 
         if (data.expiry && data.expiry.length > 0) {
             sections.push('Expiry Exposure');
-            sections.push(['Product', 'Batch #', 'Expiry Date', 'Days Left', 'Qty Remaining', 'Unit Cost', 'Exposed Value'].join(','));
-            data.expiry.forEach((r) => {
+            sections.push(['Product', 'SKU', 'Batch #', 'Expiry Date', 'Days Left', 'Qty Remaining', 'Unit Cost', 'Exposed Value'].join(','));
+            filterExpiringRowsBySearch(data.expiry, expirySearch).forEach((r) => {
                 sections.push(
-                    [r.productName, r.batchNumber, r.expiryDate, r.daysUntilExpiry <= 0 ? 'EXPIRED' : r.daysUntilExpiry, r.remainingQuantity, r.costPrice, r.exposedValue].map((v) => JSON.stringify(v)).join(',')
+                    [r.productName, r.sku ?? '', r.batchNumber, r.expiryDate, r.daysUntilExpiry <= 0 ? 'EXPIRED' : r.daysUntilExpiry, r.remainingQuantity, r.costPrice, r.exposedValue].map((v) => JSON.stringify(v)).join(',')
                 );
             });
         }
@@ -632,14 +645,19 @@ export default function CategoryIntelligencePage() {
 
                         {/* Expiry Exposure */}
                         {data.expiry && data.expirySummary && data.expiry.length > 0 && (
-                            <section className="space-y-4">
+                            <section className="space-y-4" data-category-expiry-section="true">
                                 <SectionHeading
                                     icon={<AlertTriangle className="w-5 h-5 text-red-600" />}
                                     title={`Expiry Exposure — next ${data.parameters.daysAhead} days`}
-                                    subtitle="Active batches only · ordered by expiry date (most urgent first)"
+                                    subtitle="Same rules as Expiring Items · business date · ACTIVE on-hand · day-0 under Expired · search by product / SKU / batch"
                                 />
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                     <SummaryCard label="Active Batches" value={data.expirySummary.batchCount.toLocaleString()} />
+                                    <SummaryCard
+                                        label="Expired (≤0 days)"
+                                        value={data.expirySummary.expiredCount.toLocaleString()}
+                                        variant={data.expirySummary.expiredCount > 0 ? 'danger' : 'success'}
+                                    />
                                     <SummaryCard label="Total Exposed Qty" value={data.expirySummary.totalExposedQty.toLocaleString()} />
                                     <SummaryCard label="Total Exposed Value" value={formatCurrency(data.expirySummary.totalExposedValue)} variant="danger" />
                                     <SummaryCard
@@ -648,11 +666,24 @@ export default function CategoryIntelligencePage() {
                                         variant={data.expirySummary.expiringSoonCount > 0 ? 'warning' : 'success'}
                                     />
                                 </div>
+                                <div className="relative max-w-md">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                                    <input
+                                        type="search"
+                                        value={expirySearch}
+                                        onChange={(e) => setExpirySearch(e.target.value)}
+                                        placeholder="Find product, SKU, or batch…"
+                                        data-category-expiry-search="true"
+                                        className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                                        autoComplete="off"
+                                    />
+                                </div>
                                 <ResponsiveTableWrapper>
                                     <table className="min-w-full text-sm">
                                         <thead className="bg-gray-50">
                                             <tr>
                                                 <th className="px-3 py-2 text-left font-medium">Product</th>
+                                                <th className="px-3 py-2 text-left font-medium">SKU</th>
                                                 <th className="px-3 py-2 text-left font-medium">Batch #</th>
                                                 <th className="px-3 py-2 text-left font-medium">Expiry Date</th>
                                                 <th className="px-3 py-2 text-right font-medium">Days Left</th>
@@ -662,20 +693,39 @@ export default function CategoryIntelligencePage() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y">
-                                            {data.expiry.length === 0 ? (
-                                                <tr><td colSpan={7} className="px-3 py-6 text-center text-gray-400">No expiring batches found for this category.</td></tr>
-                                            ) : data.expiry.map((r, i) => {
-                                                const urgency = r.daysUntilExpiry <= 0 ? 'bg-red-100' : r.daysUntilExpiry <= 30 ? 'bg-orange-50' : '';
+                                            {filteredExpiryRows.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={8} className="px-3 py-6 text-center text-gray-400">
+                                                        {expirySearch.trim()
+                                                            ? `No match for “${expirySearch.trim()}”. Day-0 lots are Expired (≤0 days).`
+                                                            : 'No expiring batches found for this category.'}
+                                                    </td>
+                                                </tr>
+                                            ) : filteredExpiryRows.map((r, i) => {
+                                                const band = classifyExpiryUrgency(r.daysUntilExpiry);
+                                                const urgency =
+                                                    band === 'expired'
+                                                        ? 'bg-red-100'
+                                                        : band === 'critical'
+                                                          ? 'bg-rose-50'
+                                                          : band === 'warning'
+                                                            ? 'bg-orange-50'
+                                                            : '';
                                                 return (
                                                     <tr key={`${r.batchNumber}-${i}`} className={`hover:bg-gray-50 ${urgency}`}>
                                                         <td className="px-3 py-2">{r.productName}</td>
+                                                        <td className="px-3 py-2 font-mono text-xs">{r.sku || '—'}</td>
                                                         <td className="px-3 py-2 font-mono text-xs">{r.batchNumber}</td>
                                                         <td className="px-3 py-2">{r.expiryDate}</td>
                                                         <td className="px-3 py-2 text-right">
-                                                            {r.daysUntilExpiry <= 0 ? (
-                                                                <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-red-200 text-red-800">EXPIRED</span>
+                                                            {band === 'expired' ? (
+                                                                <span className="inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-red-200 text-red-800">
+                                                                    {r.daysUntilExpiry === 0 ? '0 · EXPIRED' : 'EXPIRED'}
+                                                                </span>
                                                             ) : (
-                                                                <span className={`font-medium ${r.daysUntilExpiry <= 30 ? 'text-orange-600' : ''}`}>{r.daysUntilExpiry}</span>
+                                                                <span className={`font-medium ${band === 'warning' || band === 'critical' ? 'text-orange-600' : ''}`}>
+                                                                    {r.daysUntilExpiry}
+                                                                </span>
                                                             )}
                                                         </td>
                                                         <td className="px-3 py-2 text-right">{r.remainingQuantity.toLocaleString()}</td>
@@ -685,13 +735,25 @@ export default function CategoryIntelligencePage() {
                                                 );
                                             })}
                                         </tbody>
-                                        {data.expiry.length > 0 && (
+                                        {filteredExpiryRows.length > 0 && (
                                             <tfoot className="bg-gray-50 font-medium">
                                                 <tr>
-                                                    <td colSpan={4} className="px-3 py-2 text-right">Total</td>
-                                                    <td className="px-3 py-2 text-right">{data.expirySummary.totalExposedQty.toLocaleString()}</td>
+                                                    <td colSpan={5} className="px-3 py-2 text-right">
+                                                        {expirySearch.trim()
+                                                            ? `Showing ${filteredExpiryRows.length} of ${data.expiry.length}`
+                                                            : 'Total'}
+                                                    </td>
+                                                    <td className="px-3 py-2 text-right">
+                                                        {filteredExpiryRows
+                                                            .reduce((s, r) => s + r.remainingQuantity, 0)
+                                                            .toLocaleString()}
+                                                    </td>
                                                     <td />
-                                                    <td className="px-3 py-2 text-right">{formatCurrency(data.expirySummary.totalExposedValue)}</td>
+                                                    <td className="px-3 py-2 text-right">
+                                                        {formatCurrency(
+                                                            filteredExpiryRows.reduce((s, r) => s + r.exposedValue, 0),
+                                                        )}
+                                                    </td>
                                                 </tr>
                                             </tfoot>
                                         )}

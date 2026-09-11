@@ -2845,6 +2845,7 @@ export const reportsService = {
         ? reportsRepository.getCategoryExpiryExposure(pool, {
           category: options.category,
           daysAhead,
+          asOfDate: today,
         })
         : Promise.resolve(null),
     ]);

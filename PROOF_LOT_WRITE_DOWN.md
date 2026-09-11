@@ -1,7 +1,7 @@
 # PROOF: Near-expiry lot write-down (NRV)
 
 **Result:** PASS
-**As of:** 2026-09-11T07:32:23.860Z
+**As of:** 2026-09-11T18:41:06.455Z
 
 ## Claims
 - Still-sellable lots expiring within 60 days may be written down; original cost is preserved.
@@ -47,6 +47,9 @@
 - PASS `SSOT_LIVE_MATRIX` — live proof measures 1/7/8/20/30/45/60 + report horizon + POS 10000/3000 SQL + P&L/valuation identity
 - PASS `SSOT_ENGINE_ALLOCATED` — pricing engine attaches live FEFO carrying on every resolved price
 - PASS `SSOT_POS_ALLOCATED_FLOOR` — POS walk-in syncs cart cost floor from allocated FEFO carrying
+- PASS `UI_COMMA_PARSE` — write-down prompt strips commas before Number()
+- PASS `UI_PATCH_AFTER_POST` — after POST: patch carrying vs original in open report + surface API errors
+- PASS `FEFO_COERCE_DECIMAL` — FEFO preview coerces numeric qty to Decimal (no lessThanOrEqualTo crash)
 
 ## Executed / live (not source greps)
 

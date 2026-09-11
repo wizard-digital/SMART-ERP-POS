@@ -224,6 +224,26 @@ describe('PROOF lot write-down NRV', () => {
         !posPage.includes('if (items.length === 0 || !selectedCustomer?.id) return'),
       'POS walk-in syncs cart cost floor from allocated FEFO carrying',
     );
+    // Prod failure modes that made "proof passed" then users still see equal costs / below-cost block.
+    gate(
+      'UI_COMMA_PARSE',
+      page.includes(".replace(/,/g, '')") && page.includes('You entered:'),
+      'write-down prompt strips commas before Number()',
+    );
+    gate(
+      'UI_PATCH_AFTER_POST',
+      page.includes('setReportData((prev)') &&
+        page.includes('unitCost: newCarrying') &&
+        page.includes('originalUnitCost: orig') &&
+        page.includes('getErrorMessage'),
+      'after POST: patch carrying vs original in open report + surface API errors',
+    );
+    const fefo = readRel('SamplePOS.Server/src/modules/pricing/atCostIssuePrice.ts');
+    gate(
+      'FEFO_COERCE_DECIMAL',
+      fefo.includes('baseQty instanceof Decimal ? baseQty : new Decimal(baseQty)'),
+      'FEFO preview coerces numeric qty to Decimal (no lessThanOrEqualTo crash)',
+    );
   });
 });
 
