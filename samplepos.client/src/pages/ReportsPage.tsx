@@ -46,7 +46,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { formatCurrency } from '../utils/currency';
 import { api } from '../services/api';
-import { api as inventoryApi, getErrorMessage } from '../utils/api';
+import { api as inventoryApi, getErrorMessage, postLotWriteDown } from '../utils/api';
 import { useAuth } from '../hooks/useAuth';
 import CustomerAgingReport from '../components/reports/CustomerAgingReport';
 import ReportCustomerCombobox from '../components/reports/ReportCustomerCombobox';
@@ -1122,7 +1122,7 @@ export default function ReportsPage() {
     setExpiringWriteDownBusyId(batchId);
     setExpiringQuarantineMsg(null);
     try {
-      const res = await inventoryApi.inventory.writeDownNearExpiryLot({
+      const res = await postLotWriteDown({
         inventoryBatchId: batchId,
         newUnitCost: next,
         memo: 'Near-expiry write-down from Expiring Items',
@@ -2668,81 +2668,6 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {expiringWriteDownDraft ? (
-              <div
-                id="expiring-write-down-panel"
-                data-expiring-write-down-panel="true"
-                className="rounded-xl border-2 border-rose-400 bg-rose-50 px-4 py-3 sm:px-5 sm:py-4 space-y-3"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-rose-950">
-                    Lot carrying-value write-down — {expiringWriteDownDraft.productName}
-                    {expiringWriteDownDraft.batchNumber
-                      ? ` · ${expiringWriteDownDraft.batchNumber}`
-                      : ''}
-                  </p>
-                  <p className="text-xs text-rose-800 mt-0.5">
-                    Type the new cost below {formatCurrency(expiringWriteDownDraft.carrying)}, then tap{' '}
-                    <strong>Post</strong> (or press Enter).
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-end">
-                  <label className="flex-1 min-w-0">
-                    <span className="sr-only">New carrying cost</span>
-                    <input
-                      ref={expiringWriteDownInputRef}
-                      name="newCarrying"
-                      type="text"
-                      inputMode="decimal"
-                      autoFocus
-                      enterKeyHint="done"
-                      autoComplete="off"
-                      data-expiring-write-down-input="true"
-                      aria-label="New carrying cost"
-                      placeholder="e.g. 180"
-                      value={expiringWriteDownDraft.value}
-                      onChange={(e) =>
-                        setExpiringWriteDownDraft((prev) =>
-                          prev ? { ...prev, value: e.target.value } : prev,
-                        )
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter') return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        void submitExpiringWriteDown();
-                      }}
-                      className="w-full min-h-11 text-base px-3 py-2 rounded-lg border border-rose-400 bg-white text-right tabular-nums"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    data-expiring-write-down-post="true"
-                    disabled={expiringWriteDownBusyId === expiringWriteDownDraft.batchId}
-                    onClick={() => {
-                      void submitExpiringWriteDown();
-                    }}
-                    className="min-h-11 px-6 rounded-lg bg-rose-700 text-white text-base font-semibold hover:bg-rose-800 disabled:opacity-50"
-                  >
-                    {expiringWriteDownBusyId === expiringWriteDownDraft.batchId ? 'Posting…' : 'Post'}
-                  </button>
-                  <button
-                    type="button"
-                    className="min-h-11 px-4 rounded-lg border border-slate-300 bg-white text-slate-700"
-                    onClick={() => {
-                      setExpiringWriteDownDraft(null);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                {expiringQuarantineMsg &&
-                !/posted|moved|soft-quarantined/i.test(expiringQuarantineMsg) ? (
-                  <p className="text-sm text-red-800 font-medium">{expiringQuarantineMsg}</p>
-                ) : null}
-              </div>
-            ) : null}
-
             <div id="expiring-register" className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-slate-800 px-4 sm:px-6 py-3 flex flex-wrap justify-between items-center gap-2">
                 <div>
@@ -3011,6 +2936,63 @@ export default function ReportsPage() {
                                   {expiringQuarantineBusyId === batchId ? '…' : 'Quarantine'}
                                 </button>
                               ) : canWriteDown ? (
+                                expiringWriteDownDraft?.batchId === batchId ? (
+                                  <div
+                                    className="flex flex-col items-end gap-1 min-w-[11rem]"
+                                    data-expiring-write-down-row="true"
+                                    data-expiring-write-down-panel="true"
+                                  >
+                                    <label className="text-[10px] text-slate-500 text-right">
+                                      Lot carrying-value write-down — type new cost below{' '}
+                                      {formatCurrency(carrying)}
+                                    </label>
+                                    <input
+                                      ref={expiringWriteDownInputRef}
+                                      name="newCarrying"
+                                      type="text"
+                                      inputMode="decimal"
+                                      autoFocus
+                                      enterKeyHint="done"
+                                      autoComplete="off"
+                                      data-expiring-write-down-input="true"
+                                      aria-label="New carrying cost"
+                                      placeholder="e.g. 180"
+                                      value={expiringWriteDownDraft.value}
+                                      onChange={(e) =>
+                                        setExpiringWriteDownDraft((prev) =>
+                                          prev ? { ...prev, value: e.target.value } : prev,
+                                        )
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key !== 'Enter') return;
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        void submitExpiringWriteDown();
+                                      }}
+                                      className="w-full text-xs px-2 py-1 rounded border border-rose-300 text-right tabular-nums"
+                                    />
+                                    <div className="flex gap-1">
+                                      <button
+                                        type="button"
+                                        data-expiring-write-down-post="true"
+                                        disabled={expiringWriteDownBusyId === batchId}
+                                        onClick={() => {
+                                          void submitExpiringWriteDown();
+                                        }}
+                                        className="text-xs px-2 py-1 rounded bg-rose-700 text-white hover:bg-rose-800 disabled:opacity-50"
+                                      >
+                                        {expiringWriteDownBusyId === batchId ? 'Posting…' : 'Post'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-600"
+                                        onClick={() => setExpiringWriteDownDraft(null)}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
                                 <button
                                   type="button"
                                   disabled={expiringWriteDownBusyId === batchId}
@@ -3026,18 +3008,11 @@ export default function ReportsPage() {
                                       productName: String(row.productName ?? ''),
                                       batchNumber: String(row.batchNumber ?? ''),
                                     });
-                                    requestAnimationFrame(() => {
-                                      document
-                                        .getElementById('expiring-write-down-panel')
-                                        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                      expiringWriteDownInputRef.current?.focus();
-                                    });
                                   }}
                                 >
-                                  {expiringWriteDownDraft?.batchId === batchId
-                                    ? 'Editing…'
-                                    : 'Clearance markdown'}
+                                  Clearance markdown
                                 </button>
+                                )
                               ) : (
                                 <span className="text-xs text-slate-400">—</span>
                               )}

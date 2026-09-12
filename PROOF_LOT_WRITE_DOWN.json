@@ -1,7 +1,7 @@
 {
   "proof": "LOT_WRITE_DOWN_NRV",
   "passed": true,
-  "asOf": "2026-09-12T06:49:15.081Z",
+  "asOf": "2026-09-12T07:37:51.990Z",
   "claims": [
     "Still-sellable lots expiring within 60 days may be written down; original cost is preserved.",
     "Carrying cost_price is the POS/FEFO/AT_COST floor; no till override.",
@@ -196,6 +196,16 @@
       "id": "UI_POST_BUTTON_CLICK",
       "ok": true,
       "detail": "Post calls submitExpiringWriteDown on click — not nested form submit"
+    },
+    {
+      "id": "UI_INLINE_ROW",
+      "ok": true,
+      "detail": "editor stays inline on the expiry row — not a banner above the register"
+    },
+    {
+      "id": "UI_POST_API_SHIPPED",
+      "ok": true,
+      "detail": "Post calls named postLotWriteDown so inventory/lot-write-down ships with the page"
     },
     {
       "id": "UI_PATCH_AFTER_POST",

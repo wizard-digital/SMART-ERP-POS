@@ -342,6 +342,24 @@ apiClient.interceptors.response.use(
   }
 );
 
+/** Named export so Expiring Items always ships the POST (object method can miss the bundle). */
+export function postLotWriteDown(data: {
+  inventoryBatchId: string;
+  newUnitCost: number;
+  memo?: string;
+}) {
+  return apiClient.post<
+    ApiResponse<{
+      documentNumber?: string;
+      originalUnitCost?: number;
+      previousCarryingUnitCost?: number;
+      newCarryingUnitCost?: number;
+      totalAmount?: number;
+      remainingQuantity?: number;
+    }>
+  >('inventory/lot-write-down', data);
+}
+
 // API Methods
 export const api = {
   // Health Check
@@ -713,6 +731,7 @@ export const api = {
       apiClient.post<
         ApiResponse<{ okCount?: number; failCount?: number; results?: unknown[] }>
       >('inventory/loss-quarantine/from-expiring-report/bulk', data),
+    writeDownNearExpiryLot: postLotWriteDown,
     disposeFromQuarantine: (data: {
       storeLocationId?: string | null;
       productId: string;

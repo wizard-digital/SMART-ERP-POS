@@ -153,7 +153,7 @@ describe('PROOF lot write-down NRV', () => {
 
   it('UI: write-down on ≤60d sellable lots; quarantine remains expired-only', () => {
     const page = readRel('samplepos.client/src/pages/ReportsPage.tsx');
-    gate('UI_WRITE_DOWN', page.includes('data-expiring-write-down-row') && page.includes('writeDownNearExpiryLot'), 'write-down on Expiring Items');
+    gate('UI_WRITE_DOWN', page.includes('data-expiring-write-down-row') && page.includes('postLotWriteDown'), 'write-down on Expiring Items');
     gate('UI_CLEARANCE_NAME', page.includes('Lot carrying-value write-down') && page.includes('Clearance markdown'), 'named clearance markdown not below-cost sale');
     gate(
       'UI_ADMIN_ONLY',
@@ -173,6 +173,7 @@ describe('PROOF lot write-down NRV', () => {
     const controller = readRel('SamplePOS.Server/src/modules/reports/reportsController.ts');
     const live = readRel('SamplePOS.Server/scripts/proof-lot-write-down-live.ts');
     const ssot = readRel('shared/inventory-lot/lotWriteDown.ts');
+    const apiTs = readRel('samplepos.client/src/utils/api.ts');
     gate(
       'SSOT_ZOD_HORIZON',
       zodReports.includes('LOT_WRITE_DOWN_MAX_DAYS') &&
@@ -257,6 +258,20 @@ describe('PROOF lot write-down NRV', () => {
         /type="button"[\s\S]*data-expiring-write-down-post="true"/.test(page) &&
         !/<form[\s\S]*writeDownNearExpiryLot/.test(page),
       'Post calls submitExpiringWriteDown on click — not nested form submit',
+    );
+    gate(
+      'UI_INLINE_ROW',
+      page.includes('data-expiring-write-down-panel="true"') &&
+        !page.includes('id="expiring-write-down-panel"') &&
+        page.includes("expiringWriteDownDraft?.batchId === batchId"),
+      'editor stays inline on the expiry row — not a banner above the register',
+    );
+    gate(
+      'UI_POST_API_SHIPPED',
+      page.includes('postLotWriteDown') &&
+        apiTs.includes('export function postLotWriteDown') &&
+        apiTs.includes("'inventory/lot-write-down'"),
+      'Post calls named postLotWriteDown so inventory/lot-write-down ships with the page',
     );
     gate(
       'UI_PATCH_AFTER_POST',
