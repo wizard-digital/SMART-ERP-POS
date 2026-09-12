@@ -66,8 +66,8 @@ import {
 import {
   canPerformLotWriteDown,
   isNearExpiryWriteDownBand,
+  parseWriteDownCarryingInput,
   LOT_WRITE_DOWN_MAX_DAYS,
-  LOT_WRITE_DOWN_MIN_CARRYING,
 } from '@shared/inventory-lot/lotWriteDown';
 import {
   INVENTORY_LEDGER_REPORTS,
@@ -112,6 +112,12 @@ const formatDisplayDate = (dateString: string | null | undefined): string => {
   }
   return dateString;
 };
+
+/** Typed figure at submit time (Enter or Post). Never use a stale default carrying. */
+function readWriteDownSubmitFigure(form: HTMLFormElement): string {
+  const fd = new FormData(form);
+  return String(fd.get('newCarrying') ?? '');
+}
 
 /**
  * Dynamic field formatting utility
@@ -1092,6 +1098,10 @@ export default function ReportsPage() {
   const [expiringQuarantineBusyId, setExpiringQuarantineBusyId] = useState<string | null>(null);
   const [expiringQuarantineMsg, setExpiringQuarantineMsg] = useState<string | null>(null);
   const [expiringWriteDownBusyId, setExpiringWriteDownBusyId] = useState<string | null>(null);
+  const [expiringWriteDownDraft, setExpiringWriteDownDraft] = useState<{
+    batchId: string;
+    value: string;
+  } | null>(null);
 
   // Filter states
   const [groupBy, setGroupBy] = useState<'day' | 'week' | 'month' | 'product' | 'customer' | 'payment_method'>('day');
@@ -2502,7 +2512,13 @@ export default function ReportsPage() {
             </p>
 
             {expiringQuarantineMsg && (
-              <p className="text-sm text-teal-800 bg-teal-50 border border-teal-100 rounded-lg px-4 py-2">
+              <p
+                className={`text-sm rounded-lg px-4 py-2 border ${
+                  /posted|moved|soft-quarantined/i.test(expiringQuarantineMsg)
+                    ? 'text-teal-800 bg-teal-50 border-teal-100'
+                    : 'text-red-800 bg-red-50 border-red-200'
+                }`}
+              >
                 {expiringQuarantineMsg}{' '}
                 {/quarantine/i.test(expiringQuarantineMsg) ? (
                   <Link to="/inventory/quarantine" className="underline font-semibold">
@@ -2860,78 +2876,117 @@ export default function ReportsPage() {
                                   {expiringQuarantineBusyId === batchId ? '…' : 'Quarantine'}
                                 </button>
                               ) : canWriteDown ? (
+                                expiringWriteDownDraft?.batchId === batchId ? (
+                                  <form
+                                    className="flex flex-col items-end gap-1 min-w-[11rem]"
+                                    data-expiring-write-down-row="true"
+                                    data-expiring-write-down-submit="enter"
+                                    onSubmit={async (e) => {
+                                      e.preventDefault();
+                                      const raw = readWriteDownSubmitFigure(e.currentTarget);
+                                      const parsed = parseWriteDownCarryingInput(raw, carrying);
+                                      if (!parsed.ok) {
+                                        setExpiringQuarantineMsg(parsed.message);
+                                        return;
+                                      }
+                                      const next = parsed.value;
+                                      setExpiringWriteDownBusyId(batchId);
+                                      setExpiringQuarantineMsg(null);
+                                      try {
+                                        const res = await inventoryApi.inventory.writeDownNearExpiryLot({
+                                          inventoryBatchId: batchId,
+                                          newUnitCost: next,
+                                          memo: 'Near-expiry write-down from Expiring Items',
+                                        });
+                                        const data = (res.data?.data ?? {}) as {
+                                          documentNumber?: string;
+                                          newCarryingUnitCost?: number;
+                                          originalUnitCost?: number;
+                                          totalAmount?: number;
+                                        };
+                                        const newCarrying = Number(data.newCarryingUnitCost ?? next);
+                                        const orig = Number(data.originalUnitCost ?? originalCost);
+                                        setReportData((prev) => {
+                                          if (!prev?.data || !Array.isArray(prev.data)) return prev;
+                                          return {
+                                            ...prev,
+                                            data: prev.data.map((r) => {
+                                              const id = String((r as { batchId?: string }).batchId ?? '');
+                                              if (id !== batchId) return r;
+                                              const qty = Number(
+                                                (r as { quantityRemaining?: number }).quantityRemaining ?? 0,
+                                              );
+                                              return {
+                                                ...r,
+                                                unitCost: newCarrying,
+                                                originalUnitCost: orig,
+                                                potentialLoss: qty * newCarrying,
+                                              };
+                                            }),
+                                          };
+                                        });
+                                        setExpiringWriteDownDraft(null);
+                                        setExpiringQuarantineMsg(
+                                          `Clearance markdown ${data.documentNumber ?? ''} posted. Carrying now ${formatCurrency(newCarrying)} (original ${formatCurrency(orig)}). Sell on POS at or above the new carrying cost.`,
+                                        );
+                                      } catch (err) {
+                                        setExpiringQuarantineMsg(getErrorMessage(err));
+                                      } finally {
+                                        setExpiringWriteDownBusyId(null);
+                                      }
+                                    }}
+                                  >
+                                    <label className="text-[10px] text-slate-500 text-right">
+                                      Lot carrying-value write-down — type new cost below {formatCurrency(carrying)}, press Enter
+                                    </label>
+                                    <input
+                                      name="newCarrying"
+                                      type="text"
+                                      inputMode="decimal"
+                                      autoFocus
+                                      enterKeyHint="done"
+                                      aria-label="New carrying cost"
+                                      placeholder="e.g. 180"
+                                      value={expiringWriteDownDraft.value}
+                                      onChange={(e) =>
+                                        setExpiringWriteDownDraft({
+                                          batchId,
+                                          value: e.target.value,
+                                        })
+                                      }
+                                      className="w-full text-xs px-2 py-1 rounded border border-rose-300 text-right tabular-nums"
+                                    />
+                                    <div className="flex gap-1">
+                                      <button
+                                        type="submit"
+                                        disabled={expiringWriteDownBusyId === batchId}
+                                        className="text-xs px-2 py-1 rounded bg-rose-700 text-white hover:bg-rose-800 disabled:opacity-50"
+                                      >
+                                        {expiringWriteDownBusyId === batchId ? '…' : 'Post markdown'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-600"
+                                        onClick={() => setExpiringWriteDownDraft(null)}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </form>
+                                ) : (
                                 <button
                                   type="button"
                                   disabled={expiringWriteDownBusyId === batchId}
                                   data-expiring-write-down-row="true"
                                   className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-800 hover:bg-rose-50 disabled:opacity-50"
-                                  onClick={async () => {
-                                    const raw = window.prompt(
-                                      `Lot carrying-value write-down (clearance markdown 5140) for ${row.productName ?? 'batch'}?\nCurrent carrying: ${carrying}\nOriginal acquisition: ${originalCost}\nEnter the NEW carrying cost (must be lower). POS will then allow selling at or above that new cost.`,
-                                      String(carrying),
-                                    );
-                                    if (raw == null) return;
-                                    // Accept 20000, 20,000, 20000.50 — commas break Number().
-                                    const cleaned = String(raw).replace(/,/g, '').trim();
-                                    const next = Number(cleaned);
-                                    if (
-                                      !Number.isFinite(next) ||
-                                      next < LOT_WRITE_DOWN_MIN_CARRYING ||
-                                      next >= carrying
-                                    ) {
-                                      setExpiringQuarantineMsg(
-                                        `New carrying cost must be a number at least ${LOT_WRITE_DOWN_MIN_CARRYING} and below the current book cost (${carrying}). You entered: ${raw}`,
-                                      );
-                                      return;
-                                    }
-                                    setExpiringWriteDownBusyId(batchId);
+                                  onClick={() => {
                                     setExpiringQuarantineMsg(null);
-                                    try {
-                                      const res = await inventoryApi.inventory.writeDownNearExpiryLot({
-                                        inventoryBatchId: batchId,
-                                        newUnitCost: next,
-                                        memo: 'Near-expiry write-down from Expiring Items',
-                                      });
-                                      const data = (res.data?.data ?? {}) as {
-                                        documentNumber?: string;
-                                        newCarryingUnitCost?: number;
-                                        originalUnitCost?: number;
-                                        totalAmount?: number;
-                                      };
-                                      const newCarrying = Number(data.newCarryingUnitCost ?? next);
-                                      const orig = Number(data.originalUnitCost ?? originalCost);
-                                      // Patch the open report immediately — do not wait for manual refresh.
-                                      setReportData((prev) => {
-                                        if (!prev?.data || !Array.isArray(prev.data)) return prev;
-                                        return {
-                                          ...prev,
-                                          data: prev.data.map((r) => {
-                                            const id = String((r as { batchId?: string }).batchId ?? '');
-                                            if (id !== batchId) return r;
-                                            const qty = Number(
-                                              (r as { quantityRemaining?: number }).quantityRemaining ?? 0,
-                                            );
-                                            return {
-                                              ...r,
-                                              unitCost: newCarrying,
-                                              originalUnitCost: orig,
-                                              potentialLoss: qty * newCarrying,
-                                            };
-                                          }),
-                                        };
-                                      });
-                                      setExpiringQuarantineMsg(
-                                        `Clearance markdown ${data.documentNumber ?? ''} posted. Carrying now ${formatCurrency(newCarrying)} (original ${formatCurrency(orig)}). Sell on POS at or above the new carrying cost.`,
-                                      );
-                                    } catch (err) {
-                                      setExpiringQuarantineMsg(getErrorMessage(err));
-                                    } finally {
-                                      setExpiringWriteDownBusyId(null);
-                                    }
+                                    setExpiringWriteDownDraft({ batchId, value: '' });
                                   }}
                                 >
-                                  {expiringWriteDownBusyId === batchId ? '…' : 'Clearance markdown'}
+                                  Clearance markdown
                                 </button>
+                                )
                               ) : (
                                 <span className="text-xs text-slate-400">—</span>
                               )}

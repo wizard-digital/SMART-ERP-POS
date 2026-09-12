@@ -1,7 +1,7 @@
 {
   "proof": "LOT_WRITE_DOWN_NRV",
   "passed": true,
-  "asOf": "2026-09-11T21:30:23.270Z",
+  "asOf": "2026-09-12T05:44:00.908Z",
   "claims": [
     "Still-sellable lots expiring within 60 days may be written down; original cost is preserved.",
     "Carrying cost_price is the POS/FEFO/AT_COST floor; no till override.",
@@ -190,7 +190,7 @@
     {
       "id": "UI_COMMA_PARSE",
       "ok": true,
-      "detail": "write-down prompt strips commas before Number()"
+      "detail": "write-down submits the typed figure on Enter (form SSOT, no prompt default)"
     },
     {
       "id": "UI_PATCH_AFTER_POST",

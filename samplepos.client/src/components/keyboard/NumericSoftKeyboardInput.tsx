@@ -125,6 +125,7 @@ export function NumericSoftKeyboardInput({
         onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
           onKeyDown?.(e);
           if (e.key === 'Enter') {
+            e.preventDefault();
             onCommit?.(value);
             onEnter?.();
             kb.close();

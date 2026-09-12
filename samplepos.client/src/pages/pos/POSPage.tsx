@@ -2813,6 +2813,20 @@ export default function POSPage() {
       toast.error('Total amount cannot be negative. Adjust your discounts.');
       return;
     }
+    const itemsBelowCost = items.filter((item) =>
+      isPosLineBlockedByCatalogCost(item, selectedCustomer?.pricingMode),
+    );
+    if (itemsBelowCost.length > 0) {
+      setBelowCostItems(
+        itemsBelowCost.map((i) => ({
+          name: i.name,
+          unitPrice: i.unitPrice,
+          costPrice: i.costPrice,
+        })),
+      );
+      setShowBelowCostOverrideDialog(true);
+      return;
+    }
 
     setIsCreatingOrder(true);
     try {

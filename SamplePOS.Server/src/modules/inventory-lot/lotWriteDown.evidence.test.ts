@@ -234,8 +234,17 @@ describe('PROOF lot write-down NRV', () => {
     // Prod failure modes that made "proof passed" then users still see equal costs / below-cost block.
     gate(
       'UI_COMMA_PARSE',
-      page.includes(".replace(/,/g, '')") && page.includes('You entered:'),
-      'write-down prompt strips commas before Number()',
+      page.includes('parseWriteDownCarryingInput') &&
+        page.includes('readWriteDownSubmitFigure') &&
+        page.includes('onSubmit') &&
+        page.includes('name="newCarrying"') &&
+        page.includes('type="submit"') &&
+        page.includes('press Enter') &&
+        ssot.includes('parseWriteDownCarryingInput') &&
+        ssot.includes(".replace(/,/g, '')") &&
+        ssot.includes('You entered:') &&
+        !page.includes('window.prompt'),
+      'write-down submits the typed figure on Enter (form SSOT, no prompt default)',
     );
     gate(
       'UI_PATCH_AFTER_POST',

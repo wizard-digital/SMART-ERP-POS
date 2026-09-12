@@ -6,6 +6,7 @@ import {
   canPerformLotWriteDown,
   evaluateLotWriteDownGate,
   isNearExpiryWriteDownBand,
+  parseWriteDownCarryingInput,
   LOT_WRITE_DOWN_EXPENSE_ACCOUNT,
   LOT_WRITE_DOWN_MAX_DAYS,
   LOT_WRITE_DOWN_REFERENCE_TYPE,
@@ -90,5 +91,27 @@ describe('lot write-down eligibility SSOT', () => {
   it('uses dedicated 5140 / LOT_WRITE_DOWN — not disposal accounts', () => {
     expect(LOT_WRITE_DOWN_EXPENSE_ACCOUNT).toBe('5140');
     expect(LOT_WRITE_DOWN_REFERENCE_TYPE).toBe('LOT_WRITE_DOWN');
+  });
+
+  it('ADMIN clearance 180 is valid when lot carrying is 214 (Atenolol near-expiry)', () => {
+    const g = base({
+      expiryDate: '2026-09-30',
+      businessDate: '2026-09-12',
+      remainingQuantity: 9,
+      carryingUnitCost: 214,
+      originalUnitCost: 214,
+      newUnitCost: 180,
+    });
+    expect(g.ok).toBe(true);
+    if (g.ok) {
+      expect(g.daysUntilExpiry).toBe(18);
+      expect(g.writeDownAmount).toBe(306);
+    }
+    expect(parseWriteDownCarryingInput('180', 214).ok).toBe(true);
+    expect(parseWriteDownCarryingInput('180', 214)).toEqual({ ok: true, value: 180 });
+    expect(parseWriteDownCarryingInput(' 180 ', 214)).toEqual({ ok: true, value: 180 });
+    expect(parseWriteDownCarryingInput('214', 214).ok).toBe(false);
+    expect(parseWriteDownCarryingInput('', 214).ok).toBe(false);
+    expect(parseWriteDownCarryingInput('20,000', 21400).ok).toBe(true);
   });
 });

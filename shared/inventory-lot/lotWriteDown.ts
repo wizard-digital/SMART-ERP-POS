@@ -65,6 +65,28 @@ export function roundWriteDownMoney(n: number): number {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * Parse the new carrying typed by ADMIN. Never treat the current book cost
+ * as an acceptable value (the old window.prompt defaulted to carrying, so OK
+ * without editing was rejected as "not accepting").
+ */
+export function parseWriteDownCarryingInput(
+  raw: string,
+  carrying: number,
+): { ok: true; value: number } | { ok: false; message: string } {
+  const cleaned = String(raw ?? '').replace(/,/g, '').trim();
+  const next = Number(cleaned);
+  const book = Number(carrying);
+  if (!Number.isFinite(next) || next < LOT_WRITE_DOWN_MIN_CARRYING || next >= book) {
+    return {
+      ok: false,
+      message:
+        `New carrying cost must be a number at least ${LOT_WRITE_DOWN_MIN_CARRYING} and below the current book cost (${book}). You entered: ${raw}`,
+    };
+  }
+  return { ok: true, value: next };
+}
+
 /** SSOT: 1–60 days remaining (not expired). Critical KPI stays ≤7d. */
 export function isNearExpiryWriteDownBand(daysUntilExpiry: number): boolean {
   return Number.isFinite(daysUntilExpiry) && daysUntilExpiry > 0 && daysUntilExpiry <= LOT_WRITE_DOWN_MAX_DAYS;
