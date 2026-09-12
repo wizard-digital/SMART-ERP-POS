@@ -234,17 +234,29 @@ describe('PROOF lot write-down NRV', () => {
     // Prod failure modes that made "proof passed" then users still see equal costs / below-cost block.
     gate(
       'UI_COMMA_PARSE',
-      page.includes('parseWriteDownCarryingInput') &&
-        page.includes('readWriteDownSubmitFigure') &&
-        page.includes('onSubmit') &&
+      page.includes('evaluateWriteDownPostClick') &&
+        page.includes('submitExpiringWriteDown') &&
+        page.includes('data-expiring-write-down-post') &&
+        page.includes('data-expiring-write-down-panel') &&
         page.includes('name="newCarrying"') &&
-        page.includes('type="submit"') &&
-        page.includes('press Enter') &&
+        page.includes("e.key !== 'Enter'") &&
+        ssot.includes('evaluateWriteDownPostClick') &&
+        ssot.includes('resolveWriteDownPostFigure') &&
         ssot.includes('parseWriteDownCarryingInput') &&
         ssot.includes(".replace(/,/g, '')") &&
         ssot.includes('You entered:') &&
-        !page.includes('window.prompt'),
-      'write-down submits the typed figure on Enter (form SSOT, no prompt default)',
+        !page.includes('window.prompt') &&
+        !page.includes('readWriteDownSubmitFigure') &&
+        !page.includes('data-expiring-write-down-submit'),
+      'write-down Post is type=button (not a table form submit); Enter and Post both read the typed figure',
+    );
+    gate(
+      'UI_POST_BUTTON_CLICK',
+      page.includes('data-expiring-write-down-post="true"') &&
+        page.includes('void submitExpiringWriteDown()') &&
+        /type="button"[\s\S]*data-expiring-write-down-post="true"/.test(page) &&
+        !/<form[\s\S]*writeDownNearExpiryLot/.test(page),
+      'Post calls submitExpiringWriteDown on click — not nested form submit',
     );
     gate(
       'UI_PATCH_AFTER_POST',

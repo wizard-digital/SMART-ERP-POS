@@ -87,6 +87,24 @@ export function parseWriteDownCarryingInput(
   return { ok: true, value: next };
 }
 
+/** Post/Enter: live input wins over a stale React draft (never the book cost). */
+export function resolveWriteDownPostFigure(
+  liveInput: string | null | undefined,
+  draftValue: string | null | undefined,
+): string {
+  if (liveInput != null) return String(liveInput);
+  return String(draftValue ?? '');
+}
+
+/** Same path Post and Enter use: typed box → parse against current carrying. */
+export function evaluateWriteDownPostClick(
+  liveInput: string | null | undefined,
+  draftValue: string | null | undefined,
+  carrying: number,
+): { ok: true; value: number } | { ok: false; message: string } {
+  return parseWriteDownCarryingInput(resolveWriteDownPostFigure(liveInput, draftValue), carrying);
+}
+
 /** SSOT: 1–60 days remaining (not expired). Critical KPI stays ≤7d. */
 export function isNearExpiryWriteDownBand(daysUntilExpiry: number): boolean {
   return Number.isFinite(daysUntilExpiry) && daysUntilExpiry > 0 && daysUntilExpiry <= LOT_WRITE_DOWN_MAX_DAYS;

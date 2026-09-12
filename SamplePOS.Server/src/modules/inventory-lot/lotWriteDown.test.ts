@@ -7,6 +7,8 @@ import {
   evaluateLotWriteDownGate,
   isNearExpiryWriteDownBand,
   parseWriteDownCarryingInput,
+  evaluateWriteDownPostClick,
+  resolveWriteDownPostFigure,
   LOT_WRITE_DOWN_EXPENSE_ACCOUNT,
   LOT_WRITE_DOWN_MAX_DAYS,
   LOT_WRITE_DOWN_REFERENCE_TYPE,
@@ -113,5 +115,17 @@ describe('lot write-down eligibility SSOT', () => {
     expect(parseWriteDownCarryingInput('214', 214).ok).toBe(false);
     expect(parseWriteDownCarryingInput('', 214).ok).toBe(false);
     expect(parseWriteDownCarryingInput('20,000', 21400).ok).toBe(true);
+  });
+
+  it('Post click posts the typed box, not a stale draft or book cost', () => {
+    expect(resolveWriteDownPostFigure('180', '214')).toBe('180');
+    expect(resolveWriteDownPostFigure(undefined, '180')).toBe('180');
+    expect(evaluateWriteDownPostClick('180', '214', 214)).toEqual({ ok: true, value: 180 });
+    expect(evaluateWriteDownPostClick('180', '', 214)).toEqual({ ok: true, value: 180 });
+    expect(evaluateWriteDownPostClick('', '', 214).ok).toBe(false);
+    expect(evaluateWriteDownPostClick('214', '180', 214).ok).toBe(false);
+    const empty = evaluateWriteDownPostClick('', '180', 214);
+    expect(empty.ok).toBe(false);
+    if (!empty.ok) expect(empty.message).toContain('You entered:');
   });
 });
