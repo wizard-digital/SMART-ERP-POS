@@ -175,13 +175,11 @@ if [ -n "$VAPID_PUB_PRESENT" ] && [ -n "$VAPID_PRIV_PRESENT" ]; then
   echo ">>> VAPID keys already present in host .env"
 else
   echo ">>> Generating host-persisted VAPID keys (once)"
-  KEY_JSON=$(docker compose -f docker-compose.deploy.yml run --rm --no-deps -T --entrypoint node backend -e "const w=require('web-push'); process.stdout.write(JSON.stringify(w.generateVAPIDKeys()));" | tr -d '\r' | grep -o '{.*}')
-  if [ -z "$KEY_JSON" ]; then
-    echo ">>> FATAL: web-push did not return a VAPID pair"
-    exit 1
-  fi
-  printf '%s\n' "$KEY_JSON" | node -e 'const fs=require("fs"); const k=JSON.parse(fs.readFileSync(0,"utf8")); if(!k.publicKey||!k.privateKey) process.exit(1); process.stdout.write(JSON.stringify({VAPID_PUBLIC_KEY:k.publicKey,VAPID_PRIVATE_KEY:k.privateKey,VAPID_SUBJECT:"https://wizarddigital-inv.com"}));' \
-    | node "$SCRIPT_DIR/lib/upsert-dotenv-keys.mjs" "$ENV_FILE"
+  docker compose -f docker-compose.deploy.yml run --rm --no-deps -T \
+    --volume /opt/smarterp/.env:/host.env \
+    --volume "$SCRIPT_DIR/lib:/vapidlib:ro" \
+    --entrypoint node \
+    backend /vapidlib/provision-vapid-env.mjs /host.env
   echo ">>> VAPID keys written to host .env"
 fi
 

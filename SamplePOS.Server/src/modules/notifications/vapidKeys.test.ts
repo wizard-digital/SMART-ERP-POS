@@ -49,8 +49,9 @@ describe('production VAPID wiring', () => {
 
   it('persists VAPID keys on the host before restarting app containers', () => {
     const script = readFileSync(resolve(process.cwd(), '../scripts/deploy-update.sh'), 'utf8');
-    expect(script).toContain('upsert-dotenv-keys.mjs');
-    expect(script).toContain('generateVAPIDKeys');
+    expect(script).toContain('provision-vapid-env.mjs');
+    expect(script).toContain('/vapidlib');
+    expect(script).not.toContain('| node ');
     expect(script).toContain('VAPID keys did not reach the backend container');
   });
 
