@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useAdaptiveLayoutOptional } from './AdaptiveAppShell';
+import { pointerEventStaysInsideOverlay } from '../../lib/adaptiveOverlayDismiss';
 import {
   resolveRowActionsMenuLabel,
   resolveRowActionsPresentation,
@@ -223,7 +224,8 @@ function RowActionsMenu({
     const onPointer = (e: globalThis.MouseEvent | TouchEvent) => {
       const el = rootRef.current;
       if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) setOpen(false);
+      if (pointerEventStaysInsideOverlay(el, e)) return;
+      setOpen(false);
     };
     document.addEventListener('keydown', onKey);
     document.addEventListener('mousedown', onPointer);

@@ -38,7 +38,13 @@ describe('EVIDENCE — INV-POS sellable coverage SSOT', () => {
     const coverage = readServer('src/modules/inventory/warehouse/posSellableCoverage.ts');
     const coupling = readServer('src/services/warehouseInventoryCoupling.ts');
     const stockUi = readClient('src/pages/inventory/StockLevelsPage.tsx');
+    const productsUi = readClient('src/pages/inventory/ProductsPage.tsx');
+    const stockViewSsot = readClient('src/components/inventory/warehouseNetworkUtils.ts');
     const grUi = readClient('src/pages/inventory/GoodsReceiptsPage.tsx');
+    const fragments = readServer('src/modules/inventory/warehouse/inventoryStockSqlFragments.ts');
+    const balanceRepo = readServer('src/modules/inventory/warehouse/inventoryBalanceRepository.ts');
+    const visibility = readServer('src/modules/inventory/warehouse/stockVisibilityService.ts');
+    const posCatalog = readServer('src/modules/inventory/warehouse/posProductSearchRepository.ts');
 
     gate(
       'RESOLVE_DEFAULT_SELLING',
@@ -86,10 +92,25 @@ describe('EVIDENCE — INV-POS sellable coverage SSOT', () => {
       'Warehouse coupling asserts POS projection gaps',
     );
     gate(
+      'NETWORK_COMPANY_STOCK',
+      fragments.includes('OPERATIONAL_NETWORK_STORE_FILTER_SQL') &&
+        fragments.includes("store_type IN ('MAIN', 'SELLING')") &&
+        /getStockLevels[\s\S]{0,250}OPERATIONAL_NETWORK_STORE_FILTER_SQL/.test(balanceRepo) &&
+        visibility.includes('getStockLevelsForStore') &&
+        posCatalog.includes('Full POS catalog for multistore — active selling store only'),
+      'Inventory company qty is MAIN+shops; POS catalog and visibility stay selling-store scoped',
+    );
+    gate(
       'UI_STOCK_DEFAULT_SELLING',
-      stockUi.includes("storeType === 'SELLING'") &&
-        stockUi.includes('MAIN is receiving-only'),
-      'Stock Levels by-store defaults to SELLING',
+      stockViewSsot.includes('resolveDefaultStockViewStore') &&
+        stockViewSsot.includes('warehouse → shops') &&
+        stockViewSsot.includes('operationalNetworkStores') &&
+        productsUi.includes('retainOrDefaultStockViewStoreId') &&
+        productsUi.includes('filter-store-location-products') &&
+        stockUi.includes('retainOrDefaultStockViewStoreId') &&
+        stockUi.includes('filter-store-location') &&
+        productsUi.includes('stockQtyByProductId'),
+      'Products and Stock Levels put warehouse→shop picker in Filters; company overlays network stock-levels SSOT',
     );
     gate(
       'UI_GR_DEFAULT_SELLING',

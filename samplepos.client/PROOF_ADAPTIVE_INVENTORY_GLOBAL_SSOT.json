@@ -1,7 +1,7 @@
 {
   "proof": "ADAPTIVE_INVENTORY_GLOBAL_SSOT",
   "verdict": "PASS",
-  "generatedAt": "2026-09-05T17:07:47.975Z",
+  "generatedAt": "2026-09-13T08:19:55.587Z",
   "passed": 51,
   "total": 51,
   "gates": [
@@ -243,7 +243,7 @@
     {
       "id": "FILTERS_POPOVER",
       "ok": true,
-      "detail": "Filters: full-bleed overlay under chrome + Escape/outside-click close"
+      "detail": "Filters: full-bleed overlay under chrome + Escape/outside-click close; portaled Select stays open"
     },
     {
       "id": "FILTERS_MORE_MUTEX",

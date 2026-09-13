@@ -33,7 +33,7 @@ export const stockVisibilityService = {
 
         const store = await storeLocationRepository.getActivePosSellingStore(conn);
         const products = store
-            ? await inventoryBalanceRepository.getStockLevels(conn)
+            ? await inventoryBalanceRepository.getStockLevelsForStore(conn, store.id)
             : [];
 
         return {

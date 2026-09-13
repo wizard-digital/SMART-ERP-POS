@@ -41,8 +41,8 @@ export function StockViewModeToggle({ mode, onChange }: StockViewModeToggleProps
         </div>
         <span className="text-xs text-gray-500">
           {mode === 'company'
-            ? 'Total company quantities — same as single-store view'
-            : 'Filter and breakdown by store location'}
+            ? 'Warehouse + shops (MAIN and selling stores). The register uses shops only.'
+            : 'Open Filters to pick a warehouse or a shop. MAIN is not POS stock.'}
         </span>
       </div>
     </MultistoreGate>

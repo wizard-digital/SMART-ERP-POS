@@ -1,8 +1,8 @@
 {
   "feature": "INV_POS_SELLABLE_COVERAGE",
   "verdict": "PASS",
-  "passed": 9,
-  "total": 9,
+  "passed": 10,
+  "total": 10,
   "gates": [
     {
       "id": "RESOLVE_DEFAULT_SELLING",
@@ -40,9 +40,14 @@
       "detail": "Warehouse coupling asserts POS projection gaps"
     },
     {
+      "id": "NETWORK_COMPANY_STOCK",
+      "ok": true,
+      "detail": "Inventory company qty is MAIN+shops; POS catalog and visibility stay selling-store scoped"
+    },
+    {
       "id": "UI_STOCK_DEFAULT_SELLING",
       "ok": true,
-      "detail": "Stock Levels by-store defaults to SELLING"
+      "detail": "Products and Stock Levels put warehouse→shop picker in Filters; company overlays network stock-levels SSOT"
     },
     {
       "id": "UI_GR_DEFAULT_SELLING",
@@ -50,5 +55,5 @@
       "detail": "Goods Receipt default destination is SELLING"
     }
   ],
-  "generatedAt": "2026-09-03T20:52:16.595Z"
+  "generatedAt": "2026-09-13T08:20:08.184Z"
 }

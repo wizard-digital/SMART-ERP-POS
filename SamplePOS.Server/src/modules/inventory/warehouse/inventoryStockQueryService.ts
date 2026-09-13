@@ -10,7 +10,8 @@ export type RoutedStockLevel = StockLevel | StockLevelRow;
 /**
  * Service-layer stock query router.
  * When is_multistore_enabled is FALSE (default), delegates to legacy inventory_batches path unchanged.
- * When TRUE, aggregates sellable qty from composite inventory_balances × product_lots at POS selling stores.
+ * When TRUE, company totals are MAIN warehouse + selling shops.
+ * Pass storeLocationId to scope one location (warehouse or a shop). POS catalog stays SELLING-only.
  */
 export const inventoryStockQueryService = {
     async isMultistoreEnabled(conn: DbConn): Promise<boolean> {

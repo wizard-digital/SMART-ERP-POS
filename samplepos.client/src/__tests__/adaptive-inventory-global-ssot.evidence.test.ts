@@ -334,8 +334,9 @@ describe('PROOF: global inventory adaptive SSOT', () => {
       toolbar.includes("data-secondary-presentation=\"popover\"") &&
         toolbar.includes('data-adaptive-toolbar-filter-anchor') &&
         toolbar.includes('data-filter-fit="full-bleed"') &&
-        toolbar.includes("e.key === 'Escape'"),
-      'Filters: full-bleed overlay under chrome + Escape/outside-click close',
+        toolbar.includes("e.key === 'Escape'") &&
+        toolbar.includes('pointerEventStaysInsideOverlay'),
+      'Filters: full-bleed overlay under chrome + Escape/outside-click close; portaled Select stays open',
     );
     gate(
       'FILTERS_MORE_MUTEX',

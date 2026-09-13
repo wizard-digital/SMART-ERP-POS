@@ -75,6 +75,10 @@ export function posSellingStoreFilterSql(storeParamRef: string): string {
 export const POS_SELLING_STORE_FALLBACK_FILTER_SQL = `sl.is_active = true
         AND sl.store_type = 'SELLING'`;
 
+/** Inventory worklist company total: MAIN warehouse + selling shops. Not quarantine. Not POS-only. */
+export const OPERATIONAL_NETWORK_STORE_FILTER_SQL = `sl.is_active = true
+        AND sl.store_type IN ('MAIN', 'SELLING')`;
+
 /** Lot + balance eligibility for sellable stock (correlated to products.min_days_before_expiry_sale). */
 export const SELLABLE_LOT_PREDICATE_SQL = `pl.status = 'ACTIVE'
         AND NOT ib.blocked

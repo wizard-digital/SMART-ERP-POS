@@ -24,9 +24,17 @@ import { StockViewModeToggle } from '../../components/inventory/StockViewModeTog
 import { InventoryColumnPicker } from '../../components/inventory/InventoryColumnPicker';
 import {
   readStockViewMode,
+  readStockViewStoreId,
   writeStockViewMode,
+  writeStockViewStoreId,
   type StockViewMode,
 } from '../../components/inventory/stockViewPrefs';
+import {
+  operationalNetworkStores,
+  retainOrDefaultStockViewStoreId,
+  stockQtyByProductId,
+  unwrapStockLevelRows,
+} from '../../components/inventory/warehouseNetworkUtils';
 import { useInventoryColumnPrefs } from '../../hooks/useInventoryColumnPrefs';
 import { getErrorMessage, api } from '../../utils/api';
 import Decimal from 'decimal.js';
@@ -212,18 +220,26 @@ export default function ProductsPage() {
   const byStoreView = canUseStoreFilter && stockViewMode === 'store';
   const columnPrefs = useInventoryColumnPrefs('products', { includeStore: byStoreView });
   const { show: showCol } = columnPrefs;
-  const { data: storeLocations = [] } = useStoreLocations(byStoreView && isOnline);
-  const [storeFilterId, setStoreFilterId] = useState('');
+  const { data: storeLocations = [] } = useStoreLocations(canUseStoreFilter && isOnline);
+  const networkStores = useMemo(
+    () => operationalNetworkStores(storeLocations),
+    [storeLocations],
+  );
+  const [storeFilterId, setStoreFilterIdState] = useState(() => readStockViewStoreId());
+  const setStoreFilterId = (id: string) => {
+    setStoreFilterIdState(id);
+    writeStockViewStoreId(id);
+  };
   const useMultistoreStock = byStoreView && isOnline;
 
   useEffect(() => {
-    if (!useMultistoreStock || storeFilterId || storeLocations.length === 0) return;
-    const defaultStore =
-      storeLocations.find((s) => s.isDefaultReceiving) ||
-      storeLocations.find((s) => s.storeType === 'MAIN') ||
-      storeLocations[0];
-    if (defaultStore) setStoreFilterId(defaultStore.id);
-  }, [useMultistoreStock, storeFilterId, storeLocations]);
+    if (!useMultistoreStock || networkStores.length === 0) return;
+    setStoreFilterIdState((current) => {
+      const next = retainOrDefaultStockViewStoreId(current, networkStores);
+      if (next) writeStockViewStoreId(next);
+      return next;
+    });
+  }, [useMultistoreStock, networkStores]);
 
   // API Hooks — use offline-aware hook for reading, standard hooks for mutations
   const queryClient = useQueryClient();
@@ -239,27 +255,32 @@ export default function ProductsPage() {
     error: storeStockError,
     refetch: storeStockRefetch,
   } = useStockLevelsByStore(storeFilterId, useMultistoreStock && !!storeFilterId);
-  const { data: companyStockLevels } = useStockLevels();
+  const { data: companyStockLevels, isLoading: companyStockLoading } = useStockLevels();
 
   const nearestExpiryByProductId = useMemo(() => {
     const map = new Map<string, string | null>();
-    const rows = useMultistoreStock && Array.isArray(storeStockData)
-      ? storeStockData
-      : Array.isArray(companyStockLevels)
-        ? companyStockLevels
-        : [];
-    for (const row of rows as Array<{
-      product_id?: string;
-      nearest_expiry?: string | null;
-      nearestExpiry?: string | null;
-    }>) {
-      if (!row.product_id) continue;
-      map.set(row.product_id, row.nearest_expiry ?? row.nearestExpiry ?? null);
+    const rows = useMultistoreStock
+      ? unwrapStockLevelRows(storeStockData)
+      : unwrapStockLevelRows(companyStockLevels);
+    for (const row of rows) {
+      const productId = row.product_id != null ? String(row.product_id) : '';
+      if (!productId) continue;
+      map.set(
+        productId,
+        row.nearest_expiry != null
+          ? String(row.nearest_expiry)
+          : row.nearestExpiry != null
+            ? String(row.nearestExpiry)
+            : null,
+      );
     }
     return map;
   }, [useMultistoreStock, storeStockData, companyStockLevels]);
 
-  const isLoading = productsLoading || (useMultistoreStock && storeStockLoading);
+  const isLoading =
+    productsLoading
+    || (useMultistoreStock && storeStockLoading)
+    || (isMultistoreEnabled && !byStoreView && isOnline && companyStockLoading);
   const error = productsError ?? (useMultistoreStock ? storeStockError : null);
   const refetch = () => {
     void productsRefetch();
@@ -423,35 +444,35 @@ export default function ProductsPage() {
 
   const selectedStoreLabel = useMemo(() => {
     if (!storeFilterId) return '';
-    const store = storeLocations.find((s) => s.id === storeFilterId);
+    const store = networkStores.find((s) => s.id === storeFilterId);
     return store ? `${store.name} (${store.code})` : '';
-  }, [storeFilterId, storeLocations]);
+  }, [storeFilterId, networkStores]);
 
-  const storeStockByProductId = useMemo(() => {
-    const map = new Map<string, number>();
-    if (!Array.isArray(storeStockData)) return map;
-    for (const row of storeStockData as Array<{
-      product_id?: string;
-      total_stock?: string | number;
-      total_quantity?: string | number;
-    }>) {
-      if (!row.product_id) continue;
-      map.set(
-        row.product_id,
-        parseFloat(String(row.total_stock ?? row.total_quantity ?? 0)) || 0,
-      );
-    }
-    return map;
-  }, [storeStockData]);
+  const storeStockByProductId = useMemo(
+    () => stockQtyByProductId(storeStockData),
+    [storeStockData],
+  );
+  const companyStockByProductId = useMemo(
+    () => stockQtyByProductId(companyStockLevels),
+    [companyStockLevels],
+  );
 
-  /** List rows: company catalog with optional per-store stock overlay (multistore by-store view). */
+  /** List qty is inventory stock-levels SSOT, never the catalog product_inventory pool. */
   const catalogProducts = useMemo(() => {
-    if (!byStoreView) return products;
+    if (!isMultistoreEnabled) return products;
+    const qtyMap = byStoreView ? storeStockByProductId : companyStockByProductId;
+    if (byStoreView) {
+      return products.map((p) => ({
+        ...p,
+        quantityOnHand: String(qtyMap.get(p.id!) ?? 0),
+      }));
+    }
+    if (qtyMap.size === 0) return products;
     return products.map((p) => ({
       ...p,
-      quantityOnHand: String(storeStockByProductId.get(p.id!) ?? 0),
+      quantityOnHand: String(qtyMap.get(p.id!) ?? 0),
     }));
-  }, [products, byStoreView, storeStockByProductId]);
+  }, [products, isMultistoreEnabled, byStoreView, storeStockByProductId, companyStockByProductId]);
 
   const handleStockViewModeChange = (mode: StockViewMode) => {
     setStockViewMode(mode);
@@ -796,7 +817,11 @@ export default function ProductsPage() {
       lastCost: String(product.lastCost ?? initialFormData.lastCost),
       pricingFormula: String(product.pricingFormula ?? ''),
       autoUpdatePrice: product.autoUpdatePrice ?? initialFormData.autoUpdatePrice,
-      quantityOnHand: String(product.quantityOnHand ?? initialFormData.quantityOnHand),
+      quantityOnHand: String(
+        (product.id ? productById.get(product.id)?.quantityOnHand : undefined)
+          ?? product.quantityOnHand
+          ?? initialFormData.quantityOnHand,
+      ),
       reorderLevel: String(product.reorderLevel ?? initialFormData.reorderLevel),
       isTaxable: product.isTaxable ?? false,
       taxRate: String(product.taxRate ?? initialFormData.taxRate),
@@ -1329,13 +1354,10 @@ export default function ProductsPage() {
                     {byStoreView ? (
                       <StoreLocationSelect
                         id="filter-store-location-products"
-                        label="Location"
-                        stores={storeLocations}
+                        label="Warehouse or shop"
+                        stores={networkStores}
                         value={storeFilterId}
-                        onChange={(id) => {
-                          setStoreFilterId(id);
-                          close();
-                        }}
+                        onChange={setStoreFilterId}
                       />
                     ) : null}
                     <div>

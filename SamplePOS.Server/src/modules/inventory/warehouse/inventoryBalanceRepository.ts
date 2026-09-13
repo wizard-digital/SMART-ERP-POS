@@ -6,6 +6,7 @@ import {
 } from '../../../../../shared/types/warehouseNetwork.js';
 import {
     openPurchaseOrdersJoinSql,
+    OPERATIONAL_NETWORK_STORE_FILTER_SQL,
     POS_SELLING_STORE_FALLBACK_FILTER_SQL,
     posSellingStoreFilterSql,
     productUomsJsonSql,
@@ -17,11 +18,7 @@ export type DbConn = Pool | PoolClient;
 
 export type StockLevelRow = Record<string, unknown>;
 
-function buildMultistoreStockAggregateSql(storeParamRef: string | null): string {
-    const storeFilter = storeParamRef
-        ? posSellingStoreFilterSql(storeParamRef)
-        : POS_SELLING_STORE_FALLBACK_FILTER_SQL;
-
+function buildMultistoreStockAggregateSql(storeFilter: string): string {
     return `(
       SELECT
         ib.product_id,
@@ -74,10 +71,7 @@ export const inventoryBalanceRepository = {
     },
 
     async getStockLevels(conn: DbConn): Promise<StockLevelRow[]> {
-        const sellingStore = await storeLocationRepository.getActivePosSellingStore(conn);
-        const params: unknown[] = [];
-        const storeParamRef = sellingStore?.id ? (params.push(sellingStore.id), '$1') : null;
-        const msStock = buildMultistoreStockAggregateSql(storeParamRef);
+        const msStock = buildMultistoreStockAggregateSql(OPERATIONAL_NETWORK_STORE_FILTER_SQL);
 
         const result = await conn.query(
             `SELECT
@@ -113,7 +107,6 @@ export const inventoryBalanceRepository = {
              ${openPurchaseOrdersJoinSql()}
              WHERE p.is_active = true
              ORDER BY needs_reorder DESC, p.name ASC`,
-            params,
         );
 
         return result.rows;
@@ -121,7 +114,7 @@ export const inventoryBalanceRepository = {
 
     async getStockLevelsForStore(conn: DbConn, storeLocationId: string): Promise<StockLevelRow[]> {
         const params: unknown[] = [storeLocationId];
-        const msStock = buildMultistoreStockAggregateSql('$1');
+        const msStock = buildMultistoreStockAggregateSql(posSellingStoreFilterSql('$1'));
 
         const result = await conn.query(
             `SELECT

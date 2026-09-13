@@ -1,7 +1,7 @@
 # PROOF — Adaptive inventory global SSOT
 
 **Verdict:** PASS
-**Generated:** 2026-09-05T17:07:47.975Z
+**Generated:** 2026-09-13T08:19:55.587Z
 **Gates:** 51/51
 
 - PASS `WORKLIST_2UP` — worklist grids are 2-up on phone
@@ -51,7 +51,7 @@
 - PASS `CREATE_FIRST_RESPONSIVE` — create-first: no phone flex-basis blank band; sm+ Search grows on one row
 - PASS `MORE_OVERFLOW_ELLIPSIS` — More trigger is ··· on phone (SAP/Square overflow), labeled More on sm+
 - PASS `MOBILE_SORT_IN_MORE` — Phone sort lives in More overflow — no separate Sort row under Search
-- PASS `FILTERS_POPOVER` — Filters: full-bleed overlay under chrome + Escape/outside-click close
+- PASS `FILTERS_POPOVER` — Filters: full-bleed overlay under chrome + Escape/outside-click close; portaled Select stays open
 - PASS `FILTERS_MORE_MUTEX` — Filters XOR More: controlled AdaptiveMoreMenu + scroll panel — never stacked overlays
 - PASS `SORT_MENU_LABEL_SSOT` — More sort items use Sort by X once — never Sort: Sort by …
 - PASS `FILTER_PANEL_PHONE_SSOT` — AdaptiveFilterPanel: dense 2-up grid + full-bleed Filters fit on phone

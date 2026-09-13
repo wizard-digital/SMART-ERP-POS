@@ -8,6 +8,7 @@ import {
   type AdaptiveToolbarMode,
 } from '../../lib/adaptiveFloorplan';
 import { AdaptiveMoreMenu } from './AdaptiveMoreMenu';
+import { pointerEventStaysInsideOverlay } from '../../lib/adaptiveOverlayDismiss';
 
 export type AdaptiveToolbarSecondaryApi = {
   /** Close the progressive-disclosure Filters panel (mobile/compact). */
@@ -175,9 +176,8 @@ export function AdaptiveToolbar({
     const onPointer = (e: MouseEvent | TouchEvent) => {
       const el = rootRef.current;
       if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) {
-        closeSecondary();
-      }
+      if (pointerEventStaysInsideOverlay(el, e)) return;
+      closeSecondary();
     };
 
     document.addEventListener('keydown', onKey);

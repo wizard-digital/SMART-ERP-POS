@@ -1,13 +1,16 @@
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import type { StoreLocation } from '../../../../shared/types/warehouseNetwork';
 import { MultistoreGate } from './MultistoreGate';
+import { commitStoreLocationSelectValue } from './storeLocationSelectCommit';
 
 interface StoreLocationSelectProps {
   stores: StoreLocation[];
@@ -40,6 +43,10 @@ function StoreLocationSelectInner({
 }: Omit<StoreLocationSelectProps, 'multistoreOnly'>) {
   const options = filter ? stores.filter(filter) : stores;
   const optionIds = new Set(options.map((s) => s.id));
+  const warehouses = options.filter((s) => s.storeType === 'MAIN');
+  const shops = options.filter((s) => s.storeType === 'SELLING');
+  const other = options.filter((s) => s.storeType !== 'MAIN' && s.storeType !== 'SELLING');
+  const grouped = warehouses.length > 0 && shops.length > 0;
   // Always keep Select controlled — undefined value crashes Radix when options arrive later.
   const resolvedValue =
     value && optionIds.has(value)
@@ -47,6 +54,12 @@ function StoreLocationSelectInner({
       : allowEmpty
         ? '__empty__'
         : (options[0]?.id ?? '__pending__');
+
+  const renderItem = (store: StoreLocation) => (
+    <SelectItem key={store.id} value={store.id}>
+      {store.name} ({store.code}) — {store.storeType}
+    </SelectItem>
+  );
 
   return (
     <div className="space-y-2">
@@ -58,12 +71,7 @@ function StoreLocationSelectInner({
       <Select
         value={resolvedValue}
         onValueChange={(next) => {
-          if (next === '__pending__') return;
-          if (next === '__empty__') {
-            onChange('');
-            return;
-          }
-          onChange(next);
+          commitStoreLocationSelectValue(next, onChange);
         }}
         disabled={disabled || options.length === 0}
       >
@@ -77,11 +85,26 @@ function StoreLocationSelectInner({
               Loading stores…
             </SelectItem>
           )}
-          {options.map((store) => (
-            <SelectItem key={store.id} value={store.id}>
-              {store.name} ({store.code}) — {store.storeType}
-            </SelectItem>
-          ))}
+          {grouped ? (
+            <>
+              <SelectGroup>
+                <SelectLabel>Warehouse</SelectLabel>
+                {warehouses.map(renderItem)}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Shops</SelectLabel>
+                {shops.map(renderItem)}
+              </SelectGroup>
+              {other.length > 0 ? (
+                <SelectGroup>
+                  <SelectLabel>Other</SelectLabel>
+                  {other.map(renderItem)}
+                </SelectGroup>
+              ) : null}
+            </>
+          ) : (
+            options.map(renderItem)
+          )}
         </SelectContent>
       </Select>
     </div>

@@ -13,7 +13,9 @@ import { StoreLocationSelect } from '../../components/inventory/StoreLocationSel
 import { StockViewModeToggle } from '../../components/inventory/StockViewModeToggle';
 import {
   readStockViewMode,
+  readStockViewStoreId,
   writeStockViewMode,
+  writeStockViewStoreId,
   type StockViewMode,
 } from '../../components/inventory/stockViewPrefs';
 import { formatMultiUomQuantity, productFromApiUoms } from '../../utils/formatQuantity';
@@ -24,6 +26,11 @@ import { useColumnSort } from '../../hooks/useColumnSort';
 import { applyTableSort } from '../../lib/tableSortUtils';
 import { InventoryColumnPicker } from '../../components/inventory/InventoryColumnPicker';
 import { useInventoryColumnPrefs } from '../../hooks/useInventoryColumnPrefs';
+import {
+  operationalNetworkStores,
+  retainOrDefaultStockViewStoreId,
+  unwrapStockLevelRows,
+} from '../../components/inventory/warehouseNetworkUtils';
 import {
   AdaptivePage,
   AdaptiveSearch,
@@ -38,18 +45,6 @@ import {
   INVENTORY_COL_FILL_CLASS,
   INVENTORY_COL_FIT_CLASS,
 } from '../../lib/adaptiveDashboard';
-
-function unwrapStockListPayload(payload: unknown): unknown[] {
-  if (!payload) return [];
-  if (Array.isArray(payload)) return payload;
-  const record = payload as { data?: unknown };
-  if (Array.isArray(record.data)) return record.data;
-  if (record.data && typeof record.data === 'object') {
-    const nested = record.data as { data?: unknown };
-    if (Array.isArray(nested.data)) return nested.data;
-  }
-  return [];
-}
 
 type StockLevelSortField =
   | 'product'
@@ -124,21 +119,27 @@ export default function StockLevelsPage() {
   const byStoreView = canUseStoreFilter && stockViewMode === 'store';
   const columnPrefs = useInventoryColumnPrefs('stock-levels', { includeStore: byStoreView });
   const { show: showCol } = columnPrefs;
-  const { data: storeLocations = [] } = useStoreLocations(byStoreView && isOnline);
-  const [storeFilterId, setStoreFilterId] = useState('');
+  const { data: storeLocations = [] } = useStoreLocations(canUseStoreFilter && isOnline);
+  const networkStores = useMemo(
+    () => operationalNetworkStores(storeLocations),
+    [storeLocations],
+  );
+  const [storeFilterId, setStoreFilterIdState] = useState(() => readStockViewStoreId());
+  const setStoreFilterId = (id: string) => {
+    setStoreFilterIdState(id);
+    writeStockViewStoreId(id);
+  };
 
   const useMultistoreStock = byStoreView && isOnline;
 
   useEffect(() => {
-    if (!useMultistoreStock || storeFilterId || storeLocations.length === 0) return;
-    // Default to SELLING (same store POS sells from). MAIN is receiving-only —
-    // defaulting there made inventory show stock while POS showed 0.
-    const defaultStore =
-      storeLocations.find((s) => s.storeType === 'SELLING' || s.isPosSelling) ||
-      storeLocations.find((s) => s.isDefaultReceiving) ||
-      storeLocations[0];
-    if (defaultStore) setStoreFilterId(defaultStore.id);
-  }, [useMultistoreStock, storeFilterId, storeLocations]);
+    if (!useMultistoreStock || networkStores.length === 0) return;
+    setStoreFilterIdState((current) => {
+      const next = retainOrDefaultStockViewStoreId(current, networkStores);
+      if (next) writeStockViewStoreId(next);
+      return next;
+    });
+  }, [useMultistoreStock, networkStores]);
 
   // Use offline-aware hooks that cache to IndexedDB and fall back when offline
   const {
@@ -192,7 +193,7 @@ export default function StockLevelsPage() {
 
   // Extract stock levels from API response
   const stockLevels = useMemo(
-    () => unwrapStockListPayload(rawStockData) as StockLevelItem[],
+    () => unwrapStockLevelRows(rawStockData) as StockLevelItem[],
     [rawStockData],
   );
 
@@ -224,9 +225,9 @@ export default function StockLevelsPage() {
 
   const selectedStoreLabel = useMemo(() => {
     if (!storeFilterId) return '';
-    const store = storeLocations.find((s) => s.id === storeFilterId);
+    const store = networkStores.find((s) => s.id === storeFilterId);
     return store ? `${store.name} (${store.code})` : '';
-  }, [storeFilterId, storeLocations]);
+  }, [storeFilterId, networkStores]);
 
   const stockLevelsWithStoreLabel = useMemo(() => {
     if (!byStoreView) return stockLevels;
@@ -426,13 +427,10 @@ export default function StockLevelsPage() {
                   {byStoreView && (
                     <StoreLocationSelect
                       id="filter-store-location"
-                      label="Location"
-                      stores={storeLocations}
+                      label="Warehouse or shop"
+                      stores={networkStores}
                       value={storeFilterId}
-                      onChange={(id) => {
-                        setStoreFilterId(id);
-                        close();
-                      }}
+                      onChange={setStoreFilterId}
                     />
                   )}
                   <div>

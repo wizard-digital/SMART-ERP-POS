@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { pointerEventStaysInsideOverlay } from '../../lib/adaptiveOverlayDismiss';
 
 type AdaptiveMoreMenuProps = {
   children: ReactNode;
@@ -53,9 +54,8 @@ export function AdaptiveMoreMenu({
     const onPointer = (e: MouseEvent | TouchEvent) => {
       const el = rootRef.current;
       if (!el) return;
-      if (e.target instanceof Node && !el.contains(e.target)) {
-        setOpen(false);
-      }
+      if (pointerEventStaysInsideOverlay(el, e)) return;
+      setOpen(false);
     };
 
     document.addEventListener('keydown', onKey);
