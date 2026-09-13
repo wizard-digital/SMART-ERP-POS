@@ -142,6 +142,16 @@ describe('notification coverage matrix', () => {
     expect(missing).toEqual([]);
   });
 
+  it('AR payment notification reads totalAmount from the payment SSOT', () => {
+    const src = readFileSync(
+      join(serverRoot, 'src/modules/ar-payments/arPaymentService.ts'),
+      'utf8',
+    );
+    expect(src).toContain("typeKey: 'CUSTOMER_PAYMENT_RECEIVED'");
+    expect(src).toContain('posted.payment.totalAmount');
+    expect(src).not.toMatch(/posted\.payment\.amount\b/);
+  });
+
   it('period-close review reuses PERIOD_CLOSE_SIGNOFF after commit instead of a second type', () => {
     const src = readFileSync(
       join(serverRoot, 'src/modules/financial-governance/periodCloseSignoffService.ts'),

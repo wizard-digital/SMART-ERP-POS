@@ -217,7 +217,7 @@ export async function createCustomerPayment(handle: DbConnection, input: CreateA
       payload: {
         summary: 'Customer payment received',
         documentRef: posted.payment.paymentNumber,
-        amount: Number(posted.payment.amount || 0),
+        amount: Number(posted.payment.totalAmount || 0),
       },
       actorUserId: input.createdById,
     });
