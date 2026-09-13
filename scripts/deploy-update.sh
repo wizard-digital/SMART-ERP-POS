@@ -161,6 +161,30 @@ docker compose -f docker-compose.deploy.yml build backend
 echo ">>> Building frontend..."
 docker compose -f docker-compose.deploy.yml build frontend
 
+# Web Push keys must live on the host .env (container FS is ephemeral).
+# Production never auto-generates inside Node — rotating keys would invalidate every phone.
+echo ">>> Ensuring VAPID keys persist in /opt/smarterp/.env..."
+ENV_FILE="/opt/smarterp/.env"
+if [ ! -f "$ENV_FILE" ]; then
+  echo ">>> FATAL: $ENV_FILE not found — cannot configure OS push"
+  exit 1
+fi
+VAPID_PUB_PRESENT=$(grep -E '^VAPID_PUBLIC_KEY=.+' "$ENV_FILE" | grep -vE '^VAPID_PUBLIC_KEY=\s*$' || true)
+VAPID_PRIV_PRESENT=$(grep -E '^VAPID_PRIVATE_KEY=.+' "$ENV_FILE" | grep -vE '^VAPID_PRIVATE_KEY=\s*$' || true)
+if [ -n "$VAPID_PUB_PRESENT" ] && [ -n "$VAPID_PRIV_PRESENT" ]; then
+  echo ">>> VAPID keys already present in host .env"
+else
+  echo ">>> Generating host-persisted VAPID keys (once)"
+  KEY_JSON=$(docker compose -f docker-compose.deploy.yml run --rm --no-deps -T --entrypoint node backend -e "const w=require('web-push'); process.stdout.write(JSON.stringify(w.generateVAPIDKeys()));" | tr -d '\r' | grep -o '{.*}')
+  if [ -z "$KEY_JSON" ]; then
+    echo ">>> FATAL: web-push did not return a VAPID pair"
+    exit 1
+  fi
+  printf '%s\n' "$KEY_JSON" | node -e 'const fs=require("fs"); const k=JSON.parse(fs.readFileSync(0,"utf8")); if(!k.publicKey||!k.privateKey) process.exit(1); process.stdout.write(JSON.stringify({VAPID_PUBLIC_KEY:k.publicKey,VAPID_PRIVATE_KEY:k.privateKey,VAPID_SUBJECT:"https://wizarddigital-inv.com"}));' \
+    | node "$SCRIPT_DIR/lib/upsert-dotenv-keys.mjs" "$ENV_FILE"
+  echo ">>> VAPID keys written to host .env"
+fi
+
 # Restart only app containers (--no-deps = don't touch postgres/redis/nginx)
 echo ">>> Restarting backend + frontend..."
 # Drop stale compose recreate containers (parallel deploys can leave hash-prefixed orphans)
@@ -197,6 +221,12 @@ else
   if [ "$BACKEND_HEALTH_OK" -ne 1 ]; then
     echo ">>> Backend health: FAILED after 90s — checking logs..."
     docker logs "$BACKEND_CONTAINER" --tail 50
+    exit 1
+  fi
+  if docker exec "$BACKEND_CONTAINER" sh -c 'test -n "$VAPID_PUBLIC_KEY" && test -n "$VAPID_PRIVATE_KEY"'; then
+    echo ">>> VAPID: OS push keys present in backend container"
+  else
+    echo ">>> FATAL: VAPID keys did not reach the backend container — Enable notifications will fail on phones"
     exit 1
   fi
 fi
