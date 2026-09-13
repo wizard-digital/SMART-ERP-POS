@@ -26,7 +26,7 @@ export interface CoverageRow {
 }
 
 export const NOTIFICATION_COVERAGE: readonly CoverageRow[] = [
-  { area: 'Sales', operation: 'Sale completed', typeKey: 'SALE_COMPLETED', status: 'PUBLISHED', preference: 'OPTIONAL', volume: 'high', reason: 'High volume POS; off by default', publisher: 'salesService.createSale' },
+  { area: 'Sales', operation: 'Sale completed', typeKey: 'SALE_COMPLETED', status: 'PUBLISHED', preference: 'ROLE_DEFAULT', volume: 'high', reason: 'Managers get completed sales on phone; cashiers stay off', publisher: 'salesService.createSale' },
   { area: 'Sales', operation: 'Sale voided', typeKey: 'SALE_VOIDED', status: 'PUBLISHED', preference: 'ROLE_DEFAULT', volume: 'normal', reason: 'Control event after void commit', publisher: 'salesService.voidSale' },
   { area: 'Sales', operation: 'Sale returned (full or partial)', typeKey: 'SALE_RETURNED', status: 'PUBLISHED', preference: 'ROLE_DEFAULT', volume: 'normal', reason: 'Refund commit is the SSOT', publisher: 'salesService.refundSale' },
   { area: 'Sales', operation: 'Discount applied', typeKey: 'DISCOUNT_APPLIED', status: 'PUBLISHED', preference: 'OPTIONAL', volume: 'high', reason: 'Noise unless opted in', publisher: 'salesService.createSale' },

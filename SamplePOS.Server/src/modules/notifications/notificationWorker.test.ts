@@ -452,6 +452,70 @@ describe('notification processing policy', () => {
     expect(result?.created).toBe(1);
   });
 
+  it('notifies the director phone when a cashier completes a sale — cashier settings are unused', async () => {
+    mockClaimPendingEvent.mockResolvedValue(
+      pendingEvent({ typeKey: 'SALE_COMPLETED', actorUserId: 'cashier', storeLocationId: 'store-a' }),
+    );
+    mockGetTenantPolicyMap.mockResolvedValue(new Map());
+    mockListRecipientCandidateIds.mockResolvedValue(['cashier', 'director']);
+    mockListUserNotificationProfiles.mockResolvedValue(
+      new Map([
+        ['cashier', { role: 'CASHIER', rbacNames: [] }],
+        ['director', { role: 'STAFF', rbacNames: ['Director'] }],
+      ]),
+    );
+    mockGetUserPreferenceMaps.mockResolvedValue(
+      new Map([
+        ['cashier', new Map([['SALE_COMPLETED', { inAppEnabled: false, pushEnabled: false }]])],
+        ['director', new Map()],
+      ]),
+    );
+    mockInsertInbox.mockResolvedValue(inbox({ recipientUserId: 'director', typeKey: 'SALE_COMPLETED' }));
+    mockListActivePushSubscriptionsForUsers.mockResolvedValue(
+      new Map([['director', [device({ userId: 'director' })]]]),
+    );
+
+    const result = await processNotificationEvent(pool, 'evt-1', 'tenant-a');
+    expect(result?.created).toBe(1);
+    expect(result?.pushed).toBe(1);
+    expect(mockInsertInbox).toHaveBeenCalledWith(
+      pool,
+      expect.objectContaining({ recipientUserId: 'director' }),
+    );
+    const notified = mockInsertInbox.mock.calls.map((call) => (call[1] as { recipientUserId: string }).recipientUserId);
+    expect(notified).not.toContain('cashier');
+  });
+
+  it('notifies managers of completed sales from role defaults when they never saved type prefs', async () => {
+    mockClaimPendingEvent.mockResolvedValue(pendingEvent({ typeKey: 'SALE_COMPLETED', storeLocationId: 'store-a' }));
+    mockGetTenantPolicyMap.mockResolvedValue(new Map());
+    mockListRecipientCandidateIds.mockResolvedValue(['manager']);
+    mockListUserNotificationProfiles.mockResolvedValue(new Map([['manager', { role: 'MANAGER', rbacNames: [] }]]));
+    mockGetUserPreferenceMaps.mockResolvedValue(new Map([['manager', new Map()]]));
+    mockInsertInbox.mockResolvedValue(inbox({ recipientUserId: 'manager', typeKey: 'SALE_COMPLETED' }));
+    mockListActivePushSubscriptionsForUsers.mockResolvedValue(
+      new Map([['manager', [device({ userId: 'manager' })]]]),
+    );
+
+    const result = await processNotificationEvent(pool, 'evt-1', 'tenant-a');
+    expect(result?.created).toBe(1);
+    expect(result?.pushed).toBe(1);
+    expect(mockDeliverWebPush).toHaveBeenCalled();
+  });
+
+  it('does not notify cashiers of completed sales by default', async () => {
+    mockClaimPendingEvent.mockResolvedValue(pendingEvent({ typeKey: 'SALE_COMPLETED', storeLocationId: 'store-a' }));
+    mockGetTenantPolicyMap.mockResolvedValue(new Map());
+    mockListRecipientCandidateIds.mockResolvedValue(['cashier']);
+    mockListUserNotificationProfiles.mockResolvedValue(new Map([['cashier', { role: 'CASHIER', rbacNames: [] }]]));
+    mockGetUserPreferenceMaps.mockResolvedValue(new Map([['cashier', new Map()]]));
+
+    const result = await processNotificationEvent(pool, 'evt-1', 'tenant-a');
+    expect(result?.created).toBe(0);
+    expect(mockInsertInbox).not.toHaveBeenCalled();
+    expect(mockDeliverWebPush).not.toHaveBeenCalled();
+  });
+
   it('notifies every eligible sale when the user explicitly enables SALE_COMPLETED', async () => {
     mockClaimPendingEvent.mockResolvedValue(pendingEvent({ typeKey: 'SALE_COMPLETED', storeLocationId: 'store-a' }));
     mockGetTenantPolicyMap.mockResolvedValue(new Map());

@@ -93,7 +93,11 @@ describe('EVIDENCE — notification platform SSOT', () => {
   it('backend catalog is the type SSOT and sales publish after COMMIT', () => {
     const catalog = readRepo('SamplePOS.Server/src/modules/notifications/catalog.ts');
     const sales = readRepo('SamplePOS.Server/src/modules/sales/salesService.ts');
+    const decision = readRepo('SamplePOS.Server/src/modules/notifications/notificationDecision.ts');
     expect(catalog).toContain("typeKey: 'SALE_COMPLETED'");
+    expect(catalog).toContain('The cashier is not notified and does not need to change settings');
+    expect(decision).toContain("role === 'DIRECTOR'");
+    expect(decision).toContain("name.includes('director')");
     expect(sales.indexOf("await client.query('COMMIT')")).toBeLessThan(sales.indexOf("typeKey: 'SALE_COMPLETED'"));
   });
 });

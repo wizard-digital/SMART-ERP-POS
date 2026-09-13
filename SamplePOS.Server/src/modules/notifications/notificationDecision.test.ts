@@ -21,6 +21,18 @@ describe('notification intelligence', () => {
     expect(resolveRoleProfile('STAFF', [])).toBe('STAFF');
   });
 
+  it('treats a Director stored as STAFF as a supervisor, not floor staff', () => {
+    expect(resolveRoleProfile('STAFF', ['Director'])).toBe('ADMIN');
+    expect(resolveRoleProfile('STAFF', ['director'])).toBe('ADMIN');
+    expect(resolveRoleProfile('DIRECTOR', [])).toBe('ADMIN');
+    expect(resolveRoleProfile('STAFF', ['Store Manager'])).toBe('MANAGER');
+    const sale = getNotificationType('SALE_COMPLETED')!;
+    expect(resolveUserChannels(sale, undefined, resolveRoleProfile('STAFF', ['Director']))).toEqual({
+      inAppEnabled: true,
+      pushEnabled: true,
+    });
+  });
+
   it('lets two managers keep different stored preferences', () => {
     const type = getNotificationType('SALE_VOIDED')!;
     const managerA = resolveUserChannels(type, { inAppEnabled: true, pushEnabled: true }, 'MANAGER');
@@ -37,12 +49,15 @@ describe('notification intelligence', () => {
     expect(defaultChannelsForRole(payment, 'ADMIN').inAppEnabled).toBe(true);
   });
 
-  it('keeps high-volume sales off until the user opts in', () => {
+  it('keeps high-volume sales off for cashiers and on for managers', () => {
     const sale = getNotificationType('SALE_COMPLETED')!;
     expect(sale.highVolume).toBe(true);
-    expect(sale.preferenceMode).toBe('OPTIONAL');
-    expect(resolveUserChannels(sale, undefined, 'ADMIN').inAppEnabled).toBe(false);
-    expect(resolveUserChannels(sale, { inAppEnabled: true, pushEnabled: true }, 'ADMIN').inAppEnabled).toBe(true);
+    expect(sale.preferenceMode).toBe('ROLE_DEFAULT');
+    expect(resolveUserChannels(sale, undefined, 'CASHIER').inAppEnabled).toBe(false);
+    expect(resolveUserChannels(sale, undefined, 'CASHIER').pushEnabled).toBe(false);
+    expect(resolveUserChannels(sale, undefined, 'MANAGER')).toEqual({ inAppEnabled: true, pushEnabled: true });
+    expect(resolveUserChannels(sale, undefined, 'ADMIN')).toEqual({ inAppEnabled: true, pushEnabled: true });
+    expect(resolveUserChannels(sale, { inAppEnabled: false, pushEnabled: false }, 'MANAGER').inAppEnabled).toBe(false);
   });
 
   it('cannot silence mandatory security in-app notifications', () => {
@@ -107,6 +122,7 @@ describe('notification intelligence', () => {
   it('explains eligibility from catalog audience and RBAC, not a hardcoded manager list', () => {
     const sale = getNotificationType('SALE_VOIDED')!;
     expect(explainEligibility(sale)).toContain('view sales transactions');
+    expect(explainEligibility(getNotificationType('SALE_COMPLETED')!)).toContain('does not change any settings');
     const password = getNotificationType('SECURITY_PASSWORD_CHANGED')!;
     expect(explainEligibility(password)).toContain('person this event happened to');
     const role = getNotificationType('SECURITY_ROLE_CHANGED')!;
@@ -121,6 +137,12 @@ describe('notification intelligence', () => {
       entityType: 'sale',
       entityId: 'sale-1',
     })).toBe('You received this because you can view sales transactions.');
+    expect(explainWhyReceived({
+      type: getNotificationType('SALE_COMPLETED')!,
+      recipientUserId: 'director',
+      entityType: 'sale',
+      entityId: 'sale-1',
+    })).toContain('supervise sales');
     const password = getNotificationType('SECURITY_PASSWORD_CHANGED')!;
     expect(explainWhyReceived({
       type: password,

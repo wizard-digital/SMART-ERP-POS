@@ -313,7 +313,8 @@ export async function listRecipientCandidateIds(
   permissionKey: string,
   storeLocationId: string | null,
 ): Promise<string[]> {
-  // Mirrors AuthorizationService: active RBAC role + permission, plus users.role ADMIN.
+  // Mirrors AuthorizationService: ADMIN always; RBAC permission + scope;
+  // legacy MANAGER/ADMIN fallback only when the user has no RBAC assignments.
   const result = await db.query(
     `SELECT DISTINCT u.id
        FROM users u
@@ -340,6 +341,16 @@ export async function listRecipientCandidateIds(
                    AND ur.scope_id = $2
                  )
                )
+          )
+          OR (
+            UPPER(u.role) = 'MANAGER'
+            AND NOT EXISTS (
+              SELECT 1
+                FROM rbac_user_roles ur0
+               WHERE ur0.user_id = u.id
+                 AND ur0.is_active = true
+                 AND (ur0.expires_at IS NULL OR ur0.expires_at > NOW())
+            )
           )
         )`,
     [permissionKey, storeLocationId],

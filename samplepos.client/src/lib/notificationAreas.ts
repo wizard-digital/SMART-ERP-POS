@@ -93,7 +93,7 @@ const AREA_FALLBACK_LABEL: Record<string, { label: string; emoji: string; descri
 };
 
 const RECOMMENDED_AREA_LABEL: Record<string, string> = {
-  SALES: 'Sales exceptions',
+  SALES: 'Sales',
   CUSTOMERS: 'Customer payments',
   PURCHASING: 'Purchasing',
   INVENTORY: 'Stock alerts',

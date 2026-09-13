@@ -21,12 +21,13 @@ describe('notification catalog', () => {
     );
   });
 
-  it('keeps high-volume sales notifications opt-in', () => {
+  it('keeps cashiers off completed-sale noise while managers get the phone alert', () => {
     const sale = getNotificationType('SALE_COMPLETED')!;
     expect(sale.highVolume).toBe(true);
-    expect(sale.defaultInApp).toBe(false);
-    expect(sale.defaultPush).toBe(false);
-    expect(sale.preferenceMode).toBe('OPTIONAL');
+    expect(sale.preferenceMode).toBe('ROLE_DEFAULT');
+    expect(sale.defaultInApp).toBe(true);
+    expect(sale.defaultPush).toBe(true);
+    expect(sale.roleDefaults?.CASHIER).toEqual({ inApp: false, push: false });
     expect(DISCOUNT_THRESHOLD_RATIO).toBe(0.2);
   });
 
@@ -36,7 +37,6 @@ describe('notification catalog', () => {
     expect(new Set(NOTIFICATION_CATALOG.map((t) => t.typeKey)).size).toBe(NOTIFICATION_CATALOG.length);
 
     const quiet = [
-      'SALE_COMPLETED',
       'DISCOUNT_APPLIED',
       'SALE_PRICE_OVERRIDE',
       'PO_CREATED',
@@ -57,6 +57,16 @@ describe('notification catalog', () => {
     expect(getNotificationType('SALE_VOIDED')!.operatorBand).toBe('EXCEPTIONS');
     expect(getNotificationType('PO_SUBMITTED')!.operatorBand).toBe('APPROVALS');
     expect(getNotificationType('CUSTOMER_PAYMENT_RECEIVED')!.operatorBand).toBe('MONEY');
+  });
+
+  it('notifies managers of completed sales on the phone by default', () => {
+    const sale = getNotificationType('SALE_COMPLETED')!;
+    expect(sale.preferenceMode).toBe('ROLE_DEFAULT');
+    expect(sale.defaultInApp).toBe(true);
+    expect(sale.defaultPush).toBe(true);
+    expect(sale.roleDefaults?.CASHIER).toEqual({ inApp: false, push: false });
+    expect(getNotificationType('SALE_VOIDED')!.defaultPush).toBe(true);
+    expect(getNotificationType('SALE_RETURNED')!.defaultPush).toBe(true);
   });
 
   it('assigns every type to exactly one settings area without dropping type keys', () => {

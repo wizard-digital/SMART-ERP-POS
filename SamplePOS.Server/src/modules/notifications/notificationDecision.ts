@@ -17,16 +17,27 @@ export interface ChannelPreference {
   pushEnabled: boolean;
 }
 
+function isDirectorOrAdminRbacName(name: string): boolean {
+  return (
+    name === 'admin'
+    || name === 'administrator'
+    || name === 'director'
+    || name.includes('administrator')
+    || name.includes('director')
+  );
+}
+
 export function resolveRoleProfile(legacyRole: string | null | undefined, rbacRoleNames: string[] = []): RoleProfile {
   const names = rbacRoleNames.map((n) => n.trim().toLowerCase());
-  if (names.some((n) => n === 'accountant' || n.includes('accountant'))) return 'ACCOUNTANT';
   const role = (legacyRole || '').toUpperCase();
-  if (role === 'ADMIN') return 'ADMIN';
-  if (role === 'MANAGER') return 'MANAGER';
+  // Supervisors first. A Director is often stored as STAFF because the legacy
+  // column cannot hold DIRECTOR — never treat them as floor staff.
+  if (role === 'ADMIN' || role === 'DIRECTOR') return 'ADMIN';
+  if (names.some(isDirectorOrAdminRbacName)) return 'ADMIN';
+  if (role === 'MANAGER' || names.some((n) => n === 'manager' || n.includes('manager'))) return 'MANAGER';
+  if (names.some((n) => n === 'accountant' || n.includes('accountant'))) return 'ACCOUNTANT';
   if (role === 'CASHIER') return 'CASHIER';
   if (role === 'STAFF') return 'STAFF';
-  if (names.some((n) => n === 'admin' || n === 'administrator' || n === 'director')) return 'ADMIN';
-  if (names.some((n) => n === 'manager')) return 'MANAGER';
   if (names.some((n) => n === 'cashier')) return 'CASHIER';
   return 'OTHER';
 }
@@ -124,6 +135,9 @@ export function permissionCapabilityLabel(permissionKey: string | null | undefin
 
 /** Settings copy: who this type is for. Catalog + RBAC only — not a second recipient engine. */
 export function explainEligibility(type: NotificationTypeDefinition): string {
+  if (type.typeKey === 'SALE_COMPLETED') {
+    return 'Directors and managers are notified on their phones when a cashier completes a sale. The cashier is not notified and does not change any settings.';
+  }
   const cap = permissionCapabilityLabel(type.requiredPermission);
   if (type.audience === 'subject_user') {
     return 'Delivered to the person this event happened to.';
@@ -146,6 +160,9 @@ export function explainWhyReceived(input: {
 }): string {
   if (input.type.typeKey === 'NOTIFICATION_TEST') {
     return 'You sent a test notification.';
+  }
+  if (input.type.typeKey === 'SALE_COMPLETED') {
+    return 'A cashier completed a sale. You received this because you supervise sales.';
   }
   const happenedToYou =
     (input.type.audience === 'subject_user' || input.type.audience === 'subject_and_admins')

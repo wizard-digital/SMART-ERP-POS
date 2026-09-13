@@ -68,6 +68,13 @@ describe('notification settings areas', () => {
         typeKey: 'SALE_COMPLETED',
         label: 'Sale completed',
         uxArea: 'SALES',
+        recommendedInApp: true,
+        recommendedPush: true,
+      }),
+      row({
+        typeKey: 'DISCOUNT_APPLIED',
+        label: 'Discount applied',
+        uxArea: 'SALES',
         recommendedInApp: false,
         recommendedPush: false,
       }),
@@ -75,8 +82,10 @@ describe('notification settings areas', () => {
     const next = applyAreaOn(sales);
     expect(next[0].inAppEnabled).toBe(true);
     expect(next[0].pushEnabled).toBe(true);
-    expect(next[1].inAppEnabled).toBe(false);
-    expect(next[1].pushEnabled).toBe(false);
+    expect(next[1].inAppEnabled).toBe(true);
+    expect(next[1].pushEnabled).toBe(true);
+    expect(next[2].inAppEnabled).toBe(false);
+    expect(next[2].pushEnabled).toBe(false);
     expect(areaIsOn(next)).toBe(true);
   });
 
@@ -210,7 +219,7 @@ describe('notification settings areas', () => {
       }),
     ]);
     expect(labels).toEqual([
-      'Sales exceptions',
+      'Sales',
       'Customer payments',
       'Stock alerts',
       'Approval requests',
