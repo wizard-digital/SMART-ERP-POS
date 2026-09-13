@@ -15,12 +15,20 @@ describe('EVIDENCE — notification platform SSOT', () => {
     const tab = readRepo('samplepos.client/src/pages/settings/tabs/NotificationSettingsTab.tsx');
     expect(tab).toContain("/notifications/preferences");
     expect(tab).not.toContain('SALE_COMPLETED');
-    expect(tab).toContain('grouped.map');
-    expect(tab).toContain('How delivery works');
+    expect(tab).toContain('Choose the areas you want to be notified about');
+    expect(tab).toContain('Recommended for you');
+    expect(tab).toContain('Customize notifications');
+    expect(tab).toContain('Manage device');
+    expect(tab).toContain('managingDeviceId');
+    expect(tab).toContain('groupPreferenceAreas');
+    expect(tab).toContain('Notification category');
+    expect(tab).toContain('aria-label="Notification category"');
+    expect(tab).toContain('Deliver to');
     expect(tab).toContain('This device follows your notification types');
     expect(tab).toContain('Other devices');
     expect(tab).toContain('whyYouReceive');
     expect(tab).toContain('deviceMutes');
+    expect(tab).not.toContain('grouped.map');
   });
 
   it('service worker handles push and notificationclick without replacing offline sync', () => {
@@ -77,6 +85,8 @@ describe('EVIDENCE — notification platform SSOT', () => {
     const center = readRepo('samplepos.client/src/components/notifications/NotificationCenter.tsx');
     expect(center).toContain('whyReceived');
     expect(center).toContain('Why you received this');
+    expect(center).toContain('Need attention');
+    expect(center).toContain('inboxMatchesFilter');
     expect(center).not.toContain('manager gets');
   });
 

@@ -5,8 +5,17 @@ import {
   isNotificationTypeKey,
   listCatalogForApi,
   NOTIFICATION_CATALOG,
+  OPERATOR_BAND_META,
+  UX_AREA_META,
 } from './catalog.js';
-import { catalogPolicyLabel, explainEligibility, explainWhyReceived, resolveRoleProfile, resolveUserChannels } from './notificationDecision.js';
+import {
+  catalogPolicyLabel,
+  defaultChannelsForRole,
+  explainEligibility,
+  explainWhyReceived,
+  resolveRoleProfile,
+  resolveUserChannels,
+} from './notificationDecision.js';
 import * as repo from './notificationRepository.js';
 import { describePushTestOutcome, getVapidPublicKey, isWebPushConfigured } from './pushDeliveryService.js';
 import { processNotificationEvent } from './notificationWorker.js';
@@ -41,12 +50,27 @@ export async function getCatalog(pool: Pool) {
 
 export async function getAdminPolicy(pool: Pool) {
   const policies = await safeRead(() => repo.getTenantPolicyMap(pool), new Map());
-  return NOTIFICATION_CATALOG.map((t) => {
+  return NOTIFICATION_CATALOG
+    .slice()
+    .sort((a, b) => {
+      const area = UX_AREA_META[a.uxArea].sort - UX_AREA_META[b.uxArea].sort;
+      if (area !== 0) return area;
+      return a.label.localeCompare(b.label);
+    })
+    .map((t) => {
     const policy = policies.get(t.typeKey);
     return {
       typeKey: t.typeKey,
       category: t.category,
       categoryLabel: t.categoryLabel,
+      operatorBand: t.operatorBand,
+      operatorBandLabel: t.operatorBandLabel,
+      operatorBandDescription: OPERATOR_BAND_META[t.operatorBand].description,
+      uxArea: t.uxArea,
+      uxAreaLabel: t.uxAreaLabel,
+      uxAreaDescription: t.uxAreaDescription,
+      uxAreaEmoji: UX_AREA_META[t.uxArea].emoji,
+      uxAreaAlwaysOn: UX_AREA_META[t.uxArea].alwaysOn === true,
       label: t.label,
       description: t.description,
       isAllowed: policy ? policy.isAllowed : true,
@@ -95,10 +119,19 @@ export async function getPreferences(pool: Pool, userId: string) {
     const stored = prefs.get(t.typeKey);
     const type = getNotificationType(t.typeKey)!;
     const channels = resolveUserChannels(type, stored, role);
+    const recommended = defaultChannelsForRole(type, role);
     return {
       typeKey: t.typeKey,
       category: t.category,
       categoryLabel: t.categoryLabel,
+      operatorBand: t.operatorBand,
+      operatorBandLabel: t.operatorBandLabel,
+      operatorBandDescription: t.operatorBandDescription,
+      uxArea: t.uxArea,
+      uxAreaLabel: t.uxAreaLabel,
+      uxAreaDescription: t.uxAreaDescription,
+      uxAreaEmoji: t.uxAreaEmoji,
+      uxAreaAlwaysOn: t.uxAreaAlwaysOn,
       label: t.label,
       description: t.description,
       severity: t.severity,
@@ -107,6 +140,8 @@ export async function getPreferences(pool: Pool, userId: string) {
       preferenceModeLabel: catalogPolicyLabel(type.preferenceMode),
       audience: type.audience,
       whyYouReceive: explainEligibility(type),
+      recommendedInApp: recommended.inAppEnabled,
+      recommendedPush: recommended.pushEnabled,
       inAppEnabled: channels.inAppEnabled,
       pushEnabled: channels.pushEnabled,
       inAppLocked: type.preferenceMode === 'MANDATORY',
@@ -176,6 +211,10 @@ function decorateInbox(row: repo.InboxRow, recipientUserId: string) {
   const type = getNotificationType(row.typeKey);
   return {
     ...row,
+    category: type?.category ?? null,
+    categoryLabel: type?.categoryLabel ?? null,
+    operatorBand: type?.operatorBand ?? null,
+    operatorBandLabel: type?.operatorBandLabel ?? null,
     whyReceived: type
       ? explainWhyReceived({
           type,

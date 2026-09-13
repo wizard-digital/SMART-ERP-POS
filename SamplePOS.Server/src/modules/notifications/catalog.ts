@@ -17,6 +17,27 @@ export type NotificationCategory =
   | 'RESTAURANT'
   | 'SYSTEM';
 
+/** How operators should read the catalog — not a second type engine. */
+export type NotificationOperatorBand =
+  | 'EXCEPTIONS'
+  | 'APPROVALS'
+  | 'MONEY'
+  | 'ACTIVITY'
+  | 'SECURITY'
+  | 'SYSTEM';
+
+/** Presentation grouping for Settings. Types stay independently controllable. */
+export type NotificationUxArea =
+  | 'SALES'
+  | 'CUSTOMERS'
+  | 'PURCHASING'
+  | 'INVENTORY'
+  | 'APPROVALS'
+  | 'SECURITY'
+  | 'FINANCE'
+  | 'RESTAURANT'
+  | 'DEVICE';
+
 export type NotificationSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
 
 export type NotificationAudience = 'permission_holders' | 'subject_user' | 'subject_and_admins';
@@ -71,6 +92,11 @@ export interface NotificationTypeDefinition {
   typeKey: NotificationTypeKey;
   category: NotificationCategory;
   categoryLabel: string;
+  operatorBand: NotificationOperatorBand;
+  operatorBandLabel: string;
+  uxArea: NotificationUxArea;
+  uxAreaLabel: string;
+  uxAreaDescription: string;
   label: string;
   description: string;
   severity: NotificationSeverity;
@@ -95,16 +121,214 @@ const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   SYSTEM: 'System',
 };
 
+export const OPERATOR_BAND_META: Record<
+  NotificationOperatorBand,
+  { label: string; description: string; sort: number }
+> = {
+  EXCEPTIONS: {
+    label: 'Need attention',
+    description: 'Exceptions, reversals, and stock or accounting risk. On for your role.',
+    sort: 0,
+  },
+  APPROVALS: {
+    label: 'Waiting on you',
+    description: 'A document is waiting for a decision or the next floor action.',
+    sort: 1,
+  },
+  MONEY: {
+    label: 'Cash & postings',
+    description: 'Posted payments. On for accountants; off on the floor.',
+    sort: 2,
+  },
+  ACTIVITY: {
+    label: 'Activity log',
+    description: 'Routine documents. Off until you opt in — this is the noise.',
+    sort: 3,
+  },
+  SECURITY: {
+    label: 'Security',
+    description: 'Account and access changes. Required in SMART-ERP-POS.',
+    sort: 4,
+  },
+  SYSTEM: {
+    label: 'This device',
+    description: 'Tests you send yourself.',
+    sort: 5,
+  },
+};
+
+export const OPERATOR_BAND_ORDER: NotificationOperatorBand[] = [
+  'EXCEPTIONS',
+  'APPROVALS',
+  'MONEY',
+  'ACTIVITY',
+  'SECURITY',
+  'SYSTEM',
+];
+
+const OPERATOR_BAND_BY_KEY: Record<NotificationTypeKey, NotificationOperatorBand> = {
+  SALE_VOIDED: 'EXCEPTIONS',
+  SALE_RETURNED: 'EXCEPTIONS',
+  DISCOUNT_ABOVE_THRESHOLD: 'EXCEPTIONS',
+  CUSTOMER_CREDIT_POSTED: 'EXCEPTIONS',
+  AR_WRITE_OFF: 'EXCEPTIONS',
+  PO_CANCELLED: 'EXCEPTIONS',
+  GR_REVERSED: 'EXCEPTIONS',
+  INVENTORY_LOW_STOCK: 'EXCEPTIONS',
+  INVENTORY_EXPIRY_WARNING: 'EXCEPTIONS',
+  INVENTORY_ADJUSTED: 'EXCEPTIONS',
+  LOT_WRITE_DOWN: 'EXCEPTIONS',
+  STOCK_QUARANTINED: 'EXCEPTIONS',
+  APPROVAL_REJECTED: 'EXCEPTIONS',
+  PERIOD_CLOSE_SIGNOFF: 'EXCEPTIONS',
+  FINANCIAL_INTEGRITY_ALERT: 'EXCEPTIONS',
+  RESTAURANT_ORDER_CANCELLED: 'EXCEPTIONS',
+  APPROVAL_REQUIRED: 'APPROVALS',
+  PO_SUBMITTED: 'APPROVALS',
+  STOCK_TRANSFER_REQUESTED: 'APPROVALS',
+  RESTAURANT_ORDER_READY: 'APPROVALS',
+  CUSTOMER_PAYMENT_RECEIVED: 'MONEY',
+  SUPPLIER_PAYMENT_POSTED: 'MONEY',
+  EXPENSE_PAID: 'MONEY',
+  SALE_COMPLETED: 'ACTIVITY',
+  DISCOUNT_APPLIED: 'ACTIVITY',
+  SALE_PRICE_OVERRIDE: 'ACTIVITY',
+  PO_CREATED: 'ACTIVITY',
+  PO_SENT: 'ACTIVITY',
+  GOODS_RECEIVED: 'ACTIVITY',
+  STOCK_TRANSFER_APPROVED: 'ACTIVITY',
+  STOCK_TRANSFER_COMPLETED: 'ACTIVITY',
+  APPROVAL_COMPLETED: 'ACTIVITY',
+  RESTAURANT_KOT_SENT: 'ACTIVITY',
+  SECURITY_PASSWORD_CHANGED: 'SECURITY',
+  SECURITY_ROLE_CHANGED: 'SECURITY',
+  SECURITY_ACCOUNT_DISABLED: 'SECURITY',
+  SECURITY_USER_CREATED: 'SECURITY',
+  NOTIFICATION_TEST: 'SYSTEM',
+};
+
+export const UX_AREA_META: Record<
+  NotificationUxArea,
+  { label: string; emoji: string; description: string; sort: number; alwaysOn?: boolean }
+> = {
+  SALES: {
+    label: 'Sales',
+    emoji: '🛒',
+    description: 'Sales activity, returns, discounts and price changes.',
+    sort: 0,
+  },
+  CUSTOMERS: {
+    label: 'Customers & Payments',
+    emoji: '👥',
+    description: 'Customer payments, credits and account changes.',
+    sort: 1,
+  },
+  PURCHASING: {
+    label: 'Purchasing',
+    emoji: '📦',
+    description: 'Purchase orders, receiving and supplier payments.',
+    sort: 2,
+  },
+  INVENTORY: {
+    label: 'Inventory',
+    emoji: '📊',
+    description: 'Stock levels, expiry, transfers and adjustments.',
+    sort: 3,
+  },
+  APPROVALS: {
+    label: 'Approvals',
+    emoji: '✅',
+    description: 'Things that require your attention or have been approved or rejected.',
+    sort: 4,
+  },
+  SECURITY: {
+    label: 'Security',
+    emoji: '🔐',
+    description: 'Account and permission changes.',
+    sort: 5,
+    alwaysOn: true,
+  },
+  FINANCE: {
+    label: 'Financial control',
+    emoji: '💰',
+    description: 'Important accounting and period-control events.',
+    sort: 6,
+  },
+  RESTAURANT: {
+    label: 'Restaurant',
+    emoji: '🍽️',
+    description: 'Restaurant operational activity.',
+    sort: 7,
+  },
+  DEVICE: {
+    label: 'This device',
+    emoji: '📱',
+    description: 'Tests you send yourself.',
+    sort: 99,
+  },
+};
+
+const UX_AREA_BY_KEY: Record<NotificationTypeKey, NotificationUxArea> = {
+  SALE_COMPLETED: 'SALES',
+  SALE_VOIDED: 'SALES',
+  SALE_RETURNED: 'SALES',
+  DISCOUNT_APPLIED: 'SALES',
+  DISCOUNT_ABOVE_THRESHOLD: 'SALES',
+  SALE_PRICE_OVERRIDE: 'SALES',
+  CUSTOMER_PAYMENT_RECEIVED: 'CUSTOMERS',
+  CUSTOMER_CREDIT_POSTED: 'CUSTOMERS',
+  AR_WRITE_OFF: 'CUSTOMERS',
+  PO_CREATED: 'PURCHASING',
+  PO_SUBMITTED: 'PURCHASING',
+  PO_SENT: 'PURCHASING',
+  PO_CANCELLED: 'PURCHASING',
+  GOODS_RECEIVED: 'PURCHASING',
+  GR_REVERSED: 'PURCHASING',
+  SUPPLIER_PAYMENT_POSTED: 'PURCHASING',
+  INVENTORY_LOW_STOCK: 'INVENTORY',
+  INVENTORY_EXPIRY_WARNING: 'INVENTORY',
+  STOCK_TRANSFER_REQUESTED: 'INVENTORY',
+  STOCK_TRANSFER_APPROVED: 'INVENTORY',
+  STOCK_TRANSFER_COMPLETED: 'INVENTORY',
+  INVENTORY_ADJUSTED: 'INVENTORY',
+  LOT_WRITE_DOWN: 'INVENTORY',
+  STOCK_QUARANTINED: 'INVENTORY',
+  APPROVAL_REQUIRED: 'APPROVALS',
+  APPROVAL_COMPLETED: 'APPROVALS',
+  APPROVAL_REJECTED: 'APPROVALS',
+  EXPENSE_PAID: 'APPROVALS',
+  SECURITY_PASSWORD_CHANGED: 'SECURITY',
+  SECURITY_ROLE_CHANGED: 'SECURITY',
+  SECURITY_ACCOUNT_DISABLED: 'SECURITY',
+  SECURITY_USER_CREATED: 'SECURITY',
+  PERIOD_CLOSE_SIGNOFF: 'FINANCE',
+  FINANCIAL_INTEGRITY_ALERT: 'FINANCE',
+  RESTAURANT_KOT_SENT: 'RESTAURANT',
+  RESTAURANT_ORDER_READY: 'RESTAURANT',
+  RESTAURANT_ORDER_CANCELLED: 'RESTAURANT',
+  NOTIFICATION_TEST: 'DEVICE',
+};
+
 function def(
-  partial: Omit<NotificationTypeDefinition, 'categoryLabel' | 'preferenceMode'> & {
+  partial: Omit<
+    NotificationTypeDefinition,
+    'categoryLabel' | 'preferenceMode' | 'operatorBand' | 'operatorBandLabel' | 'uxArea' | 'uxAreaLabel' | 'uxAreaDescription'
+  > & {
     category: NotificationCategory;
     preferenceMode?: PreferenceMode;
   },
 ): NotificationTypeDefinition {
+  const operatorBand = OPERATOR_BAND_BY_KEY[partial.typeKey];
+  const uxArea = UX_AREA_BY_KEY[partial.typeKey];
   return {
     preferenceMode: 'ROLE_DEFAULT',
     ...partial,
     categoryLabel: CATEGORY_LABELS[partial.category],
+    operatorBand,
+    operatorBandLabel: OPERATOR_BAND_META[operatorBand].label,
+    uxArea,
+    uxAreaLabel: UX_AREA_META[uxArea].label,
+    uxAreaDescription: UX_AREA_META[uxArea].description,
   };
 }
 
@@ -254,10 +478,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeDefinition[] = [
     severity: 'INFO',
     requiredPermission: 'purchasing.read',
     audience: 'permission_holders',
-    defaultInApp: true,
+    defaultInApp: false,
     defaultPush: false,
-    highVolume: false,
-    roleDefaults: { CASHIER: OFF, STAFF: OFF },
+    highVolume: true,
+    preferenceMode: 'OPTIONAL',
     navigationPath: () => '/inventory/purchase-orders',
   }),
   def({
@@ -282,10 +506,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeDefinition[] = [
     severity: 'INFO',
     requiredPermission: 'purchasing.read',
     audience: 'permission_holders',
-    defaultInApp: true,
+    defaultInApp: false,
     defaultPush: false,
-    highVolume: false,
-    roleDefaults: { CASHIER: OFF, STAFF: OFF },
+    highVolume: true,
+    preferenceMode: 'OPTIONAL',
     navigationPath: () => '/inventory/purchase-orders',
   }),
   def({
@@ -310,10 +534,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeDefinition[] = [
     severity: 'INFO',
     requiredPermission: 'purchasing.read',
     audience: 'permission_holders',
-    defaultInApp: true,
+    defaultInApp: false,
     defaultPush: false,
-    highVolume: false,
-    roleDefaults: { CASHIER: OFF, STAFF: OFF },
+    highVolume: true,
+    preferenceMode: 'OPTIONAL',
     navigationPath: () => '/inventory/goods-receipts',
   }),
   def({
@@ -400,10 +624,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeDefinition[] = [
     severity: 'INFO',
     requiredPermission: 'inventory.transfer.receive',
     audience: 'permission_holders',
-    defaultInApp: true,
+    defaultInApp: false,
     defaultPush: false,
-    highVolume: false,
-    roleDefaults: { ACCOUNTANT: OFF, CASHIER: OFF, STAFF: OFF },
+    highVolume: true,
+    preferenceMode: 'OPTIONAL',
     navigationPath: () => '/inventory/transfer-approvals',
   }),
   def({
@@ -414,10 +638,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeDefinition[] = [
     severity: 'INFO',
     requiredPermission: 'inventory.read',
     audience: 'permission_holders',
-    defaultInApp: true,
+    defaultInApp: false,
     defaultPush: false,
-    highVolume: false,
-    roleDefaults: { ACCOUNTANT: OFF, CASHIER: OFF, STAFF: OFF },
+    highVolume: true,
+    preferenceMode: 'OPTIONAL',
     navigationPath: () => '/inventory/store-transfers',
   }),
   def({
@@ -484,10 +708,10 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeDefinition[] = [
     severity: 'INFO',
     requiredPermission: 'expenses.read',
     audience: 'permission_holders',
-    defaultInApp: true,
+    defaultInApp: false,
     defaultPush: false,
-    highVolume: false,
-    roleDefaults: { CASHIER: OFF, STAFF: OFF },
+    highVolume: true,
+    preferenceMode: 'OPTIONAL',
     navigationPath: () => '/expenses',
   }),
   def({
@@ -512,10 +736,17 @@ export const NOTIFICATION_CATALOG: readonly NotificationTypeDefinition[] = [
     severity: 'INFO',
     requiredPermission: 'expenses.read',
     audience: 'permission_holders',
-    defaultInApp: true,
+    defaultInApp: false,
     defaultPush: false,
     highVolume: false,
-    roleDefaults: { CASHIER: OFF, STAFF: OFF },
+    preferenceMode: 'OPTIONAL',
+    roleDefaults: {
+      ADMIN: IN_APP,
+      ACCOUNTANT: IN_APP,
+      MANAGER: OFF,
+      CASHIER: OFF,
+      STAFF: OFF,
+    },
     navigationPath: () => '/expenses',
   }),
   def({
@@ -672,11 +903,28 @@ export function isNotificationTypeKey(value: string): value is NotificationTypeK
 }
 
 export function listCatalogForApi(allowedTypeKeys?: Set<string>) {
-  return NOTIFICATION_CATALOG.filter((t) => !allowedTypeKeys || allowedTypeKeys.has(t.typeKey)).map(
-    (t) => ({
+  return NOTIFICATION_CATALOG
+    .filter((t) => !allowedTypeKeys || allowedTypeKeys.has(t.typeKey))
+    .slice()
+    .sort((a, b) => {
+      const area = UX_AREA_META[a.uxArea].sort - UX_AREA_META[b.uxArea].sort;
+      if (area !== 0) return area;
+      const band = OPERATOR_BAND_META[a.operatorBand].sort - OPERATOR_BAND_META[b.operatorBand].sort;
+      if (band !== 0) return band;
+      return a.label.localeCompare(b.label);
+    })
+    .map((t) => ({
       typeKey: t.typeKey,
       category: t.category,
       categoryLabel: t.categoryLabel,
+      operatorBand: t.operatorBand,
+      operatorBandLabel: t.operatorBandLabel,
+      operatorBandDescription: OPERATOR_BAND_META[t.operatorBand].description,
+      uxArea: t.uxArea,
+      uxAreaLabel: t.uxAreaLabel,
+      uxAreaDescription: t.uxAreaDescription,
+      uxAreaEmoji: UX_AREA_META[t.uxArea].emoji,
+      uxAreaAlwaysOn: UX_AREA_META[t.uxArea].alwaysOn === true,
       label: t.label,
       description: t.description,
       severity: t.severity,
@@ -686,8 +934,7 @@ export function listCatalogForApi(allowedTypeKeys?: Set<string>) {
       preferenceMode: t.preferenceMode,
       requiredPermission: t.requiredPermission,
       channels: ['IN_APP', 'WEB_PUSH'] as const,
-    }),
-  );
+    }));
 }
 
 /** App-relative path only — never trust push payloads as URLs. */

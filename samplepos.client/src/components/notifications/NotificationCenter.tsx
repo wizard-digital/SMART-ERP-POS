@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../utils/api';
 import { useAdaptiveLayoutOptional } from '../adaptive';
-import { resolveAuthorizedNotificationPath } from '../../lib/notificationNavigation';
+import { resolveAuthorizedNotificationPath, inboxMatchesFilter, type InboxOperatorFilter } from '../../lib/notificationNavigation';
 
 type InboxItem = {
   id: string;
@@ -20,6 +20,9 @@ type InboxItem = {
   groupingKey?: string | null;
   priority?: string;
   whyReceived?: string | null;
+  categoryLabel?: string | null;
+  operatorBand?: string | null;
+  operatorBandLabel?: string | null;
 };
 
 type InboxResponse = {
@@ -68,6 +71,7 @@ function groupInbox(rows: InboxItem[]): DisplayRow[] {
 
 export default function NotificationCenter() {
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState<InboxOperatorFilter>('attention');
   const layout = useAdaptiveLayoutOptional();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -110,7 +114,11 @@ export default function NotificationCenter() {
   });
 
   const unread = unreadQuery.data || 0;
-  const displayRows = useMemo(() => groupInbox(listQuery.data?.rows || []), [listQuery.data?.rows]);
+  const filteredRows = useMemo(
+    () => (listQuery.data?.rows || []).filter((row) => inboxMatchesFilter(row.operatorBand, filter)),
+    [listQuery.data?.rows, filter],
+  );
+  const displayRows = useMemo(() => groupInbox(filteredRows), [filteredRows]);
 
   const openItem = useCallback(
     (item: InboxItem) => {
@@ -170,9 +178,32 @@ export default function NotificationCenter() {
               </Link>
             </div>
           </div>
+          <div className="flex flex-wrap gap-1 px-3 py-2 border-b border-gray-100">
+            {([
+              ['attention', 'Need attention'],
+              ['waiting', 'Waiting'],
+              ['cash', 'Cash'],
+              ['all', 'All'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={`px-2 py-1 rounded-full text-[11px] min-h-[var(--layout-touch-target)] ${
+                  filter === id ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'
+                }`}
+                onClick={() => setFilter(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="max-h-96 overflow-y-auto">
             {displayRows.length === 0 && (
-              <p className="p-4 text-sm text-gray-500">No notifications yet.</p>
+              <p className="p-4 text-sm text-gray-500">
+                {(listQuery.data?.rows || []).length > 0
+                  ? 'Nothing in this category. Try All.'
+                  : 'No notifications yet.'}
+              </p>
             )}
             {displayRows.map((row) => {
               if (row.kind === 'group') {
@@ -191,6 +222,11 @@ export default function NotificationCenter() {
                       </span>
                       {unreadGroup && <span className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />}
                     </div>
+                    {latest.operatorBandLabel || latest.categoryLabel ? (
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {[latest.operatorBandLabel, latest.categoryLabel].filter(Boolean).join(' · ')}
+                      </p>
+                    ) : null}
                     <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">
                       Latest: {latest.documentRef || latest.body}
                     </p>
@@ -213,6 +249,11 @@ export default function NotificationCenter() {
                     <span className="text-sm font-medium text-gray-900">{item.title}</span>
                     {!item.isRead && <span className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />}
                   </div>
+                  {item.operatorBandLabel || item.categoryLabel ? (
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {[item.operatorBandLabel, item.categoryLabel].filter(Boolean).join(' · ')}
+                    </p>
+                  ) : null}
                   <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">{item.body}</p>
                   {item.whyReceived ? (
                     <p className="text-[11px] text-gray-500 mt-1">Why you received this: {item.whyReceived}</p>

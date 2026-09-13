@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendNotificationQuery,
+  inboxMatchesFilter,
   isNotificationId,
   locationFromState,
   notificationIdFromPath,
@@ -48,5 +49,11 @@ describe('notification navigation', () => {
     const nid = '11111111-2222-4333-a444-555555555555';
     expect(notificationIdFromPath(`/?nid=${nid}`)).toBe(nid);
     expect(notificationIdFromPath('/dashboard')).toBeNull();
+  });
+
+  it('keeps the bell on exceptions unless the operator opens All', () => {
+    expect(inboxMatchesFilter('EXCEPTIONS', 'attention')).toBe(true);
+    expect(inboxMatchesFilter('ACTIVITY', 'attention')).toBe(false);
+    expect(inboxMatchesFilter('MONEY', 'cash')).toBe(true);
   });
 });

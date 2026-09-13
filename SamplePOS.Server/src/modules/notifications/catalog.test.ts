@@ -30,6 +30,47 @@ describe('notification catalog', () => {
     expect(DISCOUNT_THRESHOLD_RATIO).toBe(0.2);
   });
 
+  it('puts every type in exactly one operator band and keeps the activity log off', () => {
+    const bands = NOTIFICATION_CATALOG.map((t) => t.operatorBand);
+    expect(bands).toHaveLength(NOTIFICATION_CATALOG.length);
+    expect(new Set(NOTIFICATION_CATALOG.map((t) => t.typeKey)).size).toBe(NOTIFICATION_CATALOG.length);
+
+    const quiet = [
+      'SALE_COMPLETED',
+      'DISCOUNT_APPLIED',
+      'SALE_PRICE_OVERRIDE',
+      'PO_CREATED',
+      'PO_SENT',
+      'GOODS_RECEIVED',
+      'STOCK_TRANSFER_APPROVED',
+      'STOCK_TRANSFER_COMPLETED',
+      'APPROVAL_COMPLETED',
+      'RESTAURANT_KOT_SENT',
+    ] as const;
+    for (const key of quiet) {
+      const type = getNotificationType(key)!;
+      expect(type.operatorBand).toBe('ACTIVITY');
+      expect(type.preferenceMode).toBe('OPTIONAL');
+      expect(type.defaultInApp).toBe(false);
+      expect(type.defaultPush).toBe(false);
+    }
+    expect(getNotificationType('SALE_VOIDED')!.operatorBand).toBe('EXCEPTIONS');
+    expect(getNotificationType('PO_SUBMITTED')!.operatorBand).toBe('APPROVALS');
+    expect(getNotificationType('CUSTOMER_PAYMENT_RECEIVED')!.operatorBand).toBe('MONEY');
+  });
+
+  it('assigns every type to exactly one settings area without dropping type keys', () => {
+    expect(NOTIFICATION_CATALOG.every((t) => Boolean(t.uxArea && t.uxAreaLabel))).toBe(true);
+    expect(getNotificationType('SALE_COMPLETED')!.uxArea).toBe('SALES');
+    expect(getNotificationType('CUSTOMER_PAYMENT_RECEIVED')!.uxArea).toBe('CUSTOMERS');
+    expect(getNotificationType('PERIOD_CLOSE_SIGNOFF')!.uxArea).toBe('FINANCE');
+    expect(getNotificationType('FINANCIAL_INTEGRITY_ALERT')!.uxArea).toBe('FINANCE');
+    expect(getNotificationType('NOTIFICATION_TEST')!.uxArea).toBe('DEVICE');
+    expect(
+      NOTIFICATION_CATALOG.filter((t) => t.uxArea === 'DEVICE').map((t) => t.typeKey),
+    ).toEqual(['NOTIFICATION_TEST']);
+  });
+
   it('rejects unsafe navigation paths', () => {
     expect(isSafeNavigationPath('/sales')).toBe(true);
     expect(isSafeNavigationPath('/customers/abc')).toBe(true);

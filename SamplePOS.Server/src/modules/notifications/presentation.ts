@@ -24,6 +24,21 @@ export function groupingKeyFor(
   return `${type.typeKey}:${storeLocationId || 'all'}:${hour}`;
 }
 
+export type InboxOperatorFilter = 'attention' | 'waiting' | 'cash' | 'all';
+
+export function inboxMatchesFilter(
+  operatorBand: string | null | undefined,
+  filter: InboxOperatorFilter,
+): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'attention') {
+    return operatorBand === 'EXCEPTIONS' || operatorBand === 'SECURITY' || operatorBand === 'SYSTEM';
+  }
+  if (filter === 'waiting') return operatorBand === 'APPROVALS';
+  if (filter === 'cash') return operatorBand === 'MONEY';
+  return true;
+}
+
 export function formatAmountLabel(amount: unknown, currency?: unknown): string | null {
   const n = typeof amount === 'number' ? amount : Number(amount);
   if (!Number.isFinite(n)) return null;

@@ -11,7 +11,7 @@ export default function NotificationsSettingsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Notifications</h1>
           <p className="text-gray-600 mb-8">
-            Company policy, your types, then each device. Exceptions on a device never rewrite the catalog.
+            Choose the areas you want to be notified about. Open an area when you need a specific event. Devices stay independent.
           </p>
           <ErrorBoundary section="Notifications">
             <NotificationSettingsTab canAdmin={canAdmin} />

@@ -45,3 +45,18 @@ export function locationFromState(from: { pathname?: string; search?: string } |
   if (!from?.pathname) return undefined;
   return `${from.pathname}${from.search || ''}`;
 }
+
+export type InboxOperatorFilter = 'attention' | 'waiting' | 'cash' | 'all';
+
+export function inboxMatchesFilter(
+  operatorBand: string | null | undefined,
+  filter: InboxOperatorFilter,
+): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'attention') {
+    return operatorBand === 'EXCEPTIONS' || operatorBand === 'SECURITY' || operatorBand === 'SYSTEM';
+  }
+  if (filter === 'waiting') return operatorBand === 'APPROVALS';
+  if (filter === 'cash') return operatorBand === 'MONEY';
+  return true;
+}

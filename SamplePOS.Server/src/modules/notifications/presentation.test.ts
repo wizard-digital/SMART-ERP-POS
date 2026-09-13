@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { formatAmountLabel, formatInboxBody, groupingKeyFor, priorityFromType } from './presentation.js';
+import { formatAmountLabel, formatInboxBody, groupingKeyFor, inboxMatchesFilter, priorityFromType } from './presentation.js';
 import { getNotificationType } from './catalog.js';
 
 describe('notification presentation', () => {
@@ -44,6 +44,17 @@ describe('notification presentation', () => {
     expect(priorityFromType(getNotificationType('SECURITY_PASSWORD_CHANGED')!)).toBe('CRITICAL');
     expect(priorityFromType(getNotificationType('SALE_VOIDED')!)).toBe('HIGH');
     expect(priorityFromType(getNotificationType('SALE_COMPLETED')!)).toBe('LOW');
-    expect(priorityFromType(getNotificationType('PO_CREATED')!)).toBe('NORMAL');
+    expect(priorityFromType(getNotificationType('PO_CREATED')!)).toBe('LOW');
+    expect(priorityFromType(getNotificationType('PO_SUBMITTED')!)).toBe('HIGH');
+  });
+
+  it('filters the inbox to exceptions first', () => {
+    expect(inboxMatchesFilter('EXCEPTIONS', 'attention')).toBe(true);
+    expect(inboxMatchesFilter('SECURITY', 'attention')).toBe(true);
+    expect(inboxMatchesFilter('ACTIVITY', 'attention')).toBe(false);
+    expect(inboxMatchesFilter('MONEY', 'attention')).toBe(false);
+    expect(inboxMatchesFilter('MONEY', 'cash')).toBe(true);
+    expect(inboxMatchesFilter('APPROVALS', 'waiting')).toBe(true);
+    expect(inboxMatchesFilter('ACTIVITY', 'all')).toBe(true);
   });
 });
