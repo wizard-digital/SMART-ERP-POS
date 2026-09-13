@@ -19,6 +19,7 @@ import { logOpeningBalanceAudit } from '../../utils/openingBalanceAudit.js';
 import { assertPositiveFinite, fiscalPartsFromIsoDate, safeParseInt } from '../../utils/safeParse.js';
 import * as auditRepository from '../audit/auditRepository.js';
 import { ValidationError } from '../../middleware/errorHandler.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 import { goodsReceiptRepository } from '../goods-receipts/goodsReceiptRepository.js';
 import { PricingEngine } from '../../utils/pricingEngine.js';
 import { assertSupplierCreditHeadroom } from '../suppliers/supplierCreditGuard.js';
@@ -490,7 +491,21 @@ export async function createSupplierPayment(
     if (options?.client) {
         return run(options.client);
     }
-    return UnitOfWork.run(pool, run);
+    const posted = await UnitOfWork.run(pool, run);
+    publishNotificationEvent({
+        pool,
+        typeKey: 'SUPPLIER_PAYMENT_POSTED',
+        entityType: 'supplier_payment',
+        entityId: String(posted.payment.id),
+        idempotencyKey: `SUPPLIER_PAYMENT_POSTED:supplier_payment:${posted.payment.id}`,
+        payload: {
+            summary: `Supplier payment ${posted.payment.paymentNumber} posted`,
+            documentRef: posted.payment.paymentNumber,
+            amount: posted.payment.amount,
+        },
+        actorUserId: userId || null,
+    });
+    return posted;
 }
 
 export async function updateSupplierPayment(

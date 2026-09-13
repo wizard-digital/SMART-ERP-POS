@@ -165,6 +165,59 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
         });
       }
     }
+
+    if (event.data?.type === 'NOTIFICATION_CLICK' && typeof event.data.nid === 'string') {
+      const nid = event.data.nid;
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(nid)) {
+        window.location.assign(`/?nid=${encodeURIComponent(nid)}`);
+      }
+    }
+
+    if (event.data?.type === 'PUSH_SUBSCRIPTION_CHANGE') {
+      void import('./lib/pushSubscription').then(async (push) => {
+        try {
+          if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+          const token = localStorage.getItem('auth_token');
+          if (!token) return;
+          const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+          const catalogRes = await fetch(`${baseUrl}/notifications/catalog`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+          });
+          const catalog = await catalogRes.json();
+          const publicKey = catalog?.data?.vapidPublicKey as string | undefined;
+          if (!publicKey || !('serviceWorker' in navigator)) return;
+          const registration = await navigator.serviceWorker.ready;
+          const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: push.urlBase64ToUint8Array(publicKey),
+          });
+          const json = subscription.toJSON();
+          const createdRes = await fetch(`${baseUrl}/notifications/devices`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              endpoint: json.endpoint,
+              keys: json.keys,
+              clientInstallationId: push.getOrCreateInstallationId(),
+              platformHint: push.platformHintFromCapabilities({
+                standalone: window.matchMedia('(display-mode: standalone)').matches,
+                coarsePointer: window.matchMedia('(pointer: coarse)').matches,
+              }),
+              permissionState: 'granted',
+            }),
+          });
+          const created = await createdRes.json();
+          if (created?.data?.id) push.rememberSubscriptionId(String(created.data.id));
+        } catch {
+          /* best-effort subscription renewal */
+        }
+      });
+    }
   });
 }
 

@@ -92,6 +92,8 @@ import { tenantMiddleware } from './middleware/tenantMiddleware.js';
 import { tenantRateLimit } from './middleware/tenantRateLimit.js';
 import { idempotencyMiddleware } from './middleware/idempotency.js';
 import { requireFeature } from './middleware/requireFeature.js';
+import notificationRoutes from './modules/notifications/notificationRoutes.js';
+import { ensureVapidKeys } from './modules/notifications/vapidKeys.js';
 import type { TenantPlan } from '../../shared/types/tenant.js';
 import { jobQueue } from './services/jobQueue.js';
 import { connectionManager } from './db/connectionManager.js';
@@ -108,6 +110,7 @@ import { getBusinessDate, getBusinessYear, BUSINESS_TIMEZONE, formatBusinessTime
 // All modules now use consistent named exports for maintainability
 
 dotenv.config();
+ensureVapidKeys();
 
 // ============================================================
 // PRODUCTION ENVIRONMENT VALIDATION
@@ -145,6 +148,11 @@ if (process.env.NODE_ENV === 'production') {
   if (!process.env.REDIS_URL) {
     console.warn(
       'WARNING: REDIS_URL not set. Job queues (banking retries, imports) will fail silently.'
+    );
+  }
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.warn(
+      'WARNING: VAPID keys not set. OS Web Push notifications will not be delivered.'
     );
   }
   // Validate CORS_ORIGIN — block wildcard in production
@@ -403,6 +411,7 @@ app.use('/api/down-payment-clearing', requireFeature('accounting'), downPaymentC
 // ── Settings & Admin (always available) ─────────────────────
 app.use('/api/settings/invoice', invoiceSettingsRoutes);
 app.use('/api/system-settings', systemSettingsRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', requireFeature('reports'), createReportsRouter(pool));
 app.use('/api/users', createUserRoutes());
 app.use('/api/admin', adminRoutes);
@@ -666,6 +675,64 @@ async function startServer() {
           });
       } catch (err) {
         logger.warn('CSV import worker not started (Redis may be offline)', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      try {
+        import('./modules/notifications/notificationWorker.js')
+          .then(async ({ processNotificationEvent }) => {
+            const { resolveNotificationWorkerPool } = await import(
+              './modules/notifications/tenantPoolResolver.js'
+            );
+            jobQueue.processQueue('notifications', async (job) => {
+              if (job.data.type === 'SWEEP_PENDING') {
+                const { sweepAllActiveTenantNotificationEvents } = await import(
+                  './modules/notifications/tenantPoolResolver.js'
+                );
+                const sweep = await sweepAllActiveTenantNotificationEvents(pool);
+                logger.info('Notification pending-event sweep', sweep);
+                return;
+              }
+              const payload = job.data.payload as { tenantId?: string; eventId?: string };
+              if (!payload?.eventId) return;
+              const workerPool = await resolveNotificationWorkerPool(payload.tenantId, pool);
+              if (!workerPool) {
+                logger.error('Notification worker: tenant pool not found', {
+                  tenantId: payload.tenantId,
+                  eventId: payload.eventId,
+                });
+                return;
+              }
+              await processNotificationEvent(workerPool, payload.eventId, payload.tenantId ?? null);
+            });
+            const notifQueue = jobQueue.getQueue('notifications');
+            if (notifQueue) {
+              notifQueue
+                .add(
+                  {
+                    type: 'SWEEP_PENDING',
+                    payload: { sweep: true },
+                    userId: 'system',
+                    timestamp: new Date().toISOString(),
+                  },
+                  { repeat: { every: 20000 }, jobId: 'notification-events-sweep' },
+                )
+                .catch((err) =>
+                  logger.warn('Notification sweep job registration failed', {
+                    error: err instanceof Error ? err.message : String(err),
+                  }),
+                );
+            }
+            logger.info('Notification worker registered');
+          })
+          .catch((err) => {
+            logger.warn('Notification worker not started', {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+      } catch (err) {
+        logger.warn('Notification worker not started (Redis may be offline)', {
           error: err instanceof Error ? err.message : String(err),
         });
       }

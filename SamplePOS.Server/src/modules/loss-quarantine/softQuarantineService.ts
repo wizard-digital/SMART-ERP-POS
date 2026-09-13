@@ -15,6 +15,7 @@ import {
   softQuarantineStatusForReason,
   type SoftQuarantineReason,
 } from '@shared/loss-quarantine/index.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 
 export interface SoftQuarantineInput {
   inventoryBatchId: string;
@@ -58,7 +59,7 @@ export async function applySoftQuarantine(
     );
   }
 
-  return UnitOfWork.runOrJoin(conn, async (client) => {
+  const quarantined = await UnitOfWork.runOrJoin(conn, async (client) => {
     let targetBatchId = input.inventoryBatchId;
     let splitFromBatchId: string | null = null;
     let sellableRemainingOnParent: number | null = null;
@@ -200,6 +201,21 @@ export async function applySoftQuarantine(
       sellableRemainingOnParent,
     };
   });
+  if (UnitOfWork.isPool(conn)) {
+    publishNotificationEvent({
+      pool: conn,
+      typeKey: 'STOCK_QUARANTINED',
+      entityType: 'inventory_batch',
+      entityId: quarantined.inventoryBatchId,
+      idempotencyKey: `STOCK_QUARANTINED:inventory_batch:${quarantined.inventoryBatchId}:${quarantined.movementId}`,
+      payload: {
+        summary: `Stock quarantined (${quarantined.movementNumber})`,
+        documentRef: quarantined.movementNumber,
+      },
+      actorUserId: input.userId,
+    });
+  }
+  return quarantined;
 }
 
 /**

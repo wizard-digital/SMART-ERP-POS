@@ -43,6 +43,8 @@ import * as documentFlowService from '../document-flow/documentFlowService.js';
 import { getFinalPricesBulk, type ResolvedPrice } from '../pricing/pricingEngineService.js';
 import { getCustomerPricingMode } from '../pricing/pricingRepository.js';
 import { validateAtCostSalePricing } from './atCostSalePricingGuard.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
+import { DISCOUNT_THRESHOLD_RATIO } from '../notifications/catalog.js';
 import { assertQuoteConvertibleForPosSale } from './quoteConvertibilityGuard.js';
 import { assertSaleLineNotBelowAllocatedCost } from './saleBelowCostGuard.js';
 import { recordSaleLinePriceEvent } from './salePriceAuditService.js';
@@ -245,6 +247,7 @@ export const salesService = {
 
       const multistoreEnabled = await isMultistoreEnabled(client);
       let sellingStoreId: string | null = null;
+      let priceOverrideCount = 0;
       if (multistoreEnabled) {
         sellingStoreId = await warehouseSaleDeductionService.resolveSellingStoreId(client);
       }
@@ -928,6 +931,7 @@ export const salesService = {
           engineSellingUnitPrice != null &&
           Math.abs(item.unitPrice - engineSellingUnitPrice) > 0.01
         ) {
+          priceOverrideCount += 1;
           await recordSaleLinePriceEvent(
             client,
             {
@@ -2874,6 +2878,66 @@ export const salesService = {
       if (result.checkoutProfile) {
         result.checkoutProfile = profiler.snapshot()!;
       }
+
+      const saleNotifyPayload = {
+        summary: `Sale ${sale.saleNumber} completed`,
+        documentRef: sale.saleNumber,
+        amount: Number(sale.totalAmount || 0),
+      };
+      publishNotificationEvent({
+        pool,
+        tenantId,
+        typeKey: 'SALE_COMPLETED',
+        entityType: 'sale',
+        entityId: sale.id,
+        idempotencyKey: `SALE_COMPLETED:sale:${sale.id}`,
+        payload: saleNotifyPayload,
+        actorUserId: input.soldBy,
+        storeLocationId: sellingStoreId,
+      });
+      const publishedDiscount = Number(sale.discountAmount || 0);
+      const publishedSubtotal = Number(sale.subtotal || sale.totalAmount || 0);
+      const isExchangeReplacement = Boolean(input.exchangeRefundId);
+      if (!isExchangeReplacement && publishedDiscount > 0.009) {
+        publishNotificationEvent({
+          pool,
+          tenantId,
+          typeKey: 'DISCOUNT_APPLIED',
+          entityType: 'sale',
+          entityId: sale.id,
+          idempotencyKey: `DISCOUNT_APPLIED:sale:${sale.id}`,
+          payload: { ...saleNotifyPayload, summary: `A discount was applied on sale ${sale.saleNumber}` },
+          actorUserId: input.soldBy,
+          storeLocationId: sellingStoreId,
+        });
+        if (publishedSubtotal > 0 && publishedDiscount / publishedSubtotal >= DISCOUNT_THRESHOLD_RATIO) {
+          publishNotificationEvent({
+            pool,
+            tenantId,
+            typeKey: 'DISCOUNT_ABOVE_THRESHOLD',
+            entityType: 'sale',
+            entityId: sale.id,
+            idempotencyKey: `DISCOUNT_ABOVE_THRESHOLD:sale:${sale.id}`,
+            payload: { ...saleNotifyPayload, summary: `A large discount was applied on sale ${sale.saleNumber}` },
+            actorUserId: input.soldBy,
+            storeLocationId: sellingStoreId,
+          });
+        }
+      }
+      if (priceOverrideCount > 0) {
+        publishNotificationEvent({
+          pool,
+          tenantId,
+          typeKey: 'SALE_PRICE_OVERRIDE',
+          entityType: 'sale',
+          entityId: sale.id,
+          idempotencyKey: `SALE_PRICE_OVERRIDE:sale:${sale.id}`,
+          payload: { ...saleNotifyPayload, summary: `A price override was used on sale ${sale.saleNumber}` },
+          actorUserId: input.soldBy,
+          storeLocationId: sellingStoreId,
+        });
+      }
+
       return result;
     } catch (error) {
       await client.query('ROLLBACK');
@@ -3493,6 +3557,21 @@ export const salesService = {
         voidedById,
         approvedById,
         totalAmount,
+      });
+
+      publishNotificationEvent({
+        pool,
+        typeKey: 'SALE_VOIDED',
+        entityType: 'sale',
+        entityId: saleId,
+        idempotencyKey: `SALE_VOIDED:sale:${saleId}`,
+        payload: {
+          summary: `Sale ${sale.sale_number} was voided`,
+          documentRef: sale.sale_number,
+          amount: Number(sale.total_amount || 0),
+        },
+        actorUserId: voidedById,
+        storeLocationId: sale.store_location_id || null,
       });
 
       return {
@@ -4156,6 +4235,21 @@ export const salesService = {
         totalCost: refundTotalCost.toFixed(2),
         itemsRestored: validatedItems.length,
         isFullRefund,
+      });
+
+      publishNotificationEvent({
+        pool,
+        typeKey: 'SALE_RETURNED',
+        entityType: 'sale',
+        entityId: saleId,
+        idempotencyKey: `SALE_RETURNED:refund:${refund.id}`,
+        payload: {
+          summary: `Sale ${sale.sale_number} was returned`,
+          documentRef: sale.sale_number,
+          amount: Number(sale.total_amount || 0),
+        },
+        actorUserId: refundedById,
+        storeLocationId: sale.store_location_id || null,
       });
 
       // CASH REGISTER: Record refund movement for drawer tracking (REFUND only — not exchange store credit)

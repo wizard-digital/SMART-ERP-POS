@@ -16,6 +16,7 @@ import { ordersService, type OrderItemInput } from '../orders/ordersService.js';
 import logger from '../../utils/logger.js';
 import { DocumentTaxService } from '../../services/documentTaxService.js';
 import { isRestaurantModeEnabled } from './restaurantSettings.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 import {
   restaurantRepository,
   type OrderChannel,
@@ -1303,7 +1304,7 @@ export const restaurantService = {
   ): Promise<{ kots: KotRecord[]; printJobs: PrintJobRecord[] }> {
     await assertRestaurantEnabled(pool);
 
-    return UnitOfWork.run(pool, async (client: PoolClient) => {
+    const fired = await UnitOfWork.run(pool, async (client: PoolClient) => {
       const order = await ordersRepository.getById(client, orderId);
       if (!order || order.status !== 'PENDING') {
         throw new BusinessError('Open restaurant check required to send KOT', 'ERR_RESTAURANT_KOT');
@@ -1410,6 +1411,21 @@ export const restaurantService = {
 
       return { kots, printJobs };
     });
+    if (fired.kots.length > 0) {
+      publishNotificationEvent({
+        pool,
+        typeKey: 'RESTAURANT_KOT_SENT',
+        entityType: 'restaurant_order',
+        entityId: orderId,
+        idempotencyKey: `RESTAURANT_KOT_SENT:restaurant_order:${orderId}:${fired.kots[0].id}`,
+        payload: {
+          summary: `Kitchen ticket ${fired.kots.map((k) => k.kotNumber).join(', ')} sent`,
+          documentRef: fired.kots[0].kotNumber,
+        },
+        actorUserId: firedBy,
+      });
+    }
+    return fired;
   },
 
   /**
@@ -1741,7 +1757,7 @@ export const restaurantService = {
   ): Promise<{ kot: KotRecord; orderKitchenStatus: string }> {
     await assertRestaurantEnabled(pool);
 
-    return UnitOfWork.run(pool, async (client: PoolClient) => {
+    const advanced = await UnitOfWork.run(pool, async (client: PoolClient) => {
       const current = await restaurantRepository.getKotById(client, kotId);
       if (!current) throw new NotFoundError('Kitchen ticket');
 
@@ -1792,6 +1808,21 @@ export const restaurantService = {
 
       return { kot, orderKitchenStatus };
     });
+    if (advanced.kot.status === 'READY') {
+      publishNotificationEvent({
+        pool,
+        typeKey: 'RESTAURANT_ORDER_READY',
+        entityType: 'restaurant_kot',
+        entityId: advanced.kot.id,
+        idempotencyKey: `RESTAURANT_ORDER_READY:restaurant_kot:${advanced.kot.id}`,
+        payload: {
+          summary: `Kitchen ticket ${advanced.kot.kotNumber} is ready`,
+          documentRef: advanced.kot.kotNumber,
+        },
+        actorUserId: updatedBy,
+      });
+    }
+    return advanced;
   },
 
   async markBilling(pool: Pool, orderId: string): Promise<void> {
@@ -2069,6 +2100,18 @@ export const restaurantService = {
     await this.releaseTableForOrder(pool, orderId, {
       bumpVoids: true,
       updatedBy: cancelledBy,
+    });
+    publishNotificationEvent({
+      pool,
+      typeKey: 'RESTAURANT_ORDER_CANCELLED',
+      entityType: 'restaurant_order',
+      entityId: orderId,
+      idempotencyKey: `RESTAURANT_ORDER_CANCELLED:restaurant_order:${orderId}`,
+      payload: {
+        summary: `Restaurant check cancelled`,
+        documentRef: order.orderNumber || orderId,
+      },
+      actorUserId: cancelledBy,
     });
     return { order, tableId: meta.tableId, voidKots, printJobs };
   },

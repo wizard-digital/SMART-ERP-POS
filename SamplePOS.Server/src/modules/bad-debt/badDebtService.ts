@@ -38,6 +38,7 @@ import { syncCustomerBalanceFromInvoices } from '../../utils/customerBalanceSync
 import { AccountingCore } from '../../services/accountingCore.js';
 import { AccountCodes } from '../../services/glEntryService.js';
 import { getBusinessDate } from '../../utils/dateRange.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 
 export interface WriteoffLineInput {
   invoiceId: string;
@@ -126,7 +127,7 @@ export async function createAndPostWriteoff(
   const invoiceIds = [...new Set(input.lines.map((l) => l.invoiceId))];
   invoiceIds.sort();
 
-  return UnitOfWork.run(pool, async (client) => {
+  const posted = await UnitOfWork.run(pool, async (client) => {
     for (const invoiceId of invoiceIds) {
       await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [
         `AR-WRITEOFF-${invoiceId}`,
@@ -197,6 +198,22 @@ export async function createAndPostWriteoff(
 
     return postInternal(client, pool, doc.id, input.createdBy, total, expenseAccountCode, input.customerId);
   });
+  if (posted.status === 'POSTED') {
+    publishNotificationEvent({
+      pool,
+      typeKey: 'AR_WRITE_OFF',
+      entityType: 'ar_writeoff',
+      entityId: posted.id,
+      idempotencyKey: `AR_WRITE_OFF:ar_writeoff:${posted.id}`,
+      payload: {
+        summary: `AR write-off ${posted.documentNumber} posted`,
+        documentRef: posted.documentNumber,
+        amount: posted.totalAmount,
+      },
+      actorUserId: input.createdBy,
+    });
+  }
+  return posted;
 }
 
 async function postInternal(

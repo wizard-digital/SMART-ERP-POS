@@ -7,6 +7,8 @@ import logger from '../../utils/logger.js';
 import { BusinessError, NotFoundError } from '../../middleware/errorHandler.js';
 import { UnitOfWork } from '../../db/unitOfWork.js';
 import { rbacRoleNameMapsToLegacyAdmin } from '../../../../shared/authorization/rbacAdminRole.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
+import * as notificationRepo from '../notifications/notificationRepository.js';
 
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -122,7 +124,7 @@ export async function getUserById(pool: Pool, id: string): Promise<User> {
  * - Bcrypt with salt for one-way hashing
  * - Rate limiting on auth endpoints (middleware)
  */
-export async function createUser(pool: Pool, data: CreateUser): Promise<User> {
+export async function createUser(pool: Pool, data: CreateUser, actorUserId?: string | null): Promise<User> {
   // Check if email already exists
   const existingUser = await userRepository.findUserByEmail(data.email, pool);
 
@@ -131,7 +133,7 @@ export async function createUser(pool: Pool, data: CreateUser): Promise<User> {
   }
 
   // Transaction: Create user atomically with role assignment
-  return UnitOfWork.run(pool, async (client) => {
+  const created = await UnitOfWork.run(pool, async (client) => {
     // If rbacRoleId is provided, derive the legacy role from it
     let createData = data;
     if (data.rbacRoleId) {
@@ -165,6 +167,17 @@ export async function createUser(pool: Pool, data: CreateUser): Promise<User> {
     const fullUser = await userRepository.findUserById(user.id, client);
     return fullUser ?? user;
   });
+  publishNotificationEvent({
+    pool,
+    typeKey: 'SECURITY_USER_CREATED',
+    entityType: 'user',
+    entityId: created.id,
+    idempotencyKey: `SECURITY_USER_CREATED:user:${created.id}`,
+    payload: { summary: 'A user account was created', documentRef: created.email },
+    actorUserId: actorUserId ?? null,
+    subjectUserId: created.id,
+  });
+  return created;
 }
 
 /**
@@ -289,7 +302,8 @@ export async function adminResetPassword(
 export async function deleteUser(
   pool: Pool,
   id: string,
-  hardDelete: boolean = false
+  hardDelete: boolean = false,
+  actorUserId?: string | null,
 ): Promise<{ deleted: boolean; message: string }> {
   const user = await userRepository.findUserById(id, pool);
 
@@ -319,6 +333,16 @@ export async function deleteUser(
     if (!success) {
       throw new BusinessError('Failed to deactivate user', 'ERR_USER_006', { userId: id });
     }
+    await notificationRepo.revokeAllDevicesForUser(pool, id);
+    publishNotificationEvent({
+      pool,
+      typeKey: 'SECURITY_ACCOUNT_DISABLED',
+      entityType: 'user',
+      entityId: id,
+      idempotencyKey: `SECURITY_ACCOUNT_DISABLED:user:${id}:${Date.now()}`,
+      payload: { summary: 'A user account was deactivated' },
+      actorUserId: actorUserId ?? id,
+    });
     logger.info('User deactivated', { userId: id, email: user.email });
     return { deleted: false, message: 'User deactivated successfully' };
   }

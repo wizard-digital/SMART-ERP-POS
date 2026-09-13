@@ -36,6 +36,7 @@ import { TRANSFER_PERMISSION_KEYS } from '../../../../../shared/types/transferWo
 
 import { transferAssortmentService } from './transferAssortmentService.js';
 import { assertWarehouseLayerConsistentForProducts } from '../../../services/warehouseInventoryCoupling.js';
+import { publishNotificationEvent } from '../../notifications/notificationPublisher.js';
 import { recordMovement } from '../../stock-movements/stockMovementRepository.js';
 import { syncLotStatusAfterQuarantine } from '../../loss-quarantine/quarantineLotStatus.js';
 import {
@@ -271,7 +272,7 @@ export const storeTransferService = {
 
     ): Promise<StoreTransfer> {
 
-        return UnitOfWork.run(pool, async (client) => {
+        const created = await UnitOfWork.run(pool, async (client) => {
 
             await storeTransferService.assertMultistore(client);
 
@@ -486,6 +487,64 @@ export const storeTransferService = {
             return full;
 
         });
+
+        publishNotificationEvent({
+
+            pool,
+
+            typeKey: 'STOCK_TRANSFER_REQUESTED',
+
+            entityType: 'store_transfer',
+
+            entityId: created.id,
+
+            idempotencyKey: `STOCK_TRANSFER_REQUESTED:store_transfer:${created.id}`,
+
+            payload: {
+
+                summary: `Stock transfer ${created.transferNumber} requested`,
+
+                documentRef: created.transferNumber,
+
+            },
+
+            actorUserId: actor.userId,
+
+            storeLocationId: created.sourceStoreId || created.destinationStoreId || null,
+
+        });
+
+        if (created.status === 'RECEIVED') {
+
+            publishNotificationEvent({
+
+                pool,
+
+                typeKey: 'STOCK_TRANSFER_COMPLETED',
+
+                entityType: 'store_transfer',
+
+                entityId: created.id,
+
+                idempotencyKey: `STOCK_TRANSFER_COMPLETED:store_transfer:${created.id}`,
+
+                payload: {
+
+                    summary: `Stock transfer ${created.transferNumber} completed`,
+
+                    documentRef: created.transferNumber,
+
+                },
+
+                actorUserId: actor.userId,
+
+                storeLocationId: created.destinationStoreId || created.sourceStoreId || null,
+
+            });
+
+        }
+
+        return created;
 
     },
 
@@ -903,7 +962,7 @@ export const storeTransferService = {
 
     ): Promise<StoreTransfer> {
 
-        return UnitOfWork.run(pool, async (client) => {
+        const approved = await UnitOfWork.run(pool, async (client) => {
 
             await storeTransferService.assertMultistore(client);
 
@@ -1048,6 +1107,34 @@ export const storeTransferService = {
             return (await storeTransferRepository.getById(client, transferId))!;
 
         });
+
+        publishNotificationEvent({
+
+            pool,
+
+            typeKey: 'STOCK_TRANSFER_APPROVED',
+
+            entityType: 'store_transfer',
+
+            entityId: approved.id,
+
+            idempotencyKey: `STOCK_TRANSFER_APPROVED:store_transfer:${approved.id}`,
+
+            payload: {
+
+                summary: `Stock transfer ${approved.transferNumber} approved`,
+
+                documentRef: approved.transferNumber,
+
+            },
+
+            actorUserId: actor.userId,
+
+            storeLocationId: approved.sourceStoreId || approved.destinationStoreId || null,
+
+        });
+
+        return approved;
 
     },
 
@@ -1239,7 +1326,7 @@ export const storeTransferService = {
 
     ): Promise<StoreTransfer> {
 
-        return UnitOfWork.run(pool, async (client) => {
+        const received = await UnitOfWork.run(pool, async (client) => {
 
             await storeTransferService.assertMultistore(client);
 
@@ -1467,6 +1554,38 @@ export const storeTransferService = {
             return updated;
 
         });
+
+        if (received.status === 'RECEIVED') {
+
+            publishNotificationEvent({
+
+                pool,
+
+                typeKey: 'STOCK_TRANSFER_COMPLETED',
+
+                entityType: 'store_transfer',
+
+                entityId: received.id,
+
+                idempotencyKey: `STOCK_TRANSFER_COMPLETED:store_transfer:${received.id}`,
+
+                payload: {
+
+                    summary: `Stock transfer ${received.transferNumber} completed`,
+
+                    documentRef: received.transferNumber,
+
+                },
+
+                actorUserId: actor.userId,
+
+                storeLocationId: received.destinationStoreId || received.sourceStoreId || null,
+
+            });
+
+        }
+
+        return received;
 
     },
 

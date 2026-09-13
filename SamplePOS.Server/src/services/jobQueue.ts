@@ -117,6 +117,18 @@ class JobQueueService {
                 removeOnFail: 500,
             },
         });
+
+        this.createQueue('notifications', {
+            defaultJobOptions: {
+                attempts: 5,
+                backoff: {
+                    type: 'exponential',
+                    delay: 5000,
+                },
+                removeOnComplete: 200,
+                removeOnFail: 500,
+            },
+        });
     }
 
     private createQueue(name: string, options: Bull.QueueOptions = {}) {

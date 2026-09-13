@@ -38,6 +38,7 @@ import {
   resolveGl1300FromBatchSubledgerDelta,
 } from '../../services/inventorySubledgerCoupling.js';
 import { correctionEligibilityService } from '../corrections/correctionEligibilityService.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 import { returnGrnService } from '../return-grn/returnGrnService.js';
 import { returnGrnRepository } from '../return-grn/returnGrnRepository.js';
 import { returnGrnPurchaseQuantityFromBase } from '../return-grn/returnGrnQuantity.js';
@@ -1025,6 +1026,16 @@ export const goodsReceiptService = {
     const finalized = await goodsReceiptRepository.getGRById(pool, id);
     if (!finalized) throw new Error(`Goods receipt ${id} not found after finalization`);
 
+    publishNotificationEvent({
+      pool,
+      typeKey: 'GOODS_RECEIVED',
+      entityType: 'goods_receipt',
+      entityId: id,
+      idempotencyKey: `GOODS_RECEIVED:goods_receipt:${id}`,
+      payload: { summary: `Goods receipt ${finalized.gr.grNumber} completed`, documentRef: finalized.gr.grNumber },
+      actorUserId: finalized.gr.receivedBy || null,
+    });
+
     return {
       gr: finalized.gr,
       items: finalized.items,
@@ -1418,7 +1429,7 @@ export const goodsReceiptService = {
     const reason = input.reason?.trim();
     if (!reason) throw new BusinessError('Reversal reason is required', 'ERR_GR_REVERSAL_001');
 
-    return UnitOfWork.run(pool, async (client) => {
+    const reversed = await UnitOfWork.run(pool, async (client) => {
       await client.query(`SELECT id FROM goods_receipts WHERE id = $1 FOR UPDATE`, [grId]);
 
       const eligibility = await correctionEligibilityService.eligibilityReverseUninvoicedReceipt(
@@ -1534,6 +1545,19 @@ export const goodsReceiptService = {
         cancelledBills,
       };
     });
+    publishNotificationEvent({
+      pool,
+      typeKey: 'GR_REVERSED',
+      entityType: 'goods_receipt',
+      entityId: grId,
+      idempotencyKey: `GR_REVERSED:goods_receipt:${grId}:${reversed.returnGrn.id}`,
+      payload: {
+        summary: `Goods receipt ${reversed.gr.grNumber} reversed`,
+        documentRef: reversed.gr.grNumber,
+      },
+      actorUserId: input.userId,
+    });
+    return reversed;
   },
 
   /** Used by purchase order send/cancel flows inside a shared transaction. */

@@ -4,6 +4,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useTenant } from '../contexts/TenantContext';
 import { PasswordExpiryWarning } from './auth/PasswordExpiryWarning';
 import ServerClock from './ServerClock';
+import NotificationCenter from './notifications/NotificationCenter';
+import ErrorBoundary from './ErrorBoundary';
 import { isCashierLockdownActive, resolveCashierNavItems } from '../utils/cashierLockdown';
 import {
   isRestaurantWaiterProfile,
@@ -244,7 +246,14 @@ function LayoutChrome({ children }: LayoutProps) {
         brandName={brandName}
         userInitial={userInitial}
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
-        trailing={<ServerClock />}
+        trailing={
+          <>
+            <ErrorBoundary section="NotificationCenter">
+              <NotificationCenter />
+            </ErrorBoundary>
+            <ServerClock />
+          </>
+        }
       />
 
       <div
@@ -264,6 +273,13 @@ function LayoutChrome({ children }: LayoutProps) {
           userInitial={userInitial}
           footer={({ showLabels, persistentNav }) => (
             <>
+              <Link
+                to="/settings/notifications"
+                className={`${showLabels ? 'w-full flex items-center gap-2' : 'w-10 justify-center flex'} mt-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors min-h-[var(--layout-touch-target)]`}
+                title={!showLabels && persistentNav ? 'Notifications' : undefined}
+              >
+                {showLabels ? '🔔 Notifications' : '🔔'}
+              </Link>
               <Link
                 to="/my/quick-login"
                 className={`${showLabels ? 'w-full flex items-center gap-2' : 'w-10 justify-center flex'} mt-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors min-h-[var(--layout-touch-target)]`}

@@ -8,8 +8,10 @@ import SystemSettingsTab from './tabs/SystemSettingsTab';
 import DataManagementTab from './tabs/DataManagementTab';
 import BrandingSettingsTab from './tabs/BrandingSettingsTab';
 import PrintingSettingsTab from './tabs/PrintingSettingsTab';
+import NotificationSettingsTab from './tabs/NotificationSettingsTab';
 import OfflineSyncStatusPanel from '../../components/offline/OfflineSyncStatusPanel';
 import GLIntegrityPanel from '../../components/GLIntegrityPanel';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import { useHasPermission } from '../../authorization/useAuthorization';
 
 const VALID_TABS = [
@@ -19,6 +21,7 @@ const VALID_TABS = [
   'system',
   'branding',
   'printing',
+  'notifications',
   'data',
   'offline',
   'gl-integrity',
@@ -36,6 +39,7 @@ export default function SettingsPage() {
   const canViewGLIntegrity = canReadAccounting || canReconcileAccounting;
   const canReadSystem = useHasPermission('system.read');
   const canConfigurePrinting = canReadSystem;
+  const canAdminNotifications = useHasPermission('settings.update');
 
   // Update tab if the URL search param changes (e.g. navigating from POS badge)
   useEffect(() => {
@@ -103,6 +107,12 @@ export default function SettingsPage() {
                 </Tabs.Trigger>
               )}
               <Tabs.Trigger
+                value="notifications"
+                className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-900 hover:border-gray-300 data-[state=active]:text-blue-600 data-[state=active]:border-blue-600 transition-colors whitespace-nowrap"
+              >
+                Notifications
+              </Tabs.Trigger>
+              <Tabs.Trigger
                 value="data"
                 className="px-3 sm:px-6 py-3 text-sm font-medium text-gray-600 border-b-2 border-transparent hover:text-gray-900 hover:border-gray-300 data-[state=active]:text-red-600 data-[state=active]:border-red-600 transition-colors whitespace-nowrap"
               >
@@ -152,6 +162,12 @@ export default function SettingsPage() {
                 <PrintingSettingsTab />
               </Tabs.Content>
             )}
+
+            <Tabs.Content value="notifications">
+              <ErrorBoundary section="Notifications">
+                <NotificationSettingsTab canAdmin={canAdminNotifications} />
+              </ErrorBoundary>
+            </Tabs.Content>
 
             <Tabs.Content value="data">
               <DataManagementTab />

@@ -21,6 +21,7 @@ import {
   validateOfflineLogin,
   beginOfflineLoginSession,
 } from '../lib/offlineLoginCredentials';
+import { appendNotificationQuery, locationFromState, notificationIdFromPath } from '../lib/notificationNavigation';
 
 function readCachedPermissionKeys(): string[] {
   try {
@@ -107,7 +108,8 @@ export default function LoginPage() {
   }, []);
 
   // Where to go after login — honours ProtectedRoute's "from" state
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
+  const from = locationFromState((location.state as { from?: { pathname?: string; search?: string } })?.from);
+  const nid = notificationIdFromPath(from);
 
   // Capture once on mount — reading/removing sessionStorage during render caused the
   // banner to vanish on the next re-render (common on mobile after focus/resize).
@@ -129,7 +131,7 @@ export default function LoginPage() {
     if (!isReady) {
       return <RestaurantModeBoot />;
     }
-    return <Navigate to={homeAfterLogin(user?.role, from, restaurantEnabled)} replace />;
+    return <Navigate to={appendNotificationQuery(homeAfterLogin(user?.role, from, restaurantEnabled), nid)} replace />;
   }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,7 +153,7 @@ export default function LoginPage() {
             // Never reuse prior JWT/RT — would bind UI to wrong server identity
             const offlineToken = beginOfflineLoginSession(offlineUser);
             await login(offlineUser, offlineToken);
-            navigate(await resolveHomeAfterAuth(offlineUser.role, from), { replace: true });
+            navigate(appendNotificationQuery(await resolveHomeAfterAuth(offlineUser.role, from), nid), { replace: true });
             return;
           }
         } catch (offlineErr) {
@@ -199,7 +201,7 @@ export default function LoginPage() {
         await login(user, accessToken || token, refreshToken, expiresIn);
         // Cache for offline login
         await cacheLoginCredential(email, password, user);
-        navigate(await resolveHomeAfterAuth(user.role, from), { replace: true });
+        navigate(appendNotificationQuery(await resolveHomeAfterAuth(user.role, from), nid), { replace: true });
       } else {
         setError(response.data.error || 'Login failed');
       }
@@ -221,7 +223,7 @@ export default function LoginPage() {
           if (offlineUser) {
             const offlineToken = beginOfflineLoginSession(offlineUser);
             await login(offlineUser, offlineToken);
-            navigate(await resolveHomeAfterAuth(offlineUser.role, from), { replace: true });
+            navigate(appendNotificationQuery(await resolveHomeAfterAuth(offlineUser.role, from), nid), { replace: true });
             return;
           }
         } catch (offlineErr) {
@@ -281,7 +283,7 @@ export default function LoginPage() {
         console.error('[Auth] Offline credential cache failed after 2FA:', cacheErr);
       });
     }
-    navigate(await resolveHomeAfterAuth(authUser.role, from), { replace: true });
+    navigate(appendNotificationQuery(await resolveHomeAfterAuth(authUser.role, from), nid), { replace: true });
   };
 
   const handle2FACancel = () => {

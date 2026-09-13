@@ -3,6 +3,7 @@ import { RbacRepository } from './repository.js';
 import { isValidPermissionKey, getAllPermissions, getPermission } from './permissions.js';
 import type { Role, UserRole, EffectivePermission, RbacAuditLog, RbacAuditAction, AuthorizationContext } from './types.js';
 import type { CreateRoleInput, UpdateRoleInput, AssignUserRoleInput, RemoveUserRoleInput } from './validation.js';
+import { publishNotificationEvent } from '../modules/notifications/notificationPublisher.js';
 
 export class RbacError extends Error {
   constructor(
@@ -17,10 +18,12 @@ export class RbacError extends Error {
 
 export class RbacService {
   private repository: RbacRepository;
+  private pool: Pool;
   private permissionCache: Map<string, { permissions: Set<string>; expiry: number }> = new Map();
   private readonly CACHE_TTL = 60000;
 
   constructor(pool: Pool) {
+    this.pool = pool;
     this.repository = new RbacRepository(pool);
   }
 
@@ -297,6 +300,16 @@ export class RbacService {
 
       await this.repository.commitTransaction(client);
       this.invalidateUserPermissionCache(input.userId);
+      publishNotificationEvent({
+        pool: this.pool,
+        typeKey: 'SECURITY_ROLE_CHANGED',
+        entityType: 'user',
+        entityId: input.userId,
+        idempotencyKey: `SECURITY_ROLE_CHANGED:user:${input.userId}:${userRole.id}`,
+        payload: { subjectUserId: input.userId, summary: 'A user role was changed' },
+        actorUserId,
+        subjectUserId: input.userId,
+      });
       return userRole;
     } catch (error) {
       await this.repository.rollbackTransaction(client);

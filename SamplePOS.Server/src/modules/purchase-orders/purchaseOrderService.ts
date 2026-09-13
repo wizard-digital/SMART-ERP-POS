@@ -24,6 +24,7 @@ import { goodsReceiptService } from '../goods-receipts/goodsReceiptService.js';
 import { getBusinessDate } from '../../utils/dateRange.js';
 import { assertSupplierCreditHeadroom } from '../suppliers/supplierCreditGuard.js';
 import { syncPOStatusWithReceipts } from './poReceiptStatusSync.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 
 export interface CreatePOInput {
   supplierId: string;
@@ -88,7 +89,7 @@ export const purchaseOrderService = {
    * Financial Precision: Uses Decimal.js for all cost calculations
    */
   async createPO(pool: Pool, input: CreatePOInput): Promise<{ po: PurchaseOrder; items: PurchaseOrderItem[] }> {
-    return UnitOfWork.run(pool, async (client) => {
+    const created = await UnitOfWork.run(pool, async (client) => {
       // Maintenance mode guard (replaces trg_maintenance_check_po)
       await checkMaintenanceMode(client);
 
@@ -198,6 +199,19 @@ export const purchaseOrderService = {
       logger.info('Purchase order created successfully', { poId: po.id, itemCount: items.length });
       return updatedPO!;
     });
+
+    if (created.po?.id) {
+      publishNotificationEvent({
+        pool,
+        typeKey: 'PO_CREATED',
+        entityType: 'purchase_order',
+        entityId: created.po.id,
+        idempotencyKey: `PO_CREATED:purchase_order:${created.po.id}`,
+        payload: { summary: `Purchase order ${created.po.poNumber} created`, documentRef: created.po.poNumber },
+        actorUserId: input.createdBy,
+      });
+    }
+    return created;
   },
 
   /**
@@ -443,8 +457,8 @@ export const purchaseOrderService = {
    * Cancel purchase order and cascade-cancel open (DRAFT) goods receipts (Odoo pattern).
    * Posted (COMPLETED) receipts block cancellation — use Return GRN instead.
    */
-  async cancelPO(pool: Pool, id: string): Promise<PurchaseOrder> {
-    return UnitOfWork.run(pool, async (client) => {
+  async cancelPO(pool: Pool, id: string, actorUserId?: string): Promise<PurchaseOrder> {
+    const cancelled = await UnitOfWork.run(pool, async (client) => {
       await checkMaintenanceMode(client);
 
       const result = await purchaseOrderRepository.getPOById(client, id);
@@ -480,13 +494,23 @@ export const purchaseOrderService = {
 
       return purchaseOrderRepository.updatePOStatus(client, id, 'CANCELLED');
     });
+    publishNotificationEvent({
+      pool,
+      typeKey: 'PO_CANCELLED',
+      entityType: 'purchase_order',
+      entityId: cancelled.id,
+      idempotencyKey: `PO_CANCELLED:purchase_order:${cancelled.id}`,
+      payload: { summary: `Purchase order ${cancelled.poNumber} cancelled`, documentRef: cancelled.poNumber },
+      actorUserId: actorUserId ?? null,
+    });
+    return cancelled;
   },
 
   /**
    * Submit purchase order (DRAFT -> PENDING)
    */
-  async submitPO(pool: Pool, id: string): Promise<PurchaseOrder> {
-    return UnitOfWork.run(pool, async (client) => {
+  async submitPO(pool: Pool, id: string, actorUserId?: string): Promise<PurchaseOrder> {
+    const submitted = await UnitOfWork.run(pool, async (client) => {
       await checkMaintenanceMode(client);
 
       const existing = await purchaseOrderRepository.getPOById(client, id);
@@ -509,6 +533,16 @@ export const purchaseOrderService = {
 
       return purchaseOrderRepository.updatePOStatus(client, id, 'PENDING');
     });
+    publishNotificationEvent({
+      pool,
+      typeKey: 'PO_SUBMITTED',
+      entityType: 'purchase_order',
+      entityId: submitted.id,
+      idempotencyKey: `PO_SUBMITTED:purchase_order:${submitted.id}`,
+      payload: { summary: `Purchase order ${submitted.poNumber} submitted`, documentRef: submitted.poNumber },
+      actorUserId: actorUserId ?? null,
+    });
+    return submitted;
   },
 
   /**
@@ -540,7 +574,7 @@ export const purchaseOrderService = {
    * This implements the workflow: PO Sent → Awaiting Delivery → Goods Receipt
    */
   async sendPOToSupplier(pool: Pool, id: string, userId: string): Promise<{ po: PurchaseOrder & { sent_date: Date }; goodsReceipt: { id: string; receiptNumber: string; status: string; message: string } }> {
-    return UnitOfWork.run(pool, async (client) => {
+    const sent = await UnitOfWork.run(pool, async (client) => {
       // Maintenance mode guard (replaces trg_maintenance_check_po)
       await checkMaintenanceMode(client);
 
@@ -666,6 +700,16 @@ export const purchaseOrderService = {
         },
       };
     });
+    publishNotificationEvent({
+      pool,
+      typeKey: 'PO_SENT',
+      entityType: 'purchase_order',
+      entityId: id,
+      idempotencyKey: `PO_SENT:purchase_order:${id}`,
+      payload: { summary: `Purchase order ${sent.po.poNumber} sent`, documentRef: sent.po.poNumber },
+      actorUserId: userId,
+    });
+    return sent;
   },
 
   /**

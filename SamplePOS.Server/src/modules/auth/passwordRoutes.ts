@@ -143,6 +143,19 @@ router.post(
         // Update password with policy enforcement
         await passwordPolicy.updatePasswordWithPolicy(userId, newPassword, dbPool);
 
+        const { publishNotificationEvent } = await import('../notifications/notificationPublisher.js');
+        publishNotificationEvent({
+            pool: dbPool,
+            tenantId: req.tenantId || req.user?.tenantId,
+            typeKey: 'SECURITY_PASSWORD_CHANGED',
+            entityType: 'user',
+            entityId: userId,
+            idempotencyKey: `SECURITY_PASSWORD_CHANGED:user:${userId}:${Date.now()}`,
+            payload: { subjectUserId: userId, summary: 'Your password was changed' },
+            actorUserId: userId,
+            subjectUserId: userId,
+        });
+
         logger.info('Password changed successfully', { userId });
 
         res.json({

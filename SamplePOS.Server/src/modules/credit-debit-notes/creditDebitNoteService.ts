@@ -11,6 +11,7 @@
 
 import type { Pool, PoolClient } from 'pg';
 import { UnitOfWork } from '../../db/unitOfWork.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 import {
     creditDebitNoteRepository,
     supplierCreditDebitNoteRepository,
@@ -268,9 +269,10 @@ export const creditDebitNoteService = {
     async postNote(
         pool: Pool,
         noteId: string,
+        actorUserId?: string | null,
     ): Promise<CreditDebitNoteRecord> {
 
-        return UnitOfWork.run(pool, async (client) => {
+        const posted = await UnitOfWork.run(pool, async (client) => {
             // 1. Post (update status)
             const note = await creditDebitNoteRepository.postNote(client, noteId);
             if (!note) throw new Error('Note not found or cannot be posted (must be in Draft status)');
@@ -386,6 +388,22 @@ export const creditDebitNoteService = {
             logger.info('Note posted', { noteId: note.id, noteNumber: note.invoiceNumber, type: note.documentType });
             return note;
         });
+        if (posted.documentType === 'CREDIT_NOTE') {
+            publishNotificationEvent({
+                pool,
+                typeKey: 'CUSTOMER_CREDIT_POSTED',
+                entityType: 'credit_note',
+                entityId: posted.id,
+                idempotencyKey: `CUSTOMER_CREDIT_POSTED:credit_note:${posted.id}`,
+                payload: {
+                    summary: `Customer credit ${posted.invoiceNumber} posted`,
+                    documentRef: posted.invoiceNumber,
+                    amount: posted.totalAmount,
+                },
+                actorUserId: actorUserId ?? null,
+            });
+        }
+        return posted;
     },
 
     /**

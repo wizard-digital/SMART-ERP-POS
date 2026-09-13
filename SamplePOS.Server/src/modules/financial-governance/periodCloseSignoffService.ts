@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import type { PeriodCloseSignoff, SignoffStatus } from './types.js';
 import { getSnapshotById } from './reconciliationSnapshotService.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 
 type Db = Pool | PoolClient;
 
@@ -57,7 +58,20 @@ export async function requestPeriodCloseSignoff(
     input.attestation ?? null,
   ]);
 
-  return mapSignoff(res.rows[0]);
+  const signoff = mapSignoff(res.rows[0]);
+  publishNotificationEvent({
+    pool: conn as Pool,
+    typeKey: 'PERIOD_CLOSE_SIGNOFF',
+    entityType: 'period_close_signoff',
+    entityId: signoff.id,
+    idempotencyKey: `PERIOD_CLOSE_SIGNOFF:period_close_signoff:${signoff.id}`,
+    payload: {
+      summary: `Period-close signoff requested for ${signoff.periodYear}-${String(signoff.periodMonth).padStart(2, '0')}`,
+      documentRef: `${signoff.periodYear}-${String(signoff.periodMonth).padStart(2, '0')}`,
+    },
+    actorUserId: input.requestedBy,
+  });
+  return signoff;
 }
 
 export interface ReviewSignoffInput {
@@ -94,8 +108,20 @@ export async function reviewPeriodCloseSignoff(
   if (!res.rows[0]) {
     throw new Error(`Sign-off not found: ${input.signoffId}`);
   }
-
-  return mapSignoff(res.rows[0]);
+  const signoff = mapSignoff(res.rows[0]);
+  publishNotificationEvent({
+    pool: conn as Pool,
+    typeKey: 'PERIOD_CLOSE_SIGNOFF',
+    entityType: 'period_close_signoff',
+    entityId: signoff.id,
+    idempotencyKey: `PERIOD_CLOSE_SIGNOFF:review:${signoff.id}:${signoff.status}`,
+    payload: {
+      summary: `Period-close signoff ${signoff.status.toLowerCase()} for ${signoff.periodYear}-${String(signoff.periodMonth).padStart(2, '0')}`,
+      documentRef: `${signoff.periodYear}-${String(signoff.periodMonth).padStart(2, '0')}`,
+    },
+    actorUserId: input.reviewedBy,
+  });
+  return signoff;
 }
 
 export async function listPendingSignoffs(conn: Db): Promise<PeriodCloseSignoff[]> {

@@ -11,7 +11,7 @@
  * already queues those locally and syncs on reconnect.
  */
 
-const CACHE_VERSION = 'v10';
+const CACHE_VERSION = 'v12';
 const STATIC_CACHE = `pos-static-${CACHE_VERSION}`;
 const API_CACHE = `pos-api-${CACHE_VERSION}`;
 const APP_SHELL_CACHE = `pos-shell-${CACHE_VERSION}`;
@@ -32,20 +32,13 @@ const API_CACHE_MAX_AGE = 15 * 60 * 1000;
 
 // ── Install ───────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
-  // Skip waiting so new SW activates immediately
+  // Never fail install because a precache URL 404s — that would block Web Push.
   self.skipWaiting();
 
   event.waitUntil(
     caches.open(APP_SHELL_CACHE).then((cache) => {
-      // Cache the app shell so the SPA loads offline
-      return cache.addAll([
-        './',           // index.html (SPA entry point)
-        './offline.html',
-        './manifest.json',
-        './pos-icon-192.png',
-        './pos-icon-512.png',
-        './apple-touch-icon.png',
-      ]);
+      const urls = ['./offline.html', './manifest.json'];
+      return Promise.all(urls.map((url) => cache.add(url).catch(() => undefined)));
     })
   );
 });
@@ -322,3 +315,55 @@ function requestDataFromClient(client) {
     client.postMessage({ type: 'SW_REQUEST_SYNC_DATA' }, [channel.port2]);
   });
 }
+
+// ── Web Push ──────────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  let payload = { title: 'SMART-ERP-POS', body: 'You have a new notification.', path: '/', notificationId: null };
+  try {
+    if (event.data) {
+      payload = { ...payload, ...event.data.json() };
+    }
+  } catch {
+    // iOS requires a visible notification on every push
+  }
+  const title = payload.title || 'SMART-ERP-POS';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || '',
+      data: {
+        path: payload.path,
+        notificationId: payload.notificationId,
+      },
+      tag: payload.notificationId || payload.typeKey || 'smart-erp-pos',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const nid = data.notificationId ? String(data.notificationId) : '';
+  const dest = nid ? `/?nid=${encodeURIComponent(nid)}` : '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const existing = clientList.find((client) => 'focus' in client);
+      if (existing) {
+        return existing.focus().then(() => {
+          if (typeof existing.navigate === 'function') {
+            return existing.navigate(dest);
+          }
+          existing.postMessage({ type: 'NOTIFICATION_CLICK', nid });
+        });
+      }
+      return self.clients.openWindow(dest);
+    })
+  );
+});
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then((clients) => {
+      clients.forEach((client) => client.postMessage({ type: 'PUSH_SUBSCRIPTION_CHANGE' }));
+    })
+  );
+});

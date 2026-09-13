@@ -22,6 +22,7 @@ import {
   LOT_WRITE_DOWN_REFERENCE_TYPE,
   roundWriteDownMoney,
 } from '@shared/inventory-lot/lotWriteDown.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 
 export interface WriteDownInput {
   inventoryBatchId: string;
@@ -69,7 +70,7 @@ export async function writeDownNearExpiryLot(
   const newUnitCost = Number(input.newUnitCost);
   const businessDate = getBusinessDate();
 
-  return UnitOfWork.run(pool, async (client) => {
+  const written = await UnitOfWork.run(pool, async (client) => {
     // Authoritative ADMIN gate — DB role, not JWT claim or inventory.adjust.
     const roleRes = await client.query<{ role: string | null }>(
       `SELECT role FROM users WHERE id = $1`,
@@ -273,4 +274,18 @@ export async function writeDownNearExpiryLot(
       remainingQuantity,
     };
   });
+  publishNotificationEvent({
+    pool,
+    typeKey: 'LOT_WRITE_DOWN',
+    entityType: 'lot_write_down',
+    entityId: written.documentId,
+    idempotencyKey: `LOT_WRITE_DOWN:lot_write_down:${written.documentId}`,
+    payload: {
+      summary: `Lot write-down ${written.documentNumber}`,
+      documentRef: written.documentNumber,
+      amount: written.totalAmount,
+    },
+    actorUserId: input.userId,
+  });
+  return written;
 }

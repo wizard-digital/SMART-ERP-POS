@@ -21,6 +21,10 @@ const AUTO_DISPOSE_CRON = '30 4 * * *';
 export function registerExpiryAutomationCalculationsHandlers(pool: Pool): void {
   jobQueue.registerCalculationsHandler(EXPIRY_JOB_TYPE, async () => {
     await runScheduledExpiryAutomation(pool);
+    const { publishInventoryConditionNotifications } = await import(
+      '../modules/notifications/inventoryConditionPublisher.js'
+    );
+    await publishInventoryConditionNotifications(pool);
     return { ok: true, type: EXPIRY_JOB_TYPE };
   });
   jobQueue.registerCalculationsHandler(AUTO_DISPOSE_JOB_TYPE, async () => {

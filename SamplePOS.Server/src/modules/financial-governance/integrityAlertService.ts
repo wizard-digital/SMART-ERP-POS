@@ -3,6 +3,7 @@ import type { DomainLaneSummary } from '../financial-reconciliation/types.js';
 import { resolveMaterialityThreshold } from './materialityConfigService.js';
 import type { FinancialDomain } from '../financial-reconciliation/types.js';
 import type { IntegrityAlert, IntegrityAlertType } from './types.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 
 type Db = Pool | PoolClient;
 
@@ -140,6 +141,18 @@ export async function detectIntegrityDriftAlerts(
         snapshotId,
       }));
     }
+  }
+
+  for (const alert of alerts) {
+    if (alert.alertType === 'drift_resolved') continue;
+    publishNotificationEvent({
+      pool: conn as Pool,
+      typeKey: 'FINANCIAL_INTEGRITY_ALERT',
+      entityType: 'integrity_alert',
+      entityId: alert.id,
+      idempotencyKey: `FINANCIAL_INTEGRITY_ALERT:integrity_alert:${alert.id}`,
+      payload: { summary: alert.message, documentRef: alert.domain },
+    });
   }
 
   return alerts;

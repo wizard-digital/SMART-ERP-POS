@@ -8,6 +8,7 @@ import { useGlobalSessionActivity } from '../hooks/useGlobalSessionActivity';
 import { setupAuthBroadcastListener, onAuthBroadcast, broadcastAuthEvent } from '../lib/authBroadcast';
 import { setupOfflineQueueAutoFlush } from '../lib/offlineRequestQueue';
 import { setupSessionResumeAuth } from '../lib/sessionResumeCoordinator';
+import { takeRememberedSubscriptionId, clearRememberedSubscriptionId } from '../lib/pushSubscription';
 // INVARIANT_SESSION_RESUME_INTEGRITY_v1 — proactive tab-resume auth + TOKEN_REFRESH peer sync
 import { isUserActiveOrGuarded, isTransactionGuardActive } from '../lib/sessionActivity';
 import {
@@ -423,9 +424,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       // Revoke refresh token server-side (fire-and-forget)
       const refreshToken = getRefreshToken();
+      const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+      const token = localStorage.getItem('auth_token');
       if (refreshToken) {
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
-        const token = localStorage.getItem('auth_token');
         fetch(`${baseUrl}/auth/logout`, {
           method: 'POST',
           headers: {
@@ -435,6 +436,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
           body: JSON.stringify({ refreshToken }),
           credentials: 'include',
         }).catch(() => { /* best-effort — don't block local cleanup */ });
+      }
+      // Shared-terminal POS: revoke THIS installation only so the next user
+      // cannot receive the previous user's tenant pushes. Other devices stay.
+      try {
+        const subId = takeRememberedSubscriptionId();
+        if (subId && token && /^[0-9a-f-]{36}$/i.test(subId)) {
+          fetch(`${baseUrl}/notifications/devices/${subId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+          }).catch(() => { /* best-effort */ });
+        }
+        clearRememberedSubscriptionId();
+      } catch {
+        /* ignore */
       }
 
       // Broadcast to other tabs before clearing tokens

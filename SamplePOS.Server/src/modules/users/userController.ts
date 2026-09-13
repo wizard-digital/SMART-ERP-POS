@@ -47,7 +47,7 @@ export const createUser = asyncHandler(async (req: Request, res: Response) => {
   const pool = req.tenantPool || globalPool;
   const data = CreateUserSchema.parse(req.body);
   try {
-    const user = await userService.createUser(pool, data);
+    const user = await userService.createUser(pool, data, req.user?.id);
     res.status(201).json({ success: true, data: user });
   } catch (error) {
     mapServiceError(error);
@@ -109,7 +109,7 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await userService.deleteUser(pool, id, hardDelete);
+    const result = await userService.deleteUser(pool, id, hardDelete, req.user?.id);
     res.json({ success: true, message: result.message, permanentlyDeleted: result.deleted });
   } catch (error) {
     mapServiceError(error);

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import { Toaster as SonnerToaster } from 'sonner';
 import { useAuth } from './hooks/useAuth';
@@ -12,6 +12,8 @@ import { isCashierRole, resolveCashierHomePath, resolvePostLoginPath } from './u
 import OfflineAutoSync from './components/OfflineAutoSync';
 import { useRestaurantModeForRouting } from './hooks/useRestaurantEnabled';
 import { RestaurantModeBoot } from './components/auth/RestaurantModeBoot';
+import { appendNotificationQuery } from './lib/notificationNavigation';
+import NotificationDeepLink from './components/notifications/NotificationDeepLink';
 
 // Layouts stay static (small, shared across routes)
 import Layout from './components/Layout';
@@ -58,6 +60,7 @@ const SuppliersPage = lazyWithRetry(() => import('./pages/SuppliersPage'));
 const SalesPage = lazyWithRetry(() => import('./pages/SalesPage'));
 const SettingsPage = lazyWithRetry(() => import('./pages/settings/SettingsPage'));
 const SecuritySettingsPage = lazyWithRetry(() => import('./pages/settings/SecuritySettingsPage'));
+const NotificationsSettingsPage = lazyWithRetry(() => import('./pages/settings/NotificationsSettingsPage'));
 const ReportsPage = lazyWithRetry(() => import('./pages/ReportsPage'));
 const ExpenseReportsPage = lazyWithRetry(() => import('./pages/reports/ExpenseReportsPage'));
 const OrdersReportPage = lazyWithRetry(() => import('./pages/reports/OrdersReportPage'));
@@ -197,22 +200,32 @@ const PlatformHealthPage = lazyWithRetry(() => import('./pages/platform/Platform
 function HomeRedirect() {
   const { user, permissions } = useAuth();
   const { restaurantEnabled, isReady } = useRestaurantModeForRouting();
+  const [params] = useSearchParams();
+  const nid = params.get('nid');
   if (!isReady) {
     return <RestaurantModeBoot />;
   }
   if (isCashierRole(user?.role)) {
-    return <Navigate to={resolveCashierHomePath(restaurantEnabled)} replace />;
+    return <Navigate to={appendNotificationQuery(resolveCashierHomePath(restaurantEnabled), nid)} replace />;
   }
   return (
     <Navigate
-      to={resolvePostLoginPath({
-        role: user?.role,
-        permissions,
-        restaurantEnabled,
-      })}
+      to={appendNotificationQuery(
+        resolvePostLoginPath({
+          role: user?.role,
+          permissions,
+          restaurantEnabled,
+        }),
+        nid,
+      )}
       replace
     />
   );
+}
+
+function UnauthenticatedRedirect() {
+  const location = useLocation();
+  return <Navigate to="/login" replace state={{ from: location }} />;
 }
 
 // Platform route guard
@@ -242,6 +255,7 @@ function TenantAppServices() {
     <>
       <BusinessDateSync />
       <OfflineAutoSync />
+      <NotificationDeepLink />
     </>
   );
 }
@@ -1242,6 +1256,14 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+                  <Route
+                    path="/settings/notifications"
+                    element={
+                      <ProtectedRoute>
+                        <NotificationsSettingsPage />
+                      </ProtectedRoute>
+                    }
+                  />
 
                   {/* Settings */}
                   <Route
@@ -1761,7 +1783,7 @@ function App() {
                   <Route path="/" element={<HomeRedirect />} />
                 </Route>
               ) : (
-                <Route path="*" element={<Navigate to="/login" replace />} />
+                <Route path="*" element={<UnauthenticatedRedirect />} />
               )}
             </Routes>
           </Suspense>

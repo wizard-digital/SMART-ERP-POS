@@ -16,6 +16,7 @@ import * as documentFlowService from '../document-flow/documentFlowService.js';
 import type { InvoicePaymentRecord } from '../invoices/invoiceRepository.js';
 import * as whtService from '../withholding-tax/whtService.js';
 import * as receiptSettlementRepo from '../treasury/receiptSettlementRepository.js';
+import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 
 const REVERSIBLE_AR_PAYMENT_STATUSES = new Set([
   'POSTED',
@@ -91,7 +92,7 @@ export async function createCustomerPayment(handle: DbConnection, input: CreateA
     throw new ValidationError('Payment amount must be greater than zero');
   }
 
-  return UnitOfWork.runOrJoin(handle, async (client) => {
+  const posted = await UnitOfWork.runOrJoin(handle, async (client) => {
     await checkAccountingPeriodOpen(client, input.paymentDate);
 
     await client.query(`SELECT id FROM customers WHERE id = $1 FOR UPDATE`, [input.customerId]);
@@ -205,6 +206,24 @@ export async function createCustomerPayment(handle: DbConnection, input: CreateA
       allocations: allocationResults,
     };
   });
+
+  if (UnitOfWork.isPool(handle) && posted.payment?.id) {
+    publishNotificationEvent({
+      pool: handle,
+      typeKey: 'CUSTOMER_PAYMENT_RECEIVED',
+      entityType: 'customer',
+      entityId: posted.payment.customerId,
+      idempotencyKey: `CUSTOMER_PAYMENT_RECEIVED:payment:${posted.payment.id}`,
+      payload: {
+        summary: 'Customer payment received',
+        documentRef: posted.payment.paymentNumber,
+        amount: Number(posted.payment.amount || 0),
+      },
+      actorUserId: input.createdById,
+    });
+  }
+
+  return posted;
 }
 
 export async function allocatePayment(

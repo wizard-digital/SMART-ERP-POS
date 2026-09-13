@@ -10,6 +10,7 @@ import { ensureProjectionFromMaster, lotService } from '../../inventory-lot/lotS
 import { productLotRepository } from './productLotRepository.js';
 import { warehouseInventoryRepository } from './warehouseInventoryRepository.js';
 import { pool as defaultPool } from '../../../db/pool.js';
+import { publishNotificationEvent } from '../../notifications/notificationPublisher.js';
 import { alignBatchSubledgerToStoreBalances, assertWarehouseLayerConsistent } from '../../../services/warehouseInventoryCoupling.js';
 import { recordMovement } from '../../stock-movements/stockMovementRepository.js';
 import { syncLotStatusAfterQuarantine } from '../../loss-quarantine/quarantineLotStatus.js';
@@ -275,7 +276,7 @@ export const warehouseAdjustmentService = {
             throw new ValidationError('Store-scoped adjustments require multistore mode');
         }
 
-        return UnitOfWork.runOrJoin(conn, async (client) => {
+        const adjusted = await UnitOfWork.runOrJoin(conn, async (client) => {
             const store = await storeLocationRepository.getById(client, params.storeLocationId);
             if (!store?.isActive) {
                 throw new ValidationError('Selected store is not active');
@@ -514,5 +515,21 @@ export const warehouseAdjustmentService = {
                 ...result,
             };
         });
+        if (UnitOfWork.isPool(conn)) {
+            publishNotificationEvent({
+                pool: conn,
+                typeKey: 'INVENTORY_ADJUSTED',
+                entityType: 'inventory_adjustment',
+                entityId: String(adjusted.documentId),
+                idempotencyKey: `INVENTORY_ADJUSTED:inventory_adjustment:${adjusted.documentId}`,
+                payload: {
+                    summary: `Inventory adjusted (${params.reason})`,
+                    documentRef: String(adjusted.documentId),
+                },
+                actorUserId: params.userId,
+                storeLocationId: params.storeLocationId,
+            });
+        }
+        return adjusted;
     },
 };

@@ -9,6 +9,7 @@ import { UnitOfWork } from '../db/unitOfWork.js';
 import { Pool, PoolClient } from 'pg';
 import { getBusinessDate } from '../utils/dateRange.js';
 import { normalizeExpenseCategoryCode } from '../../../shared/expense/categoryGlMap.js';
+import { publishNotificationEvent } from '../modules/notifications/notificationPublisher.js';
 
 /**
  * Get expenses with filtering and pagination
@@ -198,6 +199,16 @@ export const submitExpense = async (id: string, userId: string, pool?: Pool) => 
       return updated;
     });
 
+    publishNotificationEvent({
+      pool: dbPool,
+      typeKey: 'APPROVAL_REQUIRED',
+      entityType: 'expense',
+      entityId: id,
+      idempotencyKey: `APPROVAL_REQUIRED:expense:${id}`,
+      payload: { summary: 'An expense is waiting for approval' },
+      actorUserId: userId,
+    });
+
     return expense;
   } catch (error) {
     logger.error('Error in expense service submitExpense', { error, id, userId });
@@ -281,6 +292,16 @@ export const approveExpense = async (
       return updated;
     });
 
+    publishNotificationEvent({
+      pool: dbPool,
+      typeKey: 'APPROVAL_COMPLETED',
+      entityType: 'expense',
+      entityId: id,
+      idempotencyKey: `APPROVAL_COMPLETED:expense:${id}`,
+      payload: { summary: 'An expense approval was completed' },
+      actorUserId: approverId,
+    });
+
     return expense;
   } catch (error) {
     logger.error('Error in expense service approveExpense', { error, id, approverId, comments });
@@ -331,6 +352,16 @@ export const rejectExpense = async (
       await expenseRepository.updateApprovalRecord(id, rejectorId, 'REJECTED', reason, client);
 
       return updated;
+    });
+
+    publishNotificationEvent({
+      pool: dbPool,
+      typeKey: 'APPROVAL_REJECTED',
+      entityType: 'expense',
+      entityId: id,
+      idempotencyKey: `APPROVAL_REJECTED:expense:${id}`,
+      payload: { summary: 'An expense approval was rejected' },
+      actorUserId: rejectorId,
     });
 
     return expense;
@@ -500,6 +531,20 @@ export const markExpensePaid = async (
       }
 
       return updated;
+    });
+
+    publishNotificationEvent({
+      pool: dbPool,
+      typeKey: 'EXPENSE_PAID',
+      entityType: 'expense',
+      entityId: id,
+      idempotencyKey: `EXPENSE_PAID:expense:${id}`,
+      payload: {
+        summary: `Expense ${existingExpense.expenseNumber} paid`,
+        documentRef: existingExpense.expenseNumber,
+        amount: Number(existingExpense.amount || 0),
+      },
+      actorUserId: paidById,
     });
 
     return updatedExpense;
