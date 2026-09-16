@@ -49,7 +49,7 @@ export function formatAmountLabel(amount: unknown, currency?: unknown): string |
 
 /** Compact sold-lines line for inbox / push — business facts, not permission copy. */
 export function summarizeSoldProducts(
-  items: Array<{ productName?: string | null; quantity?: number | null }>,
+  items: Array<{ productName?: string | null; quantity?: number | string | null }>,
   maxNames = 3,
 ): string | null {
   const parts: string[] = [];

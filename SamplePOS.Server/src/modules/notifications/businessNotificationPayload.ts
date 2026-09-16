@@ -78,7 +78,8 @@ export function buildBusinessNotificationPayload(
 /** Product lines → detail for sale / void / return events. */
 export function buildProductLineNotificationPayload(input: {
   action: string;
-  items: Array<{ productName?: string | null; quantity?: number | null }>;
+  /** quantity may be numeric or decimal-string from sale item rows */
+  items: Array<{ productName?: string | null; quantity?: number | string | null }>;
   documentRef?: string | null;
   amount?: number | null;
   currency?: string | null;
