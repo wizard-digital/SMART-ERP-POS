@@ -106,12 +106,19 @@ export async function processNotificationEvent(
       payloadString(claimed.payload, 'documentNumber');
     const locationLabel = payloadString(claimed.payload, 'locationLabel');
     const amountLabel = formatAmountLabel(claimed.payload.amount, claimed.payload.currency);
+    const productSummary =
+      payloadString(claimed.payload, 'detailSummary') ||
+      payloadString(claimed.payload, 'productSummary');
+    const businessSummary = payloadString(claimed.payload, 'summary');
     const inboxBody = formatInboxBody({
       actorDisplay,
       actorRole,
       documentRef,
       locationLabel,
       amountLabel,
+      productSummary,
+      detailSummary: productSummary,
+      businessSummary,
       fallback: copy.body,
     });
     const groupingKey = groupingKeyFor(
@@ -124,7 +131,7 @@ export async function processNotificationEvent(
     const safePath = isSafeNavigationPath(navigationPath) ? navigationPath : null;
     const pushBody = lockScreenDetail
       ? copy.body
-      : [actorDisplay, copy.body].filter(Boolean).join(' · ');
+      : [productSummary || copy.body, actorDisplay].filter(Boolean).join(' · ');
 
     let created = 0;
     let pushed = 0;

@@ -20,6 +20,7 @@ import { assertPositiveFinite, fiscalPartsFromIsoDate, safeParseInt } from '../.
 import * as auditRepository from '../audit/auditRepository.js';
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
+import { buildBusinessNotificationPayload } from '../notifications/businessNotificationPayload.js';
 import { goodsReceiptRepository } from '../goods-receipts/goodsReceiptRepository.js';
 import { PricingEngine } from '../../utils/pricingEngine.js';
 import { assertSupplierCreditHeadroom } from '../suppliers/supplierCreditGuard.js';
@@ -498,11 +499,12 @@ export async function createSupplierPayment(
         entityType: 'supplier_payment',
         entityId: String(posted.payment.id),
         idempotencyKey: `SUPPLIER_PAYMENT_POSTED:supplier_payment:${posted.payment.id}`,
-        payload: {
-            summary: `Supplier payment ${posted.payment.paymentNumber} posted`,
+        payload: buildBusinessNotificationPayload({
+            action: 'Supplier paid',
+            detail: posted.supplier?.name,
             documentRef: posted.payment.paymentNumber,
             amount: posted.payment.amount,
-        },
+        }),
         actorUserId: userId || null,
     });
     return posted;
@@ -1032,7 +1034,7 @@ export interface CreateInvoiceFromGRNInput {
      * correct the GRN line costs before billing. The system rejects posting
      * when this is the selected reason.
      */
-    varianceReason?: 'SUPPLIER_DISCOUNT' | 'ROUNDING_DIFFERENCE' | 'PRICE_VARIANCE' | 'EDIT_LINE_PRICES';
+    varianceReason?: 'SUPPLIER_DISCOUNT' | 'ROUNDING_DIFFERENCE' | 'EDIT_LINE_PRICES';
 }
 
 /**

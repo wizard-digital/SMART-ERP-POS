@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../utils/api';
 import { useAdaptiveLayoutOptional } from '../adaptive';
 import { resolveAuthorizedNotificationPath, inboxMatchesFilter, type InboxOperatorFilter } from '../../lib/notificationNavigation';
+import {
+  notificationCenterMaxHeightCss,
+  notificationCenterWidthClass,
+  resolveNotificationCenterPresentation,
+} from '../../lib/notificationCenterLayout';
 
 type InboxItem = {
   id: string;
@@ -19,7 +24,6 @@ type InboxItem = {
   locationLabel?: string | null;
   groupingKey?: string | null;
   priority?: string;
-  whyReceived?: string | null;
   categoryLabel?: string | null;
   operatorBand?: string | null;
   operatorBandLabel?: string | null;
@@ -72,7 +76,11 @@ function groupInbox(rows: InboxItem[]): DisplayRow[] {
 export default function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<InboxOperatorFilter>('attention');
+  const rootRef = useRef<HTMLDivElement>(null);
   const layout = useAdaptiveLayoutOptional();
+  const tier = layout?.tier ?? null;
+  const presentation = resolveNotificationCenterPresentation(tier);
+  const narrow = tier === 'mobile' || tier === 'compact';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -120,33 +128,51 @@ export default function NotificationCenter() {
   );
   const displayRows = useMemo(() => groupInbox(filteredRows), [filteredRows]);
 
+  const close = useCallback(() => setOpen(false), []);
+
   const openItem = useCallback(
     (item: InboxItem) => {
       if (!item.isRead) markRead.mutate(item.id);
-      setOpen(false);
+      close();
       const path = resolveAuthorizedNotificationPath(item.navigationPath);
       navigate(path);
     },
-    [markRead, navigate],
+    [close, markRead, navigate],
   );
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') close();
+    };
+    const onPointer = (e: MouseEvent | TouchEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+      const target = e.target;
+      if (target instanceof Node && !root.contains(target)) close();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('touchstart', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('touchstart', onPointer);
+    };
+  }, [open, close]);
+
+  const listMaxHeight = notificationCenterMaxHeightCss(tier);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={rootRef}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="relative p-2 rounded-lg hover:bg-gray-100 min-h-[var(--layout-touch-target)] min-w-[var(--layout-touch-target)] flex items-center justify-center"
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        aria-expanded={open}
         data-testid="notification-center-toggle"
+        data-notification-presentation={presentation}
       >
         <svg className="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -157,23 +183,36 @@ export default function NotificationCenter() {
           </span>
         )}
       </button>
-      {open && (
+
+      {open ? (
         <div
-          className={`absolute right-0 mt-2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 ${layout?.tier === 'mobile' ? 'w-[min(100vw-2rem,22rem)]' : 'w-96'}`}
+          className={[
+            'z-50 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg',
+            // Narrow: dock under the shell bar with side inset — compact dropdown, not a sheet.
+            narrow
+              ? 'fixed left-2 right-2 top-[calc(3.5rem+env(safe-area-inset-top,0px))]'
+              : `absolute right-0 mt-2 ${notificationCenterWidthClass(tier)}`,
+          ].join(' ')}
           role="dialog"
           aria-label="Notification center"
+          data-notification-center="dropdown"
+          data-notification-narrow={narrow ? 'true' : 'false'}
         >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Notifications</h2>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-gray-100">
+            <h2 className="text-sm font-semibold text-gray-900 min-w-0">Notifications</h2>
+            <div className="flex items-center gap-3 shrink-0">
               <button
                 type="button"
-                className="text-xs text-blue-600 hover:underline"
+                className="text-xs text-blue-600 hover:underline min-h-[var(--layout-touch-target)] px-1"
                 onClick={() => markAll.mutate()}
               >
                 Mark all read
               </button>
-              <Link to="/settings/notifications" className="text-xs text-gray-600 hover:underline" onClick={() => setOpen(false)}>
+              <Link
+                to="/settings/notifications"
+                className="text-xs text-gray-600 hover:underline min-h-[var(--layout-touch-target)] inline-flex items-center px-1"
+                onClick={close}
+              >
                 Settings
               </Link>
             </div>
@@ -197,7 +236,10 @@ export default function NotificationCenter() {
               </button>
             ))}
           </div>
-          <div className="max-h-96 overflow-y-auto">
+          <div
+            className="overflow-y-auto overscroll-contain"
+            style={{ maxHeight: listMaxHeight }}
+          >
             {displayRows.length === 0 && (
               <p className="p-4 text-sm text-gray-500">
                 {(listQuery.data?.rows || []).length > 0
@@ -214,25 +256,22 @@ export default function NotificationCenter() {
                     key={latest.groupingKey || latest.id}
                     type="button"
                     onClick={() => openItem(latest)}
-                    className={`w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 ${unreadGroup ? '' : 'opacity-70'}`}
+                    className={`w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 min-w-0 ${unreadGroup ? '' : 'opacity-70'}`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-900">
+                    <div className="flex items-start justify-between gap-2 min-w-0">
+                      <span className="text-sm font-medium text-gray-900 break-words min-w-0">
                         {latest.title} · {row.items.length} events
                       </span>
-                      {unreadGroup && <span className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />}
+                      {unreadGroup && <span className="w-2 h-2 mt-1.5 rounded-full bg-blue-600 flex-shrink-0" />}
                     </div>
                     {latest.operatorBandLabel || latest.categoryLabel ? (
-                      <p className="text-[11px] text-gray-400 mt-0.5">
+                      <p className="text-[11px] text-gray-400 mt-0.5 break-words">
                         {[latest.operatorBandLabel, latest.categoryLabel].filter(Boolean).join(' · ')}
                       </p>
                     ) : null}
-                    <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">
-                      Latest: {latest.documentRef || latest.body}
+                    <p className="text-xs text-gray-600 mt-1 whitespace-pre-line break-words">
+                      {latest.body}
                     </p>
-                    {latest.whyReceived ? (
-                      <p className="text-[11px] text-gray-500 mt-1">Why you received this: {latest.whyReceived}</p>
-                    ) : null}
                     <p className="text-[11px] text-gray-400 mt-1">{relativeTime(latest.createdAt)}</p>
                   </button>
                 );
@@ -243,28 +282,25 @@ export default function NotificationCenter() {
                   key={item.id}
                   type="button"
                   onClick={() => openItem(item)}
-                  className={`w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 ${item.isRead ? 'opacity-70' : ''}`}
+                  className={`w-full text-left px-3 py-3 border-b border-gray-50 hover:bg-gray-50 min-w-0 ${item.isRead ? 'opacity-70' : ''}`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-gray-900">{item.title}</span>
-                    {!item.isRead && <span className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />}
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <span className="text-sm font-medium text-gray-900 break-words min-w-0">{item.title}</span>
+                    {!item.isRead && <span className="w-2 h-2 mt-1.5 rounded-full bg-blue-600 flex-shrink-0" />}
                   </div>
                   {item.operatorBandLabel || item.categoryLabel ? (
-                    <p className="text-[11px] text-gray-400 mt-0.5">
+                    <p className="text-[11px] text-gray-400 mt-0.5 break-words">
                       {[item.operatorBandLabel, item.categoryLabel].filter(Boolean).join(' · ')}
                     </p>
                   ) : null}
-                  <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">{item.body}</p>
-                  {item.whyReceived ? (
-                    <p className="text-[11px] text-gray-500 mt-1">Why you received this: {item.whyReceived}</p>
-                  ) : null}
+                  <p className="text-xs text-gray-600 mt-1 whitespace-pre-line break-words">{item.body}</p>
                   <p className="text-[11px] text-gray-400 mt-1">{relativeTime(item.createdAt)}</p>
                 </button>
               );
             })}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

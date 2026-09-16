@@ -17,6 +17,7 @@ import type { InvoicePaymentRecord } from '../invoices/invoiceRepository.js';
 import * as whtService from '../withholding-tax/whtService.js';
 import * as receiptSettlementRepo from '../treasury/receiptSettlementRepository.js';
 import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
+import { buildBusinessNotificationPayload } from '../notifications/businessNotificationPayload.js';
 
 const REVERSIBLE_AR_PAYMENT_STATUSES = new Set([
   'POSTED',
@@ -204,6 +205,7 @@ export async function createCustomerPayment(handle: DbConnection, input: CreateA
     return {
       payment: updated,
       allocations: allocationResults,
+      customerName,
     };
   });
 
@@ -214,11 +216,12 @@ export async function createCustomerPayment(handle: DbConnection, input: CreateA
       entityType: 'customer',
       entityId: posted.payment.customerId,
       idempotencyKey: `CUSTOMER_PAYMENT_RECEIVED:payment:${posted.payment.id}`,
-      payload: {
-        summary: 'Customer payment received',
+      payload: buildBusinessNotificationPayload({
+        action: 'Customer paid',
+        detail: posted.customerName,
         documentRef: posted.payment.paymentNumber,
         amount: Number(posted.payment.totalAmount || 0),
-      },
+      }),
       actorUserId: input.createdById,
     });
   }

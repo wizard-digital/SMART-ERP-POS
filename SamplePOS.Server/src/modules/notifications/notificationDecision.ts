@@ -17,23 +17,36 @@ export interface ChannelPreference {
   pushEnabled: boolean;
 }
 
-function isDirectorOrAdminRbacName(name: string): boolean {
-  return (
+function isSupervisorRbacName(name: string): boolean {
+  if (
     name === 'admin'
     || name === 'administrator'
     || name === 'director'
-    || name.includes('administrator')
+    || name === 'owner'
+    || name === 'ceo'
+    || name === 'md'
+    || name === 'proprietor'
+    || name === 'supervisor'
+  ) {
+    return true;
+  }
+  return (
+    name.includes('administrator')
     || name.includes('director')
+    || name.includes('owner')
+    || name.includes('proprietor')
+    || /\bceo\b/.test(name)
+    || name.includes('supervisor')
   );
 }
 
 export function resolveRoleProfile(legacyRole: string | null | undefined, rbacRoleNames: string[] = []): RoleProfile {
   const names = rbacRoleNames.map((n) => n.trim().toLowerCase());
   const role = (legacyRole || '').toUpperCase();
-  // Supervisors first. A Director is often stored as STAFF because the legacy
+  // Supervisors first. A Director/Owner is often stored as STAFF because the legacy
   // column cannot hold DIRECTOR — never treat them as floor staff.
-  if (role === 'ADMIN' || role === 'DIRECTOR') return 'ADMIN';
-  if (names.some(isDirectorOrAdminRbacName)) return 'ADMIN';
+  if (role === 'ADMIN' || role === 'DIRECTOR' || role === 'OWNER') return 'ADMIN';
+  if (names.some(isSupervisorRbacName)) return 'ADMIN';
   if (role === 'MANAGER' || names.some((n) => n === 'manager' || n.includes('manager'))) return 'MANAGER';
   if (names.some((n) => n === 'accountant' || n.includes('accountant'))) return 'ACCOUNTANT';
   if (role === 'CASHIER') return 'CASHIER';
@@ -108,10 +121,27 @@ export function lockScreenCopy(
   lockScreenDetail: boolean,
 ): { title: string; body: string } {
   const title = type.label;
+  const productSummary =
+    typeof payload.productSummary === 'string' && payload.productSummary.trim()
+      ? payload.productSummary.trim()
+      : typeof payload.detailSummary === 'string' && payload.detailSummary.trim()
+        ? payload.detailSummary.trim()
+        : '';
+  const summary =
+    typeof payload.summary === 'string' && payload.summary.trim()
+      ? payload.summary.trim()
+      : '';
+
   if (!lockScreenDetail) {
-    return { title, body: type.description };
+    // Business facts without amounts. Prefer products/party over catalog prose.
+    if (productSummary) return { title, body: productSummary.slice(0, 180) };
+    if (summary) {
+      return { title, body: summary.replace(AMOUNT_LIKE, '[amount hidden]').slice(0, 180) };
+    }
+    return { title, body: title };
   }
-  const detail = typeof payload.summary === 'string' ? payload.summary : type.description;
+
+  const detail = summary || productSummary || type.description;
   const redacted = detail.replace(AMOUNT_LIKE, '[amount hidden]');
   return { title, body: redacted.slice(0, 180) };
 }

@@ -45,6 +45,7 @@ import { getCustomerPricingMode } from '../pricing/pricingRepository.js';
 import { validateAtCostSalePricing } from './atCostSalePricingGuard.js';
 import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 import { DISCOUNT_THRESHOLD_RATIO } from '../notifications/catalog.js';
+import { buildProductLineNotificationPayload } from '../notifications/businessNotificationPayload.js';
 import { assertQuoteConvertibleForPosSale } from './quoteConvertibilityGuard.js';
 import { assertSaleLineNotBelowAllocatedCost } from './saleBelowCostGuard.js';
 import { recordSaleLinePriceEvent } from './salePriceAuditService.js';
@@ -2879,11 +2880,12 @@ export const salesService = {
         result.checkoutProfile = profiler.snapshot()!;
       }
 
-      const saleNotifyPayload = {
-        summary: `Sale ${sale.saleNumber} completed`,
+      const saleNotifyPayload = buildProductLineNotificationPayload({
+        action: 'Sold',
+        items: input.items,
         documentRef: sale.saleNumber,
         amount: Number(sale.totalAmount || 0),
-      };
+      });
       publishNotificationEvent({
         pool,
         tenantId,
@@ -3559,17 +3561,19 @@ export const salesService = {
         totalAmount,
       });
 
+      const voidNotifyPayload = buildProductLineNotificationPayload({
+        action: 'Voided',
+        items: saleItems,
+        documentRef: sale.sale_number,
+        amount: Number(sale.total_amount || 0),
+      });
       publishNotificationEvent({
         pool,
         typeKey: 'SALE_VOIDED',
         entityType: 'sale',
         entityId: saleId,
         idempotencyKey: `SALE_VOIDED:sale:${saleId}`,
-        payload: {
-          summary: `Sale ${sale.sale_number} was voided`,
-          documentRef: sale.sale_number,
-          amount: Number(sale.total_amount || 0),
-        },
+        payload: voidNotifyPayload,
         actorUserId: voidedById,
         storeLocationId: sale.store_location_id || null,
       });
@@ -4237,17 +4241,22 @@ export const salesService = {
         isFullRefund,
       });
 
+      const returnNotifyPayload = buildProductLineNotificationPayload({
+        action: 'Returned',
+        items: validatedItems.map(({ saleItem, refundQty }) => ({
+          productName: saleItem.productName,
+          quantity: refundQty.toNumber(),
+        })),
+        documentRef: sale.sale_number,
+        amount: Number(refundTotalAmount.toFixed(2)),
+      });
       publishNotificationEvent({
         pool,
         typeKey: 'SALE_RETURNED',
         entityType: 'sale',
         entityId: saleId,
         idempotencyKey: `SALE_RETURNED:refund:${refund.id}`,
-        payload: {
-          summary: `Sale ${sale.sale_number} was returned`,
-          documentRef: sale.sale_number,
-          amount: Number(sale.total_amount || 0),
-        },
+        payload: returnNotifyPayload,
         actorUserId: refundedById,
         storeLocationId: sale.store_location_id || null,
       });

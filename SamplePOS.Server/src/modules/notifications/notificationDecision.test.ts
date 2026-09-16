@@ -25,9 +25,14 @@ describe('notification intelligence', () => {
     expect(resolveRoleProfile('STAFF', ['Director'])).toBe('ADMIN');
     expect(resolveRoleProfile('STAFF', ['director'])).toBe('ADMIN');
     expect(resolveRoleProfile('DIRECTOR', [])).toBe('ADMIN');
+    expect(resolveRoleProfile('STAFF', ['Owner'])).toBe('ADMIN');
     expect(resolveRoleProfile('STAFF', ['Store Manager'])).toBe('MANAGER');
     const sale = getNotificationType('SALE_COMPLETED')!;
     expect(resolveUserChannels(sale, undefined, resolveRoleProfile('STAFF', ['Director']))).toEqual({
+      inAppEnabled: true,
+      pushEnabled: true,
+    });
+    expect(resolveUserChannels(sale, undefined, resolveRoleProfile('STAFF', ['Owner']))).toEqual({
       inAppEnabled: true,
       pushEnabled: true,
     });
@@ -109,10 +114,31 @@ describe('notification intelligence', () => {
     expect(scopeAllowsEvent('kampala', 'warehouse', 'kampala')).toBe(true);
   });
 
+  it('uses sold products on the lock screen instead of permission prose', () => {
+    const type = getNotificationType('SALE_COMPLETED')!;
+    const safe = lockScreenCopy(
+      type,
+      {
+        summary: 'Sold Paracetamol ×2 · UGX 18,500',
+        productSummary: 'Paracetamol ×2, Amoxil',
+      },
+      false,
+    );
+    expect(safe.body).toBe('Paracetamol ×2, Amoxil');
+    expect(safe.body).not.toMatch(/supervise|Directors and managers/i);
+    const detailed = lockScreenCopy(
+      type,
+      { summary: 'Sold Paracetamol ×2 · UGX 18,500' },
+      true,
+    );
+    expect(detailed.body).not.toMatch(/18,500/);
+    expect(detailed.body).toContain('[amount hidden]');
+  });
+
   it('uses a privacy-safe lock screen unless tenant policy enables detail', () => {
     const type = getNotificationType('CUSTOMER_PAYMENT_RECEIVED')!;
     const safe = lockScreenCopy(type, { summary: 'John Doe paid UGX 4,500,000 for INV-000923' }, false);
-    expect(safe.body).toBe(type.description);
+    expect(safe.body).toContain('[amount hidden]');
     expect(safe.body).not.toContain('4,500,000');
     const detailed = lockScreenCopy(type, { summary: 'John Doe paid UGX 4,500,000 for INV-000923' }, true);
     expect(detailed.body).not.toMatch(/4,500,000/);

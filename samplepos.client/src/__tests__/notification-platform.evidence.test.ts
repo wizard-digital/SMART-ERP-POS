@@ -81,13 +81,45 @@ describe('EVIDENCE — notification platform SSOT', () => {
     expect(push).toContain('applicationServerKeyFromVapid');
   });
 
-  it('inbox shows why the recipient received the row from the API', () => {
+  it('inbox shows what happened, not why-you-received permission prose', () => {
     const center = readRepo('samplepos.client/src/components/notifications/NotificationCenter.tsx');
-    expect(center).toContain('whyReceived');
-    expect(center).toContain('Why you received this');
-    expect(center).toContain('Need attention');
-    expect(center).toContain('inboxMatchesFilter');
-    expect(center).not.toContain('manager gets');
+    expect(center).toContain('item.body');
+    expect(center).toContain('latest.body');
+    expect(center).not.toContain('Why you received this');
+    expect(center).not.toContain('whyReceived');
+  });
+
+  it('notification popup fits the viewport as a compact dropdown, not a full-screen sheet', () => {
+    const center = readRepo('samplepos.client/src/components/notifications/NotificationCenter.tsx');
+    const layout = readRepo('samplepos.client/src/lib/notificationCenterLayout.ts');
+    expect(layout).toContain("return 'dropdown'");
+    expect(layout).toContain('50dvh');
+    expect(center).toContain('resolveNotificationCenterPresentation');
+    expect(center).toContain('data-notification-center="dropdown"');
+    expect(center).toContain('break-words');
+    expect(center).toContain('notificationCenterMaxHeightCss');
+    expect(center).not.toContain('data-notification-center="sheet"');
+    expect(center).not.toContain('92dvh');
+    expect(center).not.toContain('justify-end bg-black/40');
+  });
+
+  it('business notification payload SSOT covers sales, expenses, AR and AP publishers', () => {
+    const ssot = readRepo('SamplePOS.Server/src/modules/notifications/businessNotificationPayload.ts');
+    const sales = readRepo('SamplePOS.Server/src/modules/sales/salesService.ts');
+    const expenses = readRepo('SamplePOS.Server/src/services/expenseService.ts');
+    const ar = readRepo('SamplePOS.Server/src/modules/ar-payments/arPaymentService.ts');
+    const ap = readRepo('SamplePOS.Server/src/modules/supplier-payments/supplierPaymentService.ts');
+    const center = readRepo('samplepos.client/src/components/notifications/NotificationCenter.tsx');
+    expect(ssot).toContain('buildBusinessNotificationPayload');
+    expect(ssot).toContain('buildProductLineNotificationPayload');
+    expect(sales).toContain('buildProductLineNotificationPayload');
+    expect(expenses).toContain('buildBusinessNotificationPayload');
+    expect(expenses).toContain('expenseDetailLabel');
+    expect(ar).toContain('buildBusinessNotificationPayload');
+    expect(ar).toContain('Customer paid');
+    expect(ap).toContain('buildBusinessNotificationPayload');
+    expect(ap).toContain('Supplier paid');
+    expect(center).not.toContain('Why you received this');
   });
 
   it('backend catalog is the type SSOT and sales publish after COMMIT', () => {
@@ -95,9 +127,10 @@ describe('EVIDENCE — notification platform SSOT', () => {
     const sales = readRepo('SamplePOS.Server/src/modules/sales/salesService.ts');
     const decision = readRepo('SamplePOS.Server/src/modules/notifications/notificationDecision.ts');
     expect(catalog).toContain("typeKey: 'SALE_COMPLETED'");
-    expect(catalog).toContain('The cashier is not notified and does not need to change settings');
+    expect(catalog).toContain('Shows which products were sold');
     expect(decision).toContain("role === 'DIRECTOR'");
-    expect(decision).toContain("name.includes('director')");
+    expect(decision).toContain("name.includes('owner')");
+    expect(sales).toContain('buildProductLineNotificationPayload');
     expect(sales.indexOf("await client.query('COMMIT')")).toBeLessThan(sales.indexOf("typeKey: 'SALE_COMPLETED'"));
   });
 });

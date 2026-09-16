@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { formatAmountLabel, formatInboxBody, groupingKeyFor, inboxMatchesFilter, priorityFromType } from './presentation.js';
+import { formatAmountLabel, formatInboxBody, groupingKeyFor, inboxMatchesFilter, priorityFromType, summarizeSoldProducts } from './presentation.js';
 import { getNotificationType } from './catalog.js';
 
 describe('notification presentation', () => {
@@ -17,6 +17,27 @@ describe('notification presentation', () => {
     expect(body).toContain('Kampala Branch');
     expect(body).toContain('UGX');
     expect(body).not.toMatch(/event id/i);
+  });
+
+  it('leads with sold products for completed sales', () => {
+    expect(summarizeSoldProducts([
+      { productName: 'Paracetamol 500mg', quantity: 2 },
+      { productName: 'Amoxil', quantity: 1 },
+    ])).toBe('Paracetamol 500mg ×2, Amoxil');
+    const body = formatInboxBody({
+      actorDisplay: 'Mary',
+      actorRole: 'CASHIER',
+      documentRef: 'SALE-2026-14467',
+      locationLabel: null,
+      amountLabel: formatAmountLabel(18500),
+      productSummary: 'Paracetamol 500mg ×2, Amoxil',
+      businessSummary: 'Sold Paracetamol 500mg ×2, Amoxil',
+      fallback: 'A sale was completed.',
+    });
+    expect(body.split('\n')[0]).toBe('Paracetamol 500mg ×2, Amoxil');
+    expect(body).toContain('SALE-2026-14467');
+    expect(body).toContain('18,500');
+    expect(body).not.toMatch(/supervise|permission|why you/i);
   });
 
   it('falls back when actor and document are missing', () => {

@@ -10,6 +10,10 @@ import { Pool, PoolClient } from 'pg';
 import { getBusinessDate } from '../utils/dateRange.js';
 import { normalizeExpenseCategoryCode } from '../../../shared/expense/categoryGlMap.js';
 import { publishNotificationEvent } from '../modules/notifications/notificationPublisher.js';
+import {
+  buildBusinessNotificationPayload,
+  expenseDetailLabel,
+} from '../modules/notifications/businessNotificationPayload.js';
 
 /**
  * Get expenses with filtering and pagination
@@ -205,7 +209,12 @@ export const submitExpense = async (id: string, userId: string, pool?: Pool) => 
       entityType: 'expense',
       entityId: id,
       idempotencyKey: `APPROVAL_REQUIRED:expense:${id}`,
-      payload: { summary: 'An expense is waiting for approval' },
+      payload: buildBusinessNotificationPayload({
+        action: 'Expense awaiting approval',
+        detail: expenseDetailLabel(existingExpense),
+        documentRef: existingExpense.expenseNumber,
+        amount: Number(existingExpense.amount || 0),
+      }),
       actorUserId: userId,
     });
 
@@ -298,7 +307,12 @@ export const approveExpense = async (
       entityType: 'expense',
       entityId: id,
       idempotencyKey: `APPROVAL_COMPLETED:expense:${id}`,
-      payload: { summary: 'An expense approval was completed' },
+      payload: buildBusinessNotificationPayload({
+        action: 'Expense approved',
+        detail: expenseDetailLabel(existingExpense),
+        documentRef: existingExpense.expenseNumber,
+        amount: Number(existingExpense.amount || 0),
+      }),
       actorUserId: approverId,
     });
 
@@ -360,7 +374,12 @@ export const rejectExpense = async (
       entityType: 'expense',
       entityId: id,
       idempotencyKey: `APPROVAL_REJECTED:expense:${id}`,
-      payload: { summary: 'An expense approval was rejected' },
+      payload: buildBusinessNotificationPayload({
+        action: 'Expense rejected',
+        detail: expenseDetailLabel(existingExpense),
+        documentRef: existingExpense.expenseNumber,
+        amount: Number(existingExpense.amount || 0),
+      }),
       actorUserId: rejectorId,
     });
 
@@ -539,11 +558,12 @@ export const markExpensePaid = async (
       entityType: 'expense',
       entityId: id,
       idempotencyKey: `EXPENSE_PAID:expense:${id}`,
-      payload: {
-        summary: `Expense ${existingExpense.expenseNumber} paid`,
+      payload: buildBusinessNotificationPayload({
+        action: 'Expense paid',
+        detail: expenseDetailLabel(existingExpense),
         documentRef: existingExpense.expenseNumber,
         amount: Number(existingExpense.amount || 0),
-      },
+      }),
       actorUserId: paidById,
     });
 
