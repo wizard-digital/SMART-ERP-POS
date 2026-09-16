@@ -152,6 +152,31 @@ describe('PROOF: global inventory adaptive SSOT', () => {
         src.includes('search: debouncedSearch'),
       'PO: Create + Filters + Search on AdaptiveToolbar (search fills dead space)',
     );
+    gate(
+      'PO_PRODUCT_SEARCH_SUPPLIER_FIRST',
+      src.includes("disabled={isSubmitting || !supplierId}") &&
+        src.includes('Select a supplier first, then search products') &&
+        src.includes('[debouncedSearch, selectedStatus, selectedSupplier]'),
+      'PO product search disabled until supplier; list page resets on all filters',
+    );
+    gate(
+      'PO_LIST_SEARCH_SSOT',
+      src.includes('Search PO number, supplier name or code') &&
+        src.includes('data-po-search-clear') &&
+        src.includes('data-po-search-result-count') &&
+        src.includes('pagination?.total') &&
+        src.includes('data-po-pagination') &&
+        src.includes('Matching POs') &&
+        src.includes('isLoading && !posData') &&
+        src.includes('data-po-initial-loading'),
+      'List AdaptiveSearch keeps focus while fetching; initial load only full-page',
+    );
+    const hook = read('hooks/usePurchaseOrders.ts');
+    gate(
+      'PO_LIST_KEEP_PREVIOUS',
+      hook.includes('keepPreviousData') && hook.includes('placeholderData'),
+      'usePurchaseOrders keeps previous rows while search query changes',
+    );
   });
 
   it('InventoryAdjustmentsPage uses AdaptivePage + DataGrid + Search', () => {

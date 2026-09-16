@@ -2,7 +2,7 @@
  * React Query hooks for Purchase Orders API
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { api } from '../utils/api';
 import { GOODS_RECEIPTS_KEYS } from './useGoodsReceipts';
 import type { CreatePurchaseOrderInput, CreatePOInvoiceInput, RecordPOPaymentInput } from '../types/inputs';
@@ -20,7 +20,8 @@ export const purchaseOrderKeys = {
 };
 
 /**
- * Fetch all purchase orders with optional filters
+ * Fetch all purchase orders with optional filters.
+ * keepPreviousData: typing in search must not remount the page / steal focus.
  */
 export function usePurchaseOrders(params?: {
   page?: number;
@@ -42,6 +43,7 @@ export function usePurchaseOrders(params?: {
       });
       return response.data;
     },
+    placeholderData: keepPreviousData,
     staleTime: 30000, // 30 seconds
   });
 }

@@ -1,9 +1,9 @@
 {
   "proof": "ADAPTIVE_INVENTORY_GLOBAL_SSOT",
   "verdict": "PASS",
-  "generatedAt": "2026-09-13T08:19:55.587Z",
-  "passed": 51,
-  "total": 51,
+  "generatedAt": "2026-09-16T21:26:48.875Z",
+  "passed": 54,
+  "total": 54,
   "gates": [
     {
       "id": "WORKLIST_2UP",
@@ -159,6 +159,21 @@
       "id": "PO_FILTERS_TOOLBAR",
       "ok": true,
       "detail": "PO: Create + Filters + Search on AdaptiveToolbar (search fills dead space)"
+    },
+    {
+      "id": "PO_PRODUCT_SEARCH_SUPPLIER_FIRST",
+      "ok": true,
+      "detail": "PO product search disabled until supplier; list page resets on all filters"
+    },
+    {
+      "id": "PO_LIST_SEARCH_SSOT",
+      "ok": true,
+      "detail": "List AdaptiveSearch keeps focus while fetching; initial load only full-page"
+    },
+    {
+      "id": "PO_LIST_KEEP_PREVIOUS",
+      "ok": true,
+      "detail": "usePurchaseOrders keeps previous rows while search query changes"
     },
     {
       "id": "ADJ_ADAPTIVE_SHELL",

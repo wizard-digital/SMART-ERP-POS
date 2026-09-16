@@ -1,8 +1,8 @@
 # PROOF — Adaptive inventory global SSOT
 
 **Verdict:** PASS
-**Generated:** 2026-09-13T08:19:55.587Z
-**Gates:** 51/51
+**Generated:** 2026-09-16T21:26:48.875Z
+**Gates:** 54/54
 
 - PASS `WORKLIST_2UP` — worklist grids are 2-up on phone
 - PASS `WORKLIST_RESOLVER` — worklistKpiGridClass maps count → grid class
@@ -35,6 +35,9 @@
 - PASS `SERVER_SEARCH_SUPPLIERRETURNSPAGE` — pages/inventory/SupplierReturnsPage.tsx: debounced server search (accurate, not per-keystroke)
 - PASS `PO_KPI_STRIP` — PO uses AdaptiveKpiStrip; no cols-1×6 towers
 - PASS `PO_FILTERS_TOOLBAR` — PO: Create + Filters + Search on AdaptiveToolbar (search fills dead space)
+- PASS `PO_PRODUCT_SEARCH_SUPPLIER_FIRST` — PO product search disabled until supplier; list page resets on all filters
+- PASS `PO_LIST_SEARCH_SSOT` — List AdaptiveSearch keeps focus while fetching; initial load only full-page
+- PASS `PO_LIST_KEEP_PREVIOUS` — usePurchaseOrders keeps previous rows while search query changes
 - PASS `ADJ_ADAPTIVE_SHELL` — Adjustments uses AdaptivePage chrome
 - PASS `ADJ_DATA_GRID` — batch list uses AdaptiveDataGrid (cards on phone)
 - PASS `ADJ_PC_KPI` — physical count stats use AdaptiveKpiStrip

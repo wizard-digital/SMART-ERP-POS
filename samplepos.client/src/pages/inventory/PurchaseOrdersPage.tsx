@@ -806,16 +806,21 @@ function CreatePOModal({ onClose, onSuccess, initialReorderItems }: CreatePOModa
           {/* Procurement Product Search */}
           <div className="flex items-end gap-2 mb-3">
             <ProcurementProductSearch
-              supplierId={supplierId}
+              supplierId={supplierId || undefined}
               onProductSelect={addLineItem}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !supplierId}
               className="flex-1"
               inputRef={searchInputRef}
+              placeholder={
+                supplierId
+                  ? undefined
+                  : 'Select a supplier first, then search products…'
+              }
             />
             <button
               type="button"
               onClick={() => setShowQuickProduct(true)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !supplierId}
               className="mb-px px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 whitespace-nowrap"
               title="Quick-create a new product"
             >
@@ -1244,8 +1249,19 @@ function EditPOModal({ po, onClose, onSuccess }: EditPOModalProps) {
           </div>
 
           <div className="flex items-end gap-2 mb-3">
-            <ProcurementProductSearch supplierId={supplierId} onProductSelect={addLineItem} disabled={isSubmitting} className="flex-1" inputRef={searchInputRef} />
-            <button type="button" onClick={() => setShowQuickProduct(true)} disabled={isSubmitting}
+            <ProcurementProductSearch
+              supplierId={supplierId || undefined}
+              onProductSelect={addLineItem}
+              disabled={isSubmitting || !supplierId}
+              className="flex-1"
+              inputRef={searchInputRef}
+              placeholder={
+                supplierId
+                  ? undefined
+                  : 'Select a supplier first, then search products…'
+              }
+            />
+            <button type="button" onClick={() => setShowQuickProduct(true)} disabled={isSubmitting || !supplierId}
               className="mb-px px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">+ New</button>
           </div>
 
@@ -1278,7 +1294,9 @@ function EditPOModal({ po, onClose, onSuccess }: EditPOModalProps) {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
-              Search products above to add line items.
+              {supplierId
+                ? 'Search products above to add line items.'
+                : 'Select a supplier first, then search products.'}
             </div>
           )}
 
@@ -1339,12 +1357,14 @@ export default function PurchaseOrdersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, selectedStatus, selectedSupplier]);
 
   // API queries
   const {
     data: posData,
     isLoading,
+    isFetching,
+    isPlaceholderData,
     error,
     refetch,
   } = usePurchaseOrders({
@@ -1406,7 +1426,15 @@ export default function PurchaseOrdersPage() {
     completedGrCount: po.completed_gr_count ?? po.completedGrCount,
   });
 
-  // Extract data
+  // Extract data + server pagination (same shape as Goods Receipts worklist)
+  const pagination = useMemo(() => {
+    if (!posData || typeof posData !== 'object') return null;
+    const p = (posData as { pagination?: { page: number; limit: number; total: number; totalPages: number } })
+      .pagination;
+    if (!p || typeof p.total !== 'number') return null;
+    return p;
+  }, [posData]);
+
   const purchaseOrders = useMemo(() => {
     if (!posData) return [];
     const rawData =
@@ -1429,21 +1457,27 @@ export default function PurchaseOrdersPage() {
     });
   }, [posData]);
 
+  const listFiltersActive = Boolean(
+    debouncedSearch || selectedSupplier || selectedStatus !== 'ALL',
+  );
+  const matchedTotal = pagination?.total ?? purchaseOrders.length;
+
   const suppliers = useMemo(() => {
     if (!suppliersData) return [];
     if (suppliersData.data && Array.isArray(suppliersData.data)) return suppliersData.data;
     return Array.isArray(suppliersData) ? suppliersData : [];
   }, [suppliersData]);
 
-  // Calculate statistics - exclude cancelled POs from totals
+  // Calculate statistics from the current result set.
+  // Total uses server pagination.total so search/filter counts stay accurate across pages.
   const stats = useMemo(() => {
-    const total = purchaseOrders.length;
+    const total = matchedTotal;
     const draft = purchaseOrders.filter((po: PORow) => po.status === 'DRAFT').length;
     const pending = purchaseOrders.filter((po: PORow) => po.status === 'PENDING').length;
     const completed = purchaseOrders.filter((po: PORow) => po.status === 'COMPLETED').length;
     const cancelled = purchaseOrders.filter((po: PORow) => po.status === 'CANCELLED').length;
 
-    // Only include non-cancelled POs in total value calculation
+    // Only include non-cancelled POs in total value calculation (this page of results)
     let totalValue = new Decimal(0);
     purchaseOrders.forEach((po: PORow) => {
       if (po.status !== 'CANCELLED') {
@@ -1452,7 +1486,7 @@ export default function PurchaseOrdersPage() {
     });
 
     return { total, draft, pending, completed, cancelled, totalValue: totalValue.toNumber() };
-  }, [purchaseOrders]);
+  }, [purchaseOrders, matchedTotal]);
 
   // Must stay above loading/error early returns — hooks order SSOT.
   const hasDeliveryDates = purchaseOrders.some((po: PORow) => po.expectedDelivery);
@@ -1648,10 +1682,10 @@ export default function PurchaseOrdersPage() {
     });
   };
 
-  // Loading state
-  if (isLoading) {
+  // Initial load only — never unmount the page while search/filter refetches (focus SSOT).
+  if (isLoading && !posData) {
     return (
-      <div className="p-6">
+      <div className="p-6" data-po-initial-loading="true">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-blue-800">Loading purchase orders...</p>
         </div>
@@ -1703,9 +1737,26 @@ export default function PurchaseOrdersPage() {
                 <AdaptiveSearch
                   value={searchTerm}
                   onChange={setSearchTerm}
-                  placeholder="PO number, supplier…"
+                  placeholder="Search PO number, supplier name or code…"
                   label="Search purchase orders"
                   presentationOverride="compact"
+                  trailing={
+                    searchTerm ? (
+                      <button
+                        type="button"
+                        aria-label="Clear search"
+                        data-po-search-clear="true"
+                        onClick={() => {
+                          setSearchTerm('');
+                          setDebouncedSearch('');
+                          setPage(1);
+                        }}
+                        className="shrink-0 rounded-md border border-stone-200 bg-white px-2.5 text-sm font-medium text-stone-600 min-h-[var(--layout-touch-target)] hover:bg-stone-50"
+                      >
+                        Clear
+                      </button>
+                    ) : null
+                  }
                 />
               }
               secondaryLabel="Filters"
@@ -1821,7 +1872,11 @@ export default function PurchaseOrdersPage() {
       <AdaptiveKpiStrip
         className="mb-1"
         items={[
-          { id: 'total', label: 'Total POs', value: stats.total },
+          {
+            id: 'total',
+            label: listFiltersActive ? 'Matching POs' : 'Total POs',
+            value: stats.total,
+          },
           { id: 'draft', label: 'Draft', value: stats.draft, valueClassName: 'text-gray-600' },
           { id: 'pending', label: 'Pending', value: stats.pending, valueClassName: 'text-yellow-600' },
           { id: 'completed', label: 'Completed', value: stats.completed, valueClassName: 'text-green-600' },
@@ -1829,12 +1884,25 @@ export default function PurchaseOrdersPage() {
           {
             id: 'value',
             label: 'Total Value',
-            sub: '(excl. cancelled)',
+            sub: listFiltersActive ? '(this page, excl. cancelled)' : '(excl. cancelled)',
             value: formatCurrency(stats.totalValue),
             valueClassName: 'text-blue-600',
           },
         ]}
       />
+
+      {listFiltersActive ? (
+        <p className="mb-2 text-xs text-stone-500" data-po-search-result-count="true">
+          Showing {purchaseOrders.length} of {matchedTotal} matching purchase order
+          {matchedTotal === 1 ? '' : 's'}
+          {debouncedSearch ? ` for “${debouncedSearch}”` : ''}
+          {isFetching && isPlaceholderData ? ' · updating…' : ''}
+        </p>
+      ) : isFetching ? (
+        <p className="mb-2 text-xs text-stone-400" data-po-list-fetching="true">
+          Updating…
+        </p>
+      ) : null}
 
       {/* Purchase Orders Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -1842,7 +1910,7 @@ export default function PurchaseOrdersPage() {
         <div className="block sm:hidden space-y-3 p-3">
           {purchaseOrders.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              {selectedStatus !== 'ALL' || selectedSupplier || searchTerm
+              {listFiltersActive
                 ? 'No purchase orders match your filters'
                 : 'No purchase orders yet. Create your first PO to get started!'}
             </div>
@@ -1928,7 +1996,7 @@ export default function PurchaseOrdersPage() {
                 {purchaseOrders.length === 0 ? (
                   <tr>
                     <td colSpan={tableColSpan} className="px-6 py-8 text-center text-gray-500">
-                      {selectedStatus !== 'ALL' || selectedSupplier || searchTerm
+                      {listFiltersActive
                         ? 'No purchase orders match your filters'
                         : 'No purchase orders yet. Create your first PO to get started!'}
                     </td>
@@ -2059,23 +2127,25 @@ export default function PurchaseOrdersPage() {
         </div>
       </div>
 
-      {/* Pagination */}
-      {purchaseOrders.length > 0 && (
-        <div className="mt-6 flex justify-between items-center">
+      {/* Pagination — server totalPages SSOT (same contract as Goods Receipts) */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="mt-6 flex justify-between items-center" data-po-pagination="true">
           <div className="text-sm text-gray-600">
-            Page {page} • Showing {purchaseOrders.length} purchase orders
+            Page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
           </div>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => setPage(Math.max(1, page - 1))}
-              disabled={page === 1}
+              disabled={page <= 1}
               className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               ← Previous
             </button>
             <button
-              onClick={() => setPage(page + 1)}
-              disabled={purchaseOrders.length < limit}
+              type="button"
+              onClick={() => setPage(Math.min(pagination.totalPages, page + 1))}
+              disabled={page >= pagination.totalPages}
               className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next →

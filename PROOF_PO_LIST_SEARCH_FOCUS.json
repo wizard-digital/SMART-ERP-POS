@@ -1,0 +1,50 @@
+{
+  "proof": "PO_LIST_SEARCH_FOCUS",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-16T21:26:48.728Z",
+  "passed": 8,
+  "total": 8,
+  "gates": [
+    {
+      "id": "COLD_START_SHOWS_LOADER",
+      "ok": true,
+      "detail": "First visit with no rows may show full-page loading"
+    },
+    {
+      "id": "SEARCH_REFETCH_KEEPS_SHELL",
+      "ok": true,
+      "detail": "While previous rows exist, spinner must not unmount AdaptiveSearch"
+    },
+    {
+      "id": "FETCHING_WITH_DATA_KEEPS_SHELL",
+      "ok": true,
+      "detail": "isFetching/placeholder path keeps page shell + search mounted"
+    },
+    {
+      "id": "EMPTY_SUCCESS_KEEPS_SHELL",
+      "ok": true,
+      "detail": "Empty result set still keeps search mounted"
+    },
+    {
+      "id": "HOOK_KEEP_PREVIOUS",
+      "ok": true,
+      "detail": "usePurchaseOrders keeps prior list while search queryKey changes"
+    },
+    {
+      "id": "PAGE_INITIAL_ONLY_LOADER",
+      "ok": true,
+      "detail": "Page uses isLoading && !posData — never bare isLoading early return"
+    },
+    {
+      "id": "SEARCH_AFTER_LOADER_GATE",
+      "ok": true,
+      "detail": "AdaptiveSearch renders only on the non-loader path (after gate)"
+    },
+    {
+      "id": "SEARCH_CONTROLLED_LOCAL_STATE",
+      "ok": true,
+      "detail": "Typing updates local searchTerm immediately; query uses debounce"
+    }
+  ],
+  "integrity": "PO list AdaptiveSearch must stay mounted while typing. keepPreviousData + isLoading&&!posData; bare isLoading full-page return is forbidden."
+}
