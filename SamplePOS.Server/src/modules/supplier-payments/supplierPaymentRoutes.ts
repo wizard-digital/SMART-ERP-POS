@@ -105,7 +105,7 @@ const CreateInvoiceSchema = z.object({
      * Over-billing is always rejected regardless of reason.
      */
     varianceReason: z
-        .enum(['SUPPLIER_DISCOUNT', 'ROUNDING_DIFFERENCE', 'PRICE_VARIANCE', 'EDIT_LINE_PRICES'])
+        .enum(['SUPPLIER_DISCOUNT', 'ROUNDING_DIFFERENCE', 'EDIT_LINE_PRICES'])
         .optional(),
 });
 const CreateInvoiceFromGRNSchema = z.object({
@@ -124,9 +124,10 @@ const CreateInvoiceFromGRNSchema = z.object({
      * Why the supplier total differs from the GRN computed total.
      * Required when supplierReportedTotal is present and variance > 0.005.
      * Over-billing is always rejected — only favorable variance (discount/rounding) allowed.
+     * ≈10× / ≈0.1× paper totals are rejected as digit typos.
      */
     varianceReason: z
-        .enum(['SUPPLIER_DISCOUNT', 'ROUNDING_DIFFERENCE', 'PRICE_VARIANCE', 'EDIT_LINE_PRICES'])
+        .enum(['SUPPLIER_DISCOUNT', 'ROUNDING_DIFFERENCE', 'EDIT_LINE_PRICES'])
         .optional(),
 });
 const CreateAllocationSchema = z.object({
