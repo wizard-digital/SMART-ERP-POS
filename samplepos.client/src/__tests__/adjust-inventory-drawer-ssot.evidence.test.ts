@@ -58,7 +58,7 @@ describe('PROOF: AdjustInventoryDrawer SSOT (Adjustments + Edit Product)', () =>
         products.includes('<AdjustInventoryDrawer') &&
         products.includes('data-product-adjust-inventory="true"') &&
         products.includes('handleOpenAdjustFromProduct') &&
-        products.includes('Quantity On Hand (Read-only)') &&
+        products.includes('Qty on hand') &&
         products.includes('resolveAdjustInventoryTarget') &&
         products.includes('resolveDefaultAdjustStoreId'),
       'Edit Product has Adjust button beside QOH opening shared drawer',

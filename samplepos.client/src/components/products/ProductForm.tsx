@@ -110,10 +110,40 @@ export default function ProductForm({
   const sections = productFormSectionVisibility(values.productType);
   const inventoryDisabled = disabled || isService;
   const costNum = parseFloat(values.costPrice) || 0;
+  const sellNum = parseFloat(values.sellingPrice) || 0;
   const formulaPreviewPrice = useMemo(
     () => values.autoUpdatePrice ? evalFormulaPreview(values.pricingFormula, costNum) : null,
     [values.pricingFormula, values.autoUpdatePrice, costNum]
   );
+  const marginPct =
+    costNum > 0 && Number.isFinite(sellNum)
+      ? (((sellNum - costNum) / costNum) * 100).toFixed(1)
+      : null;
+  const sellingPriceHint = [
+    formulaPreviewPrice != null
+      ? `Formula preview: ${formulaPreviewPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+      : null,
+    marginPct != null ? `Margin ${marginPct}%` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ') || undefined;
+
+  const taxLiability = describeProductTaxLiability({
+    isTaxable: values.isTaxable,
+    taxRate: parseFloat(values.taxRate) || 0,
+    mappings: taxMappings,
+    taxInclusive: taxInclusivePricing,
+  });
+  const vatLiableHint = taxMappingsLoading
+    ? 'Checking tax mappings…'
+    : `${taxLiability.headline}. ${taxLiability.detail}`;
+
+  const typeHint =
+    isService
+      ? 'No parent stock — link a recipe for ingredients'
+      : values.productType === 'consumable'
+        ? 'Stocked, then typically expensed when used'
+        : 'Selling deducts this product\'s own stock';
 
   const purchaseUomOptions = useMemo(
     () =>
@@ -149,7 +179,7 @@ export default function ProductForm({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="md:col-span-2">
           <label htmlFor="product-name" className="block text-sm font-medium text-gray-700 mb-1">
-            Product Name <span className="text-red-500">*</span>
+            Product name <span className="text-red-500">*</span>
           </label>
           <input
             id="product-name"
@@ -159,7 +189,7 @@ export default function ProductForm({
             disabled={disabled}
             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${validationErrors.name ? "border-red-500" : "border-gray-300"
               }`}
-            placeholder="Enter product name"
+            placeholder="Product name"
           />
           {validationErrors.name && (
             <p className="text-sm text-red-600 mt-1">{validationErrors.name}</p>
@@ -196,12 +226,16 @@ export default function ProductForm({
             onChange={(e) => onChange("barcode", e.target.value)}
             disabled={disabled}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Optional barcode"
+            placeholder="Barcode"
           />
         </div>
 
         <div>
-          <label htmlFor="product-category" className="block text-sm font-medium text-gray-700 mb-1">
+          <label
+            htmlFor="product-category"
+            className="block text-sm font-medium text-gray-700 mb-1"
+            title="Search existing or type to create"
+          >
             Category
           </label>
           <CategoryCombobox
@@ -212,8 +246,12 @@ export default function ProductForm({
         </div>
 
         <div>
-          <label htmlFor="product-type" className="block text-sm font-medium text-gray-700 mb-1">
-            Product type
+          <label
+            htmlFor="product-type"
+            className="block text-sm font-medium text-gray-700 mb-1"
+            title={typeHint}
+          >
+            Type
           </label>
           <select
             id="product-type"
@@ -224,22 +262,19 @@ export default function ProductForm({
             disabled={disabled}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="inventory">Inventory — stocked item (e.g. Coke bottle)</option>
-            <option value="consumable">Consumable — stocked, then expensed</option>
-            <option value="service">Service — no parent stock (e.g. Pizza + recipe)</option>
+            <option value="inventory">Inventory</option>
+            <option value="consumable">Consumable</option>
+            <option value="service">Service</option>
           </select>
-          <p className="text-xs text-gray-500 mt-1">
-            {isService
-              ? 'Prepared dishes: sell as service and link ingredients on Restaurant → Recipes. Stock, supplier, and expiry do not apply to this product.'
-              : values.productType === 'consumable'
-                ? 'Tracked in stock like inventory; typically expensed when used.'
-                : 'Selling this product deducts its own stock (unless a recipe overrides to ingredients).'}
-          </p>
         </div>
 
         <div>
-          <label htmlFor="generic-name" className="block text-sm font-medium text-gray-700 mb-1">
-            Generic Name
+          <label
+            htmlFor="generic-name"
+            className="block text-sm font-medium text-gray-700 mb-1"
+            title="Common name for search grouping"
+          >
+            Generic name
           </label>
           <input
             id="generic-name"
@@ -248,9 +283,8 @@ export default function ProductForm({
             onChange={(e) => onChange("genericName", e.target.value)}
             disabled={disabled}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="e.g., Amoxicillin, Paracetamol"
+            placeholder="Generic name"
           />
-          <p className="text-xs text-gray-500 mt-1">Common/generic drug name for search grouping</p>
         </div>
 
         <div className="md:col-span-2">
@@ -264,25 +298,25 @@ export default function ProductForm({
             disabled={disabled}
             rows={2}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Optional description"
+            placeholder="Description"
           />
         </div>
       </div>
 
-      {/* Pricing Information */}
+      {/* Pricing */}
       <div className="border-t pt-4">
-        <h4 className="font-medium text-gray-900 mb-3">Pricing Information</h4>
+        <h4 className="font-medium text-gray-900 mb-3">Pricing</h4>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label htmlFor="cost-price" className="block text-sm font-medium text-gray-700 mb-1">
-              Cost Price <span className="text-red-500">*</span>
+              Cost <span className="text-red-500">*</span>
             </label>
             <input
               id="cost-price"
               type="number"
-              step="0.01"
+              step="1"
               value={values.costPrice}
-              onChange={(e) => onChange("costPrice", e.target.value)}
+              onChange={(e) => onChange('costPrice', e.target.value)}
               disabled={disabled}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="0.00"
@@ -290,36 +324,41 @@ export default function ProductForm({
           </div>
 
           <div>
-            <label htmlFor="selling-price" className="block text-sm font-medium text-gray-700 mb-1">
-              Selling Price <span className="text-red-500">*</span>
+            <label
+              htmlFor="selling-price"
+              className="block text-sm font-medium text-gray-700 mb-1"
+              title={sellingPriceHint}
+            >
+              Selling <span className="text-red-500">*</span>
             </label>
             <input
               id="selling-price"
               type="number"
-              step="0.01"
+              step="1"
               value={values.sellingPrice}
-              onChange={(e) => onChange("sellingPrice", e.target.value)}
+              onChange={(e) => onChange('sellingPrice', e.target.value)}
               disabled={disabled}
-              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${validationErrors.sellingPrice ? "border-red-500" : "border-gray-300"
-                }`}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                validationErrors.sellingPrice ? 'border-red-500' : 'border-gray-300'
+              }`}
               placeholder="0.00"
             />
             {validationErrors.sellingPrice && (
               <p className="text-sm text-red-600 mt-1">{validationErrors.sellingPrice}</p>
             )}
-            {/* SAP/Odoo formula preview — shows computed price before save */}
-            {formulaPreviewPrice !== null && (
-              <p className="text-xs text-blue-600 mt-1">
-                Formula preview:{' '}
-                <strong>{formulaPreviewPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong>
-                {' '}— backend may use avg cost for AVCO products
-              </p>
-            )}
           </div>
 
           <div>
-            <label htmlFor="costing-method" className="block text-sm font-medium text-gray-700 mb-1">
-              Costing Method
+            <label
+              htmlFor="costing-method"
+              className="block text-sm font-medium text-gray-700 mb-1"
+              title={
+                isService
+                  ? 'Not used for service dishes — COGS comes from recipe ingredients'
+                  : 'FIFO / AVCO / Standard valuation'
+              }
+            >
+              Costing
             </label>
             <select
               id="costing-method"
@@ -328,95 +367,56 @@ export default function ProductForm({
               disabled={inventoryDisabled}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500"
             >
-              <option value="FIFO">FIFO (First In, First Out)</option>
-              <option value="AVCO">AVCO (Average Cost)</option>
-              <option value="STANDARD">Standard Cost</option>
+              <option value="FIFO">FIFO</option>
+              <option value="AVCO">AVCO</option>
+              <option value="STANDARD">Standard</option>
             </select>
-            {isService && (
-              <p className="text-xs text-gray-500 mt-1">
-                Not used for service dishes — COGS comes from recipe ingredients on payment.
-              </p>
-            )}
           </div>
         </div>
 
-        {/* Tax Section */}
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-          {(() => {
-            const liability = describeProductTaxLiability({
-              isTaxable: values.isTaxable,
-              taxRate: parseFloat(values.taxRate) || 0,
-              mappings: taxMappings,
-              taxInclusive: taxInclusivePricing,
-            });
-            const statusColor =
-              liability.status === 'MAPPED'
-                ? 'bg-violet-100 text-violet-900 border-violet-200'
-                : liability.status === 'BRIDGE'
-                  ? 'bg-emerald-100 text-emerald-900 border-emerald-200'
-                  : liability.status === 'GATED'
-                    ? 'bg-amber-100 text-amber-900 border-amber-200'
-                    : 'bg-stone-100 text-stone-700 border-stone-200';
-            return (
-              <div className={`mb-3 rounded-md border px-3 py-2 ${statusColor}`}>
-                <p className="text-sm font-semibold">
-                  {taxMappingsLoading ? 'Checking tax mappings…' : liability.headline}
-                </p>
-                <p className="text-xs mt-1 opacity-90">{liability.detail}</p>
-                {liability.status === 'MAPPED' && (
-                  <p className="text-xs mt-1.5 font-medium">
-                    Manage in Accounting → Tax Engine → Product mappings
-                  </p>
-                )}
-              </div>
-            );
-          })()}
-          <div className="flex items-start gap-3 mb-3">
+        {/* Tax — liability toggle; explanation on hover only */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label
+            htmlFor="is-taxable"
+            className="inline-flex items-center gap-2 text-sm text-gray-700"
+            title={vatLiableHint}
+          >
             <input
               id="is-taxable"
               type="checkbox"
               checked={values.isTaxable}
               onChange={(e) => onChange("isTaxable", e.target.checked)}
               disabled={disabled}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
             />
-            <div className="flex-1">
-              <label htmlFor="is-taxable" className="text-sm font-medium text-gray-700 block">
-                VAT liable (taxable product)
-              </label>
-              <p className="text-xs text-gray-500 mt-0.5">
-                You set liability per product. How it posts is automatic: Settings “tax inclusive with
-                price” — off = add VAT on top; on = VAT already in selling price. Tax Engine mappings
-                override this rate when present.
-              </p>
-            </div>
-          </div>
-
+            VAT liable
+          </label>
           {values.isTaxable && (
-            <div>
-              <label htmlFor="tax-rate" className="block text-sm font-medium text-gray-700 mb-1">
-                Tax Rate (%) <span className="text-red-500">*</span>
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="tax-rate"
+                className="text-sm text-gray-700 whitespace-nowrap"
+                title="Fallback rate when no Tax Engine product mapping exists"
+              >
+                Rate % <span className="text-red-500">*</span>
               </label>
               <input
                 id="tax-rate"
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 max="100"
                 value={values.taxRate}
-                onChange={(e) => onChange("taxRate", e.target.value)}
+                onChange={(e) => onChange('taxRate', e.target.value)}
                 disabled={disabled}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${validationErrors.taxRate ? "border-red-500" : "border-gray-300"
-                  }`}
+                className={`w-24 px-2 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  validationErrors.taxRate ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="18"
               />
               {validationErrors.taxRate && (
-                <p className="text-sm text-red-600 mt-1">{validationErrors.taxRate}</p>
+                <p className="text-sm text-red-600">{validationErrors.taxRate}</p>
               )}
-              <p className="text-xs text-gray-500 mt-1">
-                Used when no Tax Engine product mapping exists. Exclusive vs inclusive is not set
-                here — that is Settings only.
-              </p>
             </div>
           )}
         </div>
@@ -425,8 +425,12 @@ export default function ProductForm({
         {sections.showPricingFormula && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div>
-            <label htmlFor="pricing-formula" className="block text-sm font-medium text-gray-700 mb-1">
-              Pricing Formula (optional)
+            <label
+              htmlFor="pricing-formula"
+              className="block text-sm font-medium text-gray-700 mb-1"
+              title="Variables: cost, lastCost, Math"
+            >
+              Formula
             </label>
             <input
               id="pricing-formula"
@@ -435,114 +439,103 @@ export default function ProductForm({
               onChange={(e) => onChange("pricingFormula", e.target.value)}
               disabled={disabled}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="e.g., cost * 1.20"
+              placeholder="cost * 1.20"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Variables: <code className="text-blue-600">cost</code> (AVCO/manual),{' '}
-              <code className="text-blue-600">lastCost</code> (latest GRN price),{' '}
-              <code className="text-blue-600">Math</code>
-            </p>
           </div>
 
-          <div className="flex items-start gap-2 pt-6">
+          <div className="flex items-center gap-2 pt-6 md:pt-7">
             <input
               id="auto-update-price"
               type="checkbox"
               checked={values.autoUpdatePrice}
               onChange={(e) => onChange("autoUpdatePrice", e.target.checked)}
               disabled={disabled}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
             />
-            <div>
-              <label htmlFor="auto-update-price" className="text-sm font-medium text-gray-700">
-                Auto-Update Price
-              </label>
-              <p className="text-xs text-gray-500">Automatically update selling price when cost changes</p>
-            </div>
+            <label
+              htmlFor="auto-update-price"
+              className="text-sm text-gray-700"
+              title="Recalculate selling price when cost changes"
+            >
+              Auto-update price
+            </label>
           </div>
         </div>
         )}
       </div>
 
-      {/* Stock Levels — not applicable to service/menu dishes */}
+      {/* Stock / availability */}
       <div className="border-t pt-4">
         <h4 className="font-medium text-gray-900 mb-3">
-          {isService ? 'Availability' : 'Stock Level Settings'}
+          {isService ? 'Availability' : 'Stock'}
         </h4>
         {isService ? (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-600 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2">
-              Service products do not hold stock, track expiry, or use suppliers. Link a recipe for
-              ingredient consumption, or leave without a recipe for pure fees (hall hire, delivery).
-            </p>
-            <div className="flex items-start gap-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <label
+              htmlFor="is-active"
+              className="inline-flex items-center gap-2 text-sm text-gray-700"
+              title="Inactive products are hidden from sales"
+            >
               <input
                 id="is-active"
                 type="checkbox"
                 checked={values.isActive}
                 onChange={(e) => onChange("isActive", e.target.checked)}
                 disabled={disabled}
-                className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
-              <div>
-                <label htmlFor="is-active" className="text-sm font-medium text-gray-700">
-                  Active Product
-                </label>
-                <p className="text-xs text-gray-500">Inactive products won&apos;t appear in sales</p>
-              </div>
-            </div>
+              Active
+            </label>
             {restaurantEnabled && (
-              <div className="flex items-start gap-2">
+              <label
+                htmlFor="available-in-restaurant"
+                className="inline-flex items-center gap-2 text-sm text-gray-700"
+                title="Show on Restaurant POS"
+              >
                 <input
                   id="available-in-restaurant"
                   type="checkbox"
                   checked={values.availableInRestaurant !== false}
                   onChange={(e) => onChange('availableInRestaurant', e.target.checked)}
                   disabled={disabled}
-                  className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <div>
-                  <label htmlFor="available-in-restaurant" className="text-sm font-medium text-gray-700">
-                    Available in Restaurant
-                  </label>
-                  <p className="text-xs text-gray-500">
-                    Show on Restaurant POS category buttons. Uncheck to hide from the floor.
-                  </p>
-                </div>
-              </div>
+                Restaurant
+              </label>
             )}
             {showKitchenCatalog && (
-              <div className="flex items-start gap-2">
+              <label
+                htmlFor="is-buffet-cover-svc"
+                className="inline-flex items-center gap-2 text-sm text-gray-700"
+                title="Sold as covers against an open buffet session"
+              >
                 <input
                   id="is-buffet-cover-svc"
                   type="checkbox"
                   checked={Boolean(values.isBuffetCover)}
                   onChange={(e) => onChange('isBuffetCover', e.target.checked)}
                   disabled={disabled}
-                  className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <div>
-                  <label htmlFor="is-buffet-cover-svc" className="text-sm font-medium text-gray-700">
-                    Buffet cover / plate (capacity sale)
-                  </label>
-                  <p className="text-xs text-gray-500">
-                    Sold as covers against an OPEN Buffet Session — ingredients are not exploded at payment.
-                  </p>
-                </div>
-              </div>
+                Buffet cover
+              </label>
             )}
           </div>
         ) : (
         <>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label htmlFor="reorder-level" className="block text-sm font-medium text-gray-700 mb-1">
-              Reorder Level
+            <label
+              htmlFor="reorder-level"
+              className="block text-sm font-medium text-gray-700 mb-1"
+              title="Alert when stock reaches this level"
+            >
+              Reorder level
             </label>
             <input
               id="reorder-level"
               type="number"
-              step="0.01"
+              step="1"
               value={values.reorderLevel}
               onChange={(e) => onChange("reorderLevel", e.target.value)}
               disabled={disabled}
@@ -551,112 +544,99 @@ export default function ProductForm({
             />
           </div>
 
-          <div className="flex items-start gap-2 pt-6">
-            <input
-              id="track-expiry"
-              type="checkbox"
-              checked={values.trackExpiry}
-              onChange={(e) => onChange("trackExpiry", e.target.checked)}
-              disabled={disabled}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <div>
-              <label htmlFor="track-expiry" className="text-sm font-medium text-gray-700">
-                Track Expiry Date (perishables)
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-6 md:pt-7 md:col-span-2">
+            <label
+              htmlFor="track-expiry"
+              className="inline-flex items-center gap-2 text-sm text-gray-700"
+              title="Require expiry on receiving; FEFO allocations"
+            >
+              <input
+                id="track-expiry"
+                type="checkbox"
+                checked={values.trackExpiry}
+                onChange={(e) => onChange("trackExpiry", e.target.checked)}
+                disabled={disabled}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              Track expiry
+            </label>
+            <label
+              htmlFor="is-active"
+              className="inline-flex items-center gap-2 text-sm text-gray-700"
+              title="Inactive products are hidden from sales and inventory ops"
+            >
+              <input
+                id="is-active"
+                type="checkbox"
+                checked={values.isActive}
+                onChange={(e) => onChange("isActive", e.target.checked)}
+                disabled={disabled}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              Active
+            </label>
+            {restaurantEnabled && (
+              <label
+                htmlFor="available-in-restaurant-inv"
+                className="inline-flex items-center gap-2 text-sm text-gray-700"
+                title="Show on Restaurant POS (needs a category)"
+              >
+                <input
+                  id="available-in-restaurant-inv"
+                  type="checkbox"
+                  checked={values.availableInRestaurant !== false}
+                  onChange={(e) => onChange('availableInRestaurant', e.target.checked)}
+                  disabled={disabled}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                Restaurant
               </label>
-              <p className="text-xs text-gray-500">
-                When enabled, this product will require expiry during receiving and FEFO will be used for allocations.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2 pt-6">
-            <input
-              id="is-active"
-              type="checkbox"
-              checked={values.isActive}
-              onChange={(e) => onChange("isActive", e.target.checked)}
-              disabled={disabled}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <div>
-              <label htmlFor="is-active" className="text-sm font-medium text-gray-700">
-                Active Product
+            )}
+            {showKitchenCatalog && sections.showPreparedFood && (
+              <label
+                htmlFor="is-prepared-food"
+                className="inline-flex items-center gap-2 text-sm text-gray-700"
+                title="Kitchen finished goods; pair with On production recipe"
+              >
+                <input
+                  id="is-prepared-food"
+                  type="checkbox"
+                  checked={Boolean(values.isPreparedFood)}
+                  onChange={(e) => onChange('isPreparedFood', e.target.checked)}
+                  disabled={disabled}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                Prepared food
               </label>
-              <p className="text-xs text-gray-500">Inactive products won&apos;t appear in sales or inventory operations</p>
-            </div>
+            )}
+            {showKitchenCatalog && (
+              <label
+                htmlFor="is-buffet-cover-inv"
+                className="inline-flex items-center gap-2 text-sm text-gray-700"
+                title="Requires an open buffet session"
+              >
+                <input
+                  id="is-buffet-cover-inv"
+                  type="checkbox"
+                  checked={Boolean(values.isBuffetCover)}
+                  onChange={(e) => onChange('isBuffetCover', e.target.checked)}
+                  disabled={disabled}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                Buffet cover
+              </label>
+            )}
           </div>
         </div>
 
-        {restaurantEnabled && (
-          <div className="mt-3 flex items-start gap-2">
-            <input
-              id="available-in-restaurant-inv"
-              type="checkbox"
-              checked={values.availableInRestaurant !== false}
-              onChange={(e) => onChange('availableInRestaurant', e.target.checked)}
-              disabled={disabled}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <div>
-              <label htmlFor="available-in-restaurant-inv" className="text-sm font-medium text-gray-700">
-                Available in Restaurant
-              </label>
-              <p className="text-xs text-gray-500">
-                Show on Restaurant POS. Needs a Category so it appears under the right button.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {showKitchenCatalog && sections.showPreparedFood && (
-          <div className="mt-3 flex items-start gap-2">
-            <input
-              id="is-prepared-food"
-              type="checkbox"
-              checked={Boolean(values.isPreparedFood)}
-              onChange={(e) => onChange('isPreparedFood', e.target.checked)}
-              disabled={disabled}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <div>
-              <label htmlFor="is-prepared-food" className="text-sm font-medium text-gray-700">
-                Prepared food (kitchen finished goods)
-              </label>
-              <p className="text-xs text-gray-500">
-                Produced with Kitchen Production batches. Pair with a recipe usage &quot;On production&quot;
-                so sale deducts this product, not raw ingredients again.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {showKitchenCatalog && (
-          <div className="mt-3 flex items-start gap-2">
-            <input
-              id="is-buffet-cover-inv"
-              type="checkbox"
-              checked={Boolean(values.isBuffetCover)}
-              onChange={(e) => onChange('isBuffetCover', e.target.checked)}
-              disabled={disabled}
-              className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <div>
-              <label htmlFor="is-buffet-cover-inv" className="text-sm font-medium text-gray-700">
-                Buffet cover / plate (capacity sale)
-              </label>
-              <p className="text-xs text-gray-500">
-                Usually a service SKU. Sale requires an OPEN Buffet Session and does not explode ingredients.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Expiry Enforcement (shown when Track Expiry is enabled) */}
         {values.trackExpiry && (
-          <div className="mt-4 p-4 bg-amber-50 rounded-lg border border-amber-200">
-            <label htmlFor="min-days-expiry" className="block text-sm font-medium text-gray-700 mb-1">
-              Minimum Days Before Expiry to Allow Sale
+          <div className="mt-3 flex items-center gap-3">
+            <label
+              htmlFor="min-days-expiry"
+              className="text-sm text-gray-700 whitespace-nowrap"
+              title="0 disables. Batches closer than this cannot be sold."
+            >
+              Min days to sell
             </label>
             <input
               id="min-days-expiry"
@@ -666,12 +646,9 @@ export default function ProductForm({
               value={values.minDaysBeforeExpirySale}
               onChange={(e) => onChange("minDaysBeforeExpirySale", e.target.value)}
               disabled={disabled}
-              className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-24 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="90"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Batches expiring within this many days cannot be sold (NDA compliance). Set to 0 to disable.
-            </p>
           </div>
         )}
         </>
@@ -684,8 +661,12 @@ export default function ProductForm({
           <h4 className="font-medium text-gray-900 mb-3">Procurement</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="preferred-supplier" className="block text-sm font-medium text-gray-700 mb-1">
-                Preferred Supplier
+              <label
+                htmlFor="preferred-supplier"
+                className="block text-sm font-medium text-gray-700 mb-1"
+                title="Pre-selected when creating POs for this product"
+              >
+                Preferred supplier
               </label>
               <select
                 id="preferred-supplier"
@@ -699,12 +680,15 @@ export default function ProductForm({
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-1">Auto-selected when creating POs for this product</p>
             </div>
 
             <div>
-              <label htmlFor="supplier-product-code" className="block text-sm font-medium text-gray-700 mb-1">
-                Supplier Product Code
+              <label
+                htmlFor="supplier-product-code"
+                className="block text-sm font-medium text-gray-700 mb-1"
+                title="Supplier catalog code — searchable on POs"
+              >
+                Supplier code
               </label>
               <input
                 id="supplier-product-code"
@@ -713,14 +697,21 @@ export default function ProductForm({
                 onChange={(e) => onChange("supplierProductCode", e.target.value)}
                 disabled={disabled}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., SUP-SKU-001"
+                placeholder="Supplier code"
                 maxLength={100}
               />
-              <p className="text-xs text-gray-500 mt-1">Supplier&apos;s catalog code (searchable in PO)</p>
             </div>
 
             <div>
-              <label htmlFor="purchase-uom" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="purchase-uom"
+                className="block text-sm font-medium text-gray-700 mb-1"
+                title={
+                  restrictPurchaseUomToConfigured
+                    ? 'Must match a unit configured under Units'
+                    : 'Default unit for purchasing'
+                }
+              >
                 Purchase UoM
               </label>
               {purchaseUomOptions.length > 0 ? (
@@ -731,7 +722,7 @@ export default function ProductForm({
                   disabled={disabled}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value="">Default (base unit)</option>
+                  <option value="">Base unit</option>
                   {purchaseUomOptions.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}{u.symbol ? ` (${u.symbol})` : ''}
@@ -746,19 +737,18 @@ export default function ProductForm({
                   readOnly
                   disabled
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                  placeholder={restrictPurchaseUomToConfigured ? 'Add Product UoMs first' : 'No UoMs configured'}
+                  placeholder={restrictPurchaseUomToConfigured ? 'Add units first' : 'No UoMs'}
                 />
               )}
-              <p className="text-xs text-gray-500 mt-1">
-                {restrictPurchaseUomToConfigured
-                  ? 'Must match a unit configured under Product UoMs'
-                  : 'Default unit of measure for purchasing'}
-              </p>
             </div>
 
             <div>
-              <label htmlFor="lead-time-days" className="block text-sm font-medium text-gray-700 mb-1">
-                Lead Time (days)
+              <label
+                htmlFor="lead-time-days"
+                className="block text-sm font-medium text-gray-700 mb-1"
+                title="Average delivery time from supplier"
+              >
+                Lead time (days)
               </label>
               <input
                 id="lead-time-days"
@@ -771,41 +761,48 @@ export default function ProductForm({
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="0"
               />
-              <p className="text-xs text-gray-500 mt-1">Average delivery time from supplier</p>
             </div>
 
             <div>
-              <label htmlFor="reorder-quantity" className="block text-sm font-medium text-gray-700 mb-1">
-                Reorder Quantity
+              <label
+                htmlFor="reorder-quantity"
+                className="block text-sm font-medium text-gray-700 mb-1"
+                title="Suggested qty when stock drops below reorder level"
+              >
+                Reorder qty
               </label>
               <input
                 id="reorder-quantity"
                 type="number"
                 min="0"
-                step="0.01"
+                step="1"
                 value={values.reorderQuantity}
                 onChange={(e) => onChange("reorderQuantity", e.target.value)}
                 disabled={disabled}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="0"
               />
-              <p className="text-xs text-gray-500 mt-1">Auto-suggested qty when stock drops below reorder level</p>
             </div>
 
-            <div>
-              <label htmlFor="last-purchase-price" className="block text-sm font-medium text-gray-700 mb-1">
-                Last Purchase Price (read-only)
-              </label>
-              <input
-                id="last-purchase-price"
-                type="text"
-                value={lastPurchasePrice || '—'}
-                readOnly
-                disabled
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-              />
-              <p className="text-xs text-gray-500 mt-1">From latest goods receipt</p>
-            </div>
+            {lastPurchasePrice != null && lastPurchasePrice !== '' && (
+              <div>
+                <label
+                  htmlFor="last-purchase-price"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                  title="From latest goods receipt"
+                >
+                  Last purchase
+                </label>
+                <input
+                  id="last-purchase-price"
+                  type="text"
+                  value={lastPurchasePrice}
+                  readOnly
+                  disabled
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -199,7 +199,7 @@ export default function CategoryCombobox({ value, onChange, disabled = false }: 
         onKeyDown={handleKeyDown}
         disabled={disabled}
         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-8"
-        placeholder="Search or create category..."
+        placeholder="Category"
         data-category-combobox="true"
       />
       <button

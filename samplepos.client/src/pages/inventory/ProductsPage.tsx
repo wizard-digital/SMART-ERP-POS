@@ -1904,7 +1904,7 @@ export default function ProductsPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-[95vw] sm:max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b px-6 py-4">
               <h3 className="text-xl font-bold text-gray-900">
-                {modalMode === 'create' ? 'Add New Product' : 'Edit Product'}
+                {modalMode === 'create' ? 'Add product' : 'Edit product'}
               </h3>
             </div>
 
@@ -1960,53 +1960,47 @@ export default function ProductsPage() {
                 <ProductDistributionPolicySection productId={formData.id} />
               )}
 
-              {/* Cost Tracking (Read-only) — inventory products only */}
-              {formData.productType !== 'service' && (
+              {/* Cost tracking — edit only (zeros on create are noise) */}
+              {modalMode === 'edit' && formData.productType !== 'service' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <div>
-                  <label htmlFor="average-cost" className="block text-sm font-medium text-gray-700 mb-1">
-                    Average Cost (Read-only)
+                  <label
+                    htmlFor="average-cost"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                    title="System average for AVCO"
+                  >
+                    Avg cost
                   </label>
                   <input
                     id="average-cost"
                     type="number"
-                    step="0.01"
+                    step="1"
                     value={formData.averageCost}
                     readOnly
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                     placeholder="0.00"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Calculated by system for AVCO method</p>
                 </div>
 
                 <div>
-                  <label htmlFor="last-cost" className="block text-sm font-medium text-gray-700 mb-1">
-                    Last Cost (Read-only)
+                  <label
+                    htmlFor="last-cost"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                    title="Last purchase cost from goods receipt"
+                  >
+                    Last cost
                   </label>
                   <input
                     id="last-cost"
                     type="number"
-                    step="0.01"
+                    step="1"
                     value={formData.lastCost}
                     readOnly
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
                     placeholder="0.00"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Last purchase cost from goods receipt</p>
                 </div>
               </div>
-              )}
-
-              {/* Margin Display */}
-              {formData.costPrice && formData.sellingPrice && (
-                <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                  <div className="text-sm text-gray-700">
-                    <strong>Profit Margin:</strong>{' '}
-                    <span className="text-blue-600 font-semibold">
-                      {calculateMargin(formData.costPrice, formData.sellingPrice)}%
-                    </span>
-                  </div>
-                </div>
               )}
 
               {/* BR-PRC-001 — only when selling is below cost */}
@@ -2015,95 +2009,94 @@ export default function ProductsPage() {
                 const sell = parseFloat(formData.sellingPrice || '0') || 0;
                 if (sell >= cost) return null;
                 return (
-                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded">
-                    <p className="text-xs text-yellow-800">
-                      <strong>⚠️ {BUSINESS_RULES.PRC_001}</strong>: Selling price must be greater than or
-                      equal to cost price
-                    </p>
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    {BUSINESS_RULES.PRC_001}: selling price must be ≥ cost
                   </div>
                 );
               })()}
 
-              {/* Inventory Snapshot — not for service dishes */}
-              {formData.productType !== 'service' && (
+              {/* QOH + Adjust — edit only */}
+              {modalMode === 'edit' && formData.productType !== 'service' && (
               <div className="border-t pt-4">
-                <h4 className="font-medium text-gray-900 mb-3">Inventory Snapshot</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className={isMultistoreEnabled ? 'md:col-span-2' : undefined}>
-                    <label htmlFor="quantity-on-hand" className="block text-sm font-medium text-gray-700 mb-1">
-                      Quantity On Hand (Read-only)
-                    </label>
-                    <div className="flex flex-wrap gap-2 items-stretch">
-                      <input
-                        id="quantity-on-hand"
-                        type="number"
-                        step="0.01"
-                        value={formData.quantityOnHand}
-                        readOnly
-                        className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                        placeholder="0"
-                      />
-                      {modalMode === 'edit' && formData.id && canAdjustInventory && isMultistoreEnabled ? (
-                        <select
-                          id="product-adjust-store"
-                          data-product-adjust-store="true"
-                          aria-label="Adjust at store"
-                          value={productAdjustStoreId}
-                          onChange={(e) => setProductAdjustStoreId(e.target.value)}
-                          className="min-w-[10rem] px-2 py-2 text-sm border border-gray-300 rounded-lg bg-white"
-                        >
-                          {storeLocations
-                            .filter(
-                              (s) =>
-                                s.isActive &&
-                                ['MAIN', 'SELLING', 'DAMAGE', 'EXPIRED', 'RETURN'].includes(s.storeType),
-                            )
-                            .map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name} ({s.code})
-                              </option>
-                            ))}
-                        </select>
-                      ) : null}
-                      {modalMode === 'edit' && formData.id && canAdjustInventory ? (
-                        <button
-                          type="button"
-                          data-product-adjust-inventory="true"
-                          onClick={() => {
-                            void handleOpenAdjustFromProduct();
-                          }}
-                          className="shrink-0 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap"
-                          title="Adjust inventory quantity at selected store / FEFO lot"
-                        >
-                          Adjust
-                        </button>
-                      ) : null}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {isMultistoreEnabled
-                        ? "Adjust posts to the selected store's FEFO lot/batch (store-available qty)."
-                        : 'Current stock from inventory. Adjust uses FEFO batch when multiple exist.'}
-                    </p>
+                <div className={isMultistoreEnabled ? 'md:max-w-xl' : 'md:max-w-xs'}>
+                  <label
+                    htmlFor="quantity-on-hand"
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                    title={
+                      isMultistoreEnabled
+                        ? "Adjust posts to the selected store's FEFO lot"
+                        : 'Current stock; Adjust uses FEFO when multiple lots exist'
+                    }
+                  >
+                    Qty on hand
+                  </label>
+                  <div className="flex flex-wrap gap-2 items-stretch">
+                    <input
+                      id="quantity-on-hand"
+                      type="number"
+                      step="1"
+                      value={formData.quantityOnHand}
+                      readOnly
+                      className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      placeholder="0"
+                    />
+                    {formData.id && canAdjustInventory && isMultistoreEnabled ? (
+                      <select
+                        id="product-adjust-store"
+                        data-product-adjust-store="true"
+                        aria-label="Adjust at store"
+                        title="Store for adjust"
+                        value={productAdjustStoreId}
+                        onChange={(e) => setProductAdjustStoreId(e.target.value)}
+                        className="min-w-[10rem] px-2 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                      >
+                        {storeLocations
+                          .filter(
+                            (s) =>
+                              s.isActive &&
+                              ['MAIN', 'SELLING', 'DAMAGE', 'EXPIRED', 'RETURN'].includes(s.storeType),
+                          )
+                          .map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.code})
+                            </option>
+                          ))}
+                      </select>
+                    ) : null}
+                    {formData.id && canAdjustInventory ? (
+                      <button
+                        type="button"
+                        data-product-adjust-inventory="true"
+                        onClick={() => {
+                          void handleOpenAdjustFromProduct();
+                        }}
+                        className="shrink-0 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap"
+                        title="Adjust at selected store / FEFO lot"
+                      >
+                        Adjust
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
               )}
 
-              {/* Multi-Unit of Measure */}
+              {/* Units */}
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-3">
-                  <div>
-                    <h4 className="font-medium text-gray-900">Multi-Unit of Measure</h4>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Configure alternate units for this product with automatic conversion factors
-                    </p>
-                  </div>
+                  <h4
+                    className="font-medium text-gray-900"
+                    title="Alternate units with conversion factors"
+                  >
+                    Units
+                  </h4>
                   <button
                     type="button"
                     onClick={handleAddUomClick}
                     className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                    title="Add a conversion unit"
                   >
-                    + Add Unit
+                    + Add unit
                   </button>
                 </div>
 
@@ -2206,12 +2199,7 @@ export default function ProductsPage() {
                       </tbody>
                     </table>
                   </div>
-                ) : (
-                  <div className="text-center py-6 bg-gray-50 rounded border border-dashed border-gray-300">
-                    <p className="text-sm text-gray-500">No alternate units configured</p>
-                    <p className="text-xs text-gray-400 mt-1">Click "Add Unit" to configure conversion factors</p>
-                  </div>
-                )}
+                ) : null}
               </div>
 
               {/* Status handled within shared ProductForm */}
