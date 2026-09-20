@@ -2,6 +2,7 @@
 // Validation for price rules, product categories, and price calculation requests
 
 import { z } from 'zod';
+import { normalizeProductCategoryName } from '../utils/productCategoryName.js';
 
 // ============================================================================
 // Enums
@@ -14,6 +15,11 @@ export type PriceRuleType = z.infer<typeof PriceRuleType>;
 // Product Category
 // ============================================================================
 
+const ProductCategoryNameSchema = z
+  .string()
+  .transform((v) => normalizeProductCategoryName(v))
+  .pipe(z.string().min(1, 'Category name is required').max(255));
+
 export const ProductCategorySchema = z.object({
     id: z.string().uuid(),
     name: z.string().min(1).max(255),
@@ -24,12 +30,12 @@ export const ProductCategorySchema = z.object({
 }).strict();
 
 export const CreateProductCategorySchema = z.object({
-    name: z.string().min(1, 'Category name is required').max(255),
+    name: ProductCategoryNameSchema,
     description: z.string().max(1000).optional(),
 }).strict();
 
 export const UpdateProductCategorySchema = z.object({
-    name: z.string().min(1).max(255).optional(),
+    name: ProductCategoryNameSchema.optional(),
     description: z.string().max(1000).nullable().optional(),
     isActive: z.boolean().optional(),
 }).strict();

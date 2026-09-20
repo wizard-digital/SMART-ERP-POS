@@ -1,0 +1,40 @@
+{
+  "proof": "PRODUCT_CATEGORY_NAME_SSOT",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-20T16:57:17.121Z",
+  "passed": 6,
+  "total": 6,
+  "gates": [
+    {
+      "id": "NORMALIZE_COLLAPSE_WS",
+      "ok": true,
+      "detail": "normalize trims and collapses whitespace"
+    },
+    {
+      "id": "EQUAL_CASE_INSENSITIVE",
+      "ok": true,
+      "detail": "equal ignores case and surrounding spaces"
+    },
+    {
+      "id": "SQL_CI_UNIQUE_INDEX",
+      "ok": true,
+      "detail": "Migration 618 merges dups + unique on LOWER(TRIM(name))"
+    },
+    {
+      "id": "ZOD_NORMALIZE_NAME",
+      "ok": true,
+      "detail": "Create/Update schemas normalize category names"
+    },
+    {
+      "id": "API_CI_LOOKUP",
+      "ok": true,
+      "detail": "API lookup + ConflictError on duplicate / unique violation"
+    },
+    {
+      "id": "UI_DUP_GUARD",
+      "ok": true,
+      "detail": "Categories page + combobox block duplicate names"
+    }
+  ],
+  "integrity": "Product categories cannot share the same name ignoring case/whitespace; DB unique index + API ConflictError + UI guards."
+}

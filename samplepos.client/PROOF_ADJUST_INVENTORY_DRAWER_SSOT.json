@@ -1,0 +1,45 @@
+{
+  "proof": "ADJUST_INVENTORY_DRAWER_SSOT",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-20T16:57:17.097Z",
+  "passed": 7,
+  "total": 7,
+  "gates": [
+    {
+      "id": "DRAWER_SSOT_FILE",
+      "ok": true,
+      "detail": "Shared drawer owns BatchAdjustmentSchema + useAdjustBatch submit"
+    },
+    {
+      "id": "ADJ_PAGE_USES_SHARED_DRAWER",
+      "ok": true,
+      "detail": "Adjustments page mounts shared drawer only (no inline adjust form)"
+    },
+    {
+      "id": "PRODUCTS_EDIT_ADJUST_BUTTON",
+      "ok": true,
+      "detail": "Edit Product has Adjust button beside QOH opening shared drawer"
+    },
+    {
+      "id": "PRODUCTS_ADJUST_QTY_STORE_SSOT",
+      "ok": true,
+      "detail": "Edit Product: store picker + FEFO lot/batch select; store lots carry inventoryBatchId"
+    },
+    {
+      "id": "API_STORE_PRODUCT_LOTS_BATCH_ID",
+      "ok": true,
+      "detail": "listLotsForProductAtStore returns inventoryBatchId for lot↔batch coupling"
+    },
+    {
+      "id": "NO_DUPLICATE_ADJUST_SUBMIT_UI",
+      "ok": true,
+      "detail": "Products has no forked adjust schema; Adjustments keeps PHYSICAL_COUNT only"
+    },
+    {
+      "id": "DRAWER_INITIAL_CATEGORY",
+      "ok": true,
+      "detail": "Damage row action prefills shared drawer category (no local form state)"
+    }
+  ],
+  "integrity": "Adjust Inventory UI+submit is one AdjustInventoryDrawer; Inventory Adjustments and Products Edit Product both mount it; no duplicated single-adjust form."
+}

@@ -702,14 +702,27 @@ export async function getCategoryById(pool: Pool | PoolClient, id: string) {
 }
 
 export async function createCategory(pool: Pool | PoolClient, data: CreateProductCategory) {
-    // Check uniqueness
-    const existing = await repo.getCategoryByName(pool, data.name);
+    const name = data.name; // already normalized by CreateProductCategorySchema
+    // Case-insensitive uniqueness SSOT (matches uq_product_categories_name_ci)
+    const existing = await repo.getCategoryByName(pool, name);
     if (existing) {
-        throw new ConflictError(`Product category "${data.name}" already exists`);
+        throw new ConflictError(
+            `Product category "${existing.name}" already exists. Names must be unique (case-insensitive).`,
+        );
     }
-    const row = await repo.createCategory(pool, data);
-    logger.info('Product category created', { categoryId: row.id, name: row.name });
-    return normaliseProductCategory(row);
+    try {
+        const row = await repo.createCategory(pool, { ...data, name });
+        logger.info('Product category created', { categoryId: row.id, name: row.name });
+        return normaliseProductCategory(row);
+    } catch (err) {
+        const pg = err as { code?: string };
+        if (pg.code === '23505') {
+            throw new ConflictError(
+                `Product category "${name}" already exists. Names must be unique (case-insensitive).`,
+            );
+        }
+        throw err;
+    }
 }
 
 export async function updateCategory(
@@ -717,17 +730,30 @@ export async function updateCategory(
     id: string,
     data: UpdateProductCategory,
 ) {
-    // Check name uniqueness if changing
+    // Check name uniqueness if changing (case-insensitive)
     if (data.name) {
         const existing = await repo.getCategoryByName(pool, data.name);
         if (existing && existing.id !== id) {
-            throw new ConflictError(`Product category "${data.name}" already exists`);
+            throw new ConflictError(
+                `Product category "${existing.name}" already exists. Names must be unique (case-insensitive).`,
+            );
         }
     }
-    const row = await repo.updateCategory(pool, id, data);
-    if (!row) throw new NotFoundError(`Product category ${id}`);
-    logger.info('Product category updated', { categoryId: id });
-    return normaliseProductCategory(row);
+    try {
+        const row = await repo.updateCategory(pool, id, data);
+        if (!row) throw new NotFoundError(`Product category ${id}`);
+        logger.info('Product category updated', { categoryId: id });
+        return normaliseProductCategory(row);
+    } catch (err) {
+        if (err instanceof NotFoundError || err instanceof ConflictError) throw err;
+        const pg = err as { code?: string };
+        if (pg.code === '23505') {
+            throw new ConflictError(
+                `Product category "${data.name ?? ''}" already exists. Names must be unique (case-insensitive).`,
+            );
+        }
+        throw err;
+    }
 }
 
 /**

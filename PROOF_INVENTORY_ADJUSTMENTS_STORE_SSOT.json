@@ -1,0 +1,35 @@
+{
+  "proof": "INVENTORY_ADJUSTMENTS_STORE_SSOT",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-20T16:57:17.095Z",
+  "passed": 5,
+  "total": 5,
+  "gates": [
+    {
+      "id": "UI_ADJ_DEFAULT_SELLING",
+      "ok": true,
+      "detail": "Adjustments default store is SELLING (INV-POS), not MAIN"
+    },
+    {
+      "id": "UI_ADJ_STORE_AVAILABLE_QTY",
+      "ok": true,
+      "detail": "Modal Current Quantity uses store-available lot/batch FEFO, not batch master alone"
+    },
+    {
+      "id": "API_ADJ_DEFAULT_SELLING",
+      "ok": true,
+      "detail": "resolveDefaultStoreId prefers POS SELLING"
+    },
+    {
+      "id": "API_ADJ_STORE_SELLABLE_PREFLIGHT",
+      "ok": true,
+      "detail": "OUT adjustments refuse wrong-store debit with clear message"
+    },
+    {
+      "id": "API_STORE_LOTS_BATCH_ID",
+      "ok": true,
+      "detail": "listLotsAtStore returns inventoryBatchId for batch coupling"
+    }
+  ],
+  "integrity": "Multistore Adjustments default to SELLING; Current Quantity is store-available; OUT preflights sellable at chosen store; store lots expose inventoryBatchId."
+}

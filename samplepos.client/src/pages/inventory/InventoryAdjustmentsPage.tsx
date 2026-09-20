@@ -9,11 +9,10 @@
  * Backend automatically handles batch selection (MAIN batch)
  */
 
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ResponsiveTableWrapper } from '../../components/ui/ResponsiveTableWrapper';
-import { ResponsiveGrid } from '../../components/ui/ResponsiveGrid';
 import {
   AdaptivePage,
   AdaptiveToolbar,
@@ -30,7 +29,7 @@ import {
 import { AdaptiveRowActions } from '../../components/adaptive';
 import { InventoryColumnPicker } from '../../components/inventory/InventoryColumnPicker';
 import { useInventoryColumnPrefs } from '../../hooks/useInventoryColumnPrefs';
-import { useStockLevels, useAdjustInventory, useAdjustBatch } from '../../hooks/useInventory';
+import { useStockLevels, useAdjustBatch } from '../../hooks/useInventory';
 import { useMultistoreEnabled } from '../../hooks/useMultistore';
 import { useStoreLocations, useStockLevelsByStore, useStoreLotsAtStore } from '../../hooks/useWarehouse';
 import { StoreLocationSelect } from '../../components/inventory/StoreLocationSelect';
@@ -38,18 +37,20 @@ import { useProducts } from '../../hooks/useProducts';
 import { useStockMovements } from '../../hooks/useStockMovements';
 import { BatchAdjustmentSchema } from '@shared/zod/inventory';
 import { INVENTORY_STOCK_ADJUST_PERMISSIONS } from '@shared/authorization/inventoryAdjustPermissions';
-import apiClient from '../../utils/api';
-import { handleApiError } from '../../utils/errorHandler';
 import { useHasAnyPermission } from '../../authorization/useAuthorization';
-import Decimal from 'decimal.js';
-import { z } from 'zod';
 import { getBusinessDate } from '../../utils/businessDate';
-import { SortableTableHeader } from '../../components/ui/SortableTableHeader';
 import { MobileSortSelect } from '../../components/ui/MobileSortSelect';
 import { useColumnSort } from '../../hooks/useColumnSort';
 import { applyTableSort } from '../../lib/tableSortUtils';
 import SlideDrawer from '../../components/ui/SlideDrawer';
 import { WorkflowHelpTrigger } from '../../components/inventory/shared';
+import {
+  AdjustInventoryDrawer,
+  resolveAdjustInventoryTarget,
+  resolveDefaultAdjustStoreId,
+  formatAdjustStoreLabel,
+  type AdjustInventoryTarget,
+} from '../../components/inventory/AdjustInventoryDrawer';
 
 type AdjustmentBatchSortField =
   | 'product'
@@ -130,14 +131,18 @@ export default function InventoryAdjustmentsPage() {
   const queryClient = useQueryClient();
   const { isMultistoreEnabled } = useMultistoreEnabled();
   const { data: stores = [] } = useStoreLocations(isMultistoreEnabled);
-  const mainStore = stores.find((s) => s.storeType === 'MAIN') ?? stores.find((s) => s.isDefaultReceiving);
+  // INV-POS SSOT: sellable stock lives on SELLING — never default Adjustments to MAIN warehouse.
+  const defaultAdjustmentStoreId = resolveDefaultAdjustStoreId(stores);
   const [adjustmentStoreId, setAdjustmentStoreId] = useState<string>('');
+  const adjustmentStoreLabel = formatAdjustStoreLabel(
+    stores.find((s) => s.id === (adjustmentStoreId || defaultAdjustmentStoreId)),
+  );
 
   useEffect(() => {
-    if (mainStore?.id && !adjustmentStoreId) {
-      setAdjustmentStoreId(mainStore.id);
+    if (defaultAdjustmentStoreId && !adjustmentStoreId) {
+      setAdjustmentStoreId(defaultAdjustmentStoreId);
     }
-  }, [mainStore?.id, adjustmentStoreId]);
+  }, [defaultAdjustmentStoreId, adjustmentStoreId]);
 
   const { data: stockLevelsData, isLoading, error } = useStockLevels();
   const { data: storeStockLevels = [] } = useStockLevelsByStore(
@@ -148,8 +153,6 @@ export default function InventoryAdjustmentsPage() {
     adjustmentStoreId || null,
     isMultistoreEnabled && !!adjustmentStoreId,
   );
-  const adjustInventoryMutation = useAdjustInventory();
-  void adjustInventoryMutation;
   const adjustBatchMutation = useAdjustBatch();
   // Load products for category map (static, for batch search)
   const { data: productsData } = useProducts({ limit: 500 });
@@ -171,16 +174,11 @@ export default function InventoryAdjustmentsPage() {
   const { sortField, sortOrder, handleSort, setSortOrder } =
     useColumnSort<AdjustmentBatchSortField>('product', 'asc');
   const [physicalCountPage, setPhysicalCountPage] = useState(1);
-  const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<AdjustInventoryTarget | null>(null);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
-
-  // Adjustment form state
-  const [adjustmentType, setAdjustmentType] = useState<'increase' | 'decrease'>('increase');
-  const [movementCategory, setMovementCategory] = useState<'ADJUSTMENT' | 'DAMAGE' | 'EXPIRY'>(
-    'ADJUSTMENT'
-  );
-  const [adjustmentQuantity, setAdjustmentQuantity] = useState('');
-  const [adjustmentReason, setAdjustmentReason] = useState('');
+  const [adjustInitialCategory, setAdjustInitialCategory] = useState<
+    'ADJUSTMENT' | 'DAMAGE' | 'EXPIRY'
+  >('ADJUSTMENT');
 
   // Physical Count modal state
   const [showPhysicalCountModal, setShowPhysicalCountModal] = useState(false);
@@ -197,10 +195,6 @@ export default function InventoryAdjustmentsPage() {
   const pcSearchParam = physicalCountSearchTerm.trim().length >= 2 ? physicalCountSearchTerm.trim() : undefined;
   const { data: pcProductsData } = useProducts({ search: pcSearchParam, limit: 500 });
 
-  // Refs for keyboard navigation
-  const quantityInputRef = useRef<HTMLInputElement>(null);
-  const reasonInputRef = useRef<HTMLTextAreaElement>(null);
-
   // Get current user from localStorage
   const currentUser = useMemo(() => {
     try {
@@ -210,25 +204,6 @@ export default function InventoryAdjustmentsPage() {
       return null;
     }
   }, []);
-
-  // Keyboard shortcuts for modal
-  useEffect(() => {
-    if (!showAdjustModal) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Enter to submit (if not in textarea)
-      if (e.key === 'Enter' && !e.shiftKey && e.target !== reasonInputRef.current) {
-        e.preventDefault();
-        if (adjustmentQuantity && adjustmentReason && !adjustBatchMutation.isPending) {
-          handleSubmitAdjustment();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAdjustModal, adjustmentQuantity, adjustmentReason, adjustBatchMutation.isPending]);
 
   // Keyboard shortcuts for physical count modal
   useEffect(() => {
@@ -251,13 +226,6 @@ export default function InventoryAdjustmentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPhysicalCountModal, isProcessingCount, countedQuantities, physicalCountReason]);
 
-  // Auto-focus quantity input when modal opens
-  useEffect(() => {
-    if (showAdjustModal && quantityInputRef.current) {
-      setTimeout(() => quantityInputRef.current?.focus(), 100);
-    }
-  }, [showAdjustModal]);
-
   const canAdjust = useHasAnyPermission([...INVENTORY_STOCK_ADJUST_PERMISSIONS]);
 
   const adjustmentStores = useMemo(
@@ -271,10 +239,11 @@ export default function InventoryAdjustmentsPage() {
       return storeLots.map((lot) => ({
         id: lot.productLotId,
         product_lot_id: lot.productLotId,
-        batch_id: undefined,
+        batch_id: lot.inventoryBatchId ?? undefined,
         product_id: lot.productId,
         product_name: lot.productName,
         batch_number: lot.lotNumber,
+        // Store-available qty is SSOT for this screen — never overwrite with batch master alone.
         remaining_quantity: lot.availableQuantity,
         expiry_date: lot.expiryDate,
         cost_price: 0,
@@ -574,8 +543,11 @@ export default function InventoryAdjustmentsPage() {
     return Array.isArray(recentAdjustmentsData.data) ? recentAdjustmentsData.data : [];
   }, [recentAdjustmentsData]);
 
-  // Handle adjustment modal open — resolve a real inventory_batches row (FEFO) for GL/batch coupling
-  const handleOpenAdjustModal = async (batch: Batch) => {
+  // Handle adjustment modal open — shared resolver for batch + store-available qty
+  const handleOpenAdjustModal = async (
+    batch: Batch,
+    initialMovementCategory: 'ADJUSTMENT' | 'DAMAGE' | 'EXPIRY' = 'ADJUSTMENT',
+  ) => {
     if (!canAdjust) {
       alert(
         'You do not have permission to adjust inventory. Need inventory.adjust or inventory.approve.',
@@ -583,249 +555,25 @@ export default function InventoryAdjustmentsPage() {
       return;
     }
 
-    let resolved = batch;
-    try {
-      const res = await apiClient.get('/inventory/batches', {
-        params: { productId: batch.product_id },
-      });
-      const rows = (res.data?.data ?? []) as Array<{
-        id: string;
-        batch_number: string;
-        remaining_quantity: number | string;
-        cost_price?: number | string;
-        expiry_date?: string | null;
-        status?: string;
-      }>;
-      const withStock = rows.filter((b) => Number(b.remaining_quantity) > 0);
-      const pick = withStock[0] ?? rows[0];
-      if (pick?.id) {
-        resolved = {
-          ...batch,
-          batch_id: pick.id,
-          batch_number: pick.batch_number ?? batch.batch_number,
-          remaining_quantity: Number(pick.remaining_quantity),
-          cost_price: parseFloat(String(pick.cost_price ?? batch.cost_price ?? 0)),
-          expiry_date: pick.expiry_date ?? batch.expiry_date,
-          status: pick.status ?? batch.status,
-        };
-      }
-    } catch {
-      // Fall back to stock-level row; backend will FEFO-select when batchId omitted
-    }
-
-    setSelectedBatch(resolved);
-    setMovementCategory('ADJUSTMENT');
-    setAdjustmentType('increase');
-    setAdjustmentQuantity('');
-    setAdjustmentReason('');
+    const target = await resolveAdjustInventoryTarget({
+      productId: batch.product_id,
+      productName: batch.product_name,
+      preferredBatchId: batch.batch_id,
+      productLotId: batch.product_lot_id,
+      batchNumber: batch.batch_number,
+      currentQuantity: batch.remaining_quantity,
+      storeLocationId: isMultistoreEnabled ? adjustmentStoreId || undefined : undefined,
+      storeLabel: isMultistoreEnabled ? adjustmentStoreLabel : undefined,
+    });
+    setAdjustInitialCategory(initialMovementCategory);
+    setAdjustTarget(target);
     setShowAdjustModal(true);
   };
-
-  // Handle adjustment submission
-  const handleSubmitAdjustment = useCallback(async () => {
-    if (!selectedBatch || !currentUser) {
-      alert('Missing required data. Please try again.');
-      return;
-    }
-
-    const qty = new Decimal(adjustmentQuantity || 0).toNumber();
-    if (qty <= 0) {
-      alert('Quantity must be a positive number.');
-      return;
-    }
-
-    // Map UI category + direction to enterprise reason + direction
-    type AdjReason = 'ADJUSTMENT' | 'DAMAGE' | 'EXPIRY' | 'PHYSICAL_COUNT' | 'WRITE_OFF';
-    type AdjDir = 'IN' | 'OUT';
-
-    const reason: AdjReason =
-      movementCategory === 'DAMAGE'
-        ? 'DAMAGE'
-        : movementCategory === 'EXPIRY'
-          ? 'EXPIRY'
-          : 'ADJUSTMENT';
-
-    const direction: AdjDir =
-      movementCategory === 'DAMAGE' || movementCategory === 'EXPIRY'
-        ? 'OUT'
-        : adjustmentType === 'increase'
-          ? 'IN'
-          : 'OUT';
-
-    try {
-      const validatedData = BatchAdjustmentSchema.parse({
-        batchId:
-          selectedBatch.batch_id
-          ?? (selectedBatch.id && selectedBatch.id !== selectedBatch.product_id && !selectedBatch.product_lot_id
-            ? selectedBatch.id
-            : undefined),
-        productLotId: selectedBatch.product_lot_id,
-        productId: selectedBatch.product_id,
-        storeLocationId: isMultistoreEnabled ? adjustmentStoreId || undefined : undefined,
-        quantity: qty,
-        direction,
-        reason,
-        notes: adjustmentReason,
-        userId: currentUser.id,
-      });
-
-      await adjustBatchMutation.mutateAsync(validatedData);
-
-      const isPartialQuarantine =
-        (reason === 'DAMAGE' || reason === 'EXPIRY') &&
-        qty > 0 &&
-        qty < Number(selectedBatch.remaining_quantity) - 0.0001;
-
-      const typeLabel =
-        reason === 'DAMAGE'
-          ? isPartialQuarantine
-            ? `Partial damage quarantined (${qty} units; remainder stays sellable). Dispose from Inventory → Quarantine (DAMAGE band).`
-            : 'Damage quarantined (no P&L yet). Dispose from Inventory → Quarantine (DAMAGE band).'
-          : reason === 'EXPIRY'
-            ? isPartialQuarantine
-              ? `Partial expiry quarantined (${qty} units; remainder stays sellable). Dispose from Inventory → Quarantine (EXPIRED band).`
-              : 'Expiry quarantined (no P&L yet). Dispose from Inventory → Quarantine (EXPIRED band).'
-            : direction === 'IN'
-              ? 'Stock increased'
-              : 'Stock decreased';
-
-      alert(`${typeLabel} successfully!`);
-      setShowAdjustModal(false);
-      setSelectedBatch(null);
-      setAdjustmentQuantity('');
-      setAdjustmentReason('');
-      setMovementCategory('ADJUSTMENT');
-      setAdjustmentType('increase');
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const first = error.issues[0];
-        alert(`Validation: ${first?.message ?? 'Invalid input'}`);
-        return;
-      }
-      // Parse domain errors from the backend
-      const apiErr = error as {
-        response?: {
-          data?: {
-            error?: string;
-            error_code?: string;
-            details?: {
-              remaining?: number;
-              requested?: number;
-              deltaGap?: number;
-              batchNumber?: string;
-            };
-          };
-        };
-      };
-      const errorCode = apiErr?.response?.data?.error_code;
-      const details = apiErr?.response?.data?.details;
-      if (errorCode === 'INSUFFICIENT_BATCH_QTY') {
-        alert(
-          `Cannot reduce stock.\nBatch has ${details?.remaining ?? 0} unit(s) remaining, but ${details?.requested ?? qty} unit(s) were requested.`
-        );
-        return;
-      }
-      if (errorCode === 'ERR_INVENTORY_BATCH_NO_COST') {
-        alert(
-          apiErr?.response?.data?.error ??
-            'This batch has no unit cost. Repair batch valuation or receive stock with cost before reducing inventory.'
-        );
-        return;
-      }
-      if (errorCode === 'ERR_WAREHOUSE_LAYER_COUPLING') {
-        alert(
-          apiErr?.response?.data?.error ??
-            'Warehouse batch and store balances are out of sync for this product. Retry the adjustment; if it persists, contact support.',
-        );
-        return;
-      }
-      if (errorCode === 'ERR_INVENTORY_GL_COUPLING') {
-        alert(
-          apiErr?.response?.data?.error ??
-            `Inventory and GL would drift by ${details?.deltaGap ?? 'unknown'} UGX. Use Repair Valuation or contact support.`
-        );
-        return;
-      }
-      console.error('Adjustment failed:', error);
-      handleApiError(error, { fallback: 'Failed to adjust inventory' });
-    }
-  }, [
-    selectedBatch,
-    currentUser,
-    adjustmentQuantity,
-    adjustmentType,
-    adjustmentReason,
-    movementCategory,
-    adjustBatchMutation,
-    queryClient,
-  ]);
 
   // View full audit trail in Stock Movements page
   const handleViewAllMovements = () => {
     navigate('/inventory/stock-movements?type=ADJUSTMENT_IN,ADJUSTMENT_OUT,DAMAGE,EXPIRY');
   };
-
-  // Calculate new quantity for preview with real-time validation
-  const previewNewQuantity = useMemo(() => {
-    if (!selectedBatch || !adjustmentQuantity) return null;
-
-    const current = new Decimal(selectedBatch.remaining_quantity);
-    const adjustment = new Decimal(adjustmentQuantity || 0);
-
-    // DAMAGE/EXPIRY quarantine:
-    // - full batch: remaining unchanged until dispose (LQ-INV-1)
-    // - partial: lot split — this batch keeps (current − qty) sellable
-    if (movementCategory === 'DAMAGE' || movementCategory === 'EXPIRY') {
-      if (adjustment.gt(0) && adjustment.lt(current)) {
-        return current.minus(adjustment).toNumber();
-      }
-      return current.toNumber();
-    }
-
-    const newQty =
-      adjustmentType === 'increase' ? current.plus(adjustment) : current.minus(adjustment);
-
-    return newQty.toNumber();
-  }, [selectedBatch, adjustmentQuantity, adjustmentType, movementCategory]);
-
-  const quarantinePreviewHint = useMemo(() => {
-    if (
-      (movementCategory !== 'DAMAGE' && movementCategory !== 'EXPIRY') ||
-      !selectedBatch ||
-      !adjustmentQuantity
-    ) {
-      return null;
-    }
-    const current = Number(selectedBatch.remaining_quantity);
-    const qty = Number(adjustmentQuantity);
-    if (!(qty > 0) || qty > current + 0.0001) return null;
-    if (Math.abs(qty - current) <= 0.0001) {
-      return 'Full batch will be quarantined (non-sellable). No P&L until Dispose.';
-    }
-    return `Partial: ${qty} quarantined; ${(current - qty).toFixed(2)} stays sellable on this batch (lot split). No P&L until Dispose.`;
-  }, [movementCategory, selectedBatch, adjustmentQuantity]);
-
-  // Real-time form validation
-  const formValidation = useMemo(() => {
-    const errors: Record<string, string> = {};
-
-    if (adjustmentQuantity && parseFloat(adjustmentQuantity) <= 0) {
-      errors.quantity = 'Quantity must be greater than zero';
-    }
-
-    if (previewNewQuantity !== null && previewNewQuantity < 0) {
-      errors.quantity = 'Resulting quantity cannot be negative';
-    }
-
-    if (adjustmentReason && adjustmentReason.length < 5) {
-      errors.reason = 'Reason must be at least 5 characters';
-    }
-
-    return {
-      errors,
-      isValid: Object.keys(errors).length === 0 && adjustmentQuantity && adjustmentReason,
-    };
-  }, [adjustmentQuantity, adjustmentReason, previewNewQuantity]);
 
   // Must stay above loading/error/permission early returns — hooks order SSOT.
   const adjustmentBatchColumns: AdaptiveDataColumn<Batch>[] = useMemo(() => {
@@ -1166,11 +914,7 @@ export default function InventoryAdjustmentsPage() {
                   label: 'Damage',
                   tone: 'warning',
                   onClick: () => {
-                    handleOpenAdjustModal(batch);
-                    setTimeout(() => {
-                      setMovementCategory('DAMAGE');
-                      setAdjustmentType('decrease');
-                    }, 0);
+                    void handleOpenAdjustModal(batch, 'DAMAGE');
                   },
                 },
                 {
@@ -1216,249 +960,17 @@ export default function InventoryAdjustmentsPage() {
 
       </AdaptivePage>
 
-      {/* Adjustment workspace */}
-      {showAdjustModal && selectedBatch && (
-        <SlideDrawer
-          open
-          onClose={() => setShowAdjustModal(false)}
-          title={
-            movementCategory === 'DAMAGE'
-              ? 'Record Damage'
-              : movementCategory === 'EXPIRY'
-                ? 'Quarantine Expired Stock'
-                : 'Adjust Inventory'
-          }
-          subtitle={`${selectedBatch.product_name} — ${selectedBatch.batch_number}`}
-          width="xl"
-          transactional
-          cancellable={false}
-          guardLabel="Stock adjustment"
-          footer={
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowAdjustModal(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium"
-                disabled={adjustBatchMutation.isPending}
-              >
-                Cancel (Esc)
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleSubmitAdjustment();
-                }}
-                disabled={adjustBatchMutation.isPending || !formValidation.isValid}
-                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                {adjustBatchMutation.isPending
-                  ? 'Saving...'
-                  : movementCategory === 'DAMAGE'
-                    ? 'Record Damage'
-                    : movementCategory === 'EXPIRY'
-                      ? 'Quarantine expired'
-                      : 'Save Adjustment (Enter)'}
-              </button>
-            </div>
-          }
-        >
-            <div className="space-y-4 -mt-2">
-              {/* Current Quantity */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Current Quantity
-                </label>
-                <div className="text-2xl font-bold text-gray-900">
-                  {selectedBatch.remaining_quantity.toFixed(2)}
-                </div>
-              </div>
-
-              {/* Movement Category */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Movement Category
-                </label>
-                <ResponsiveGrid cols={3} className="gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMovementCategory('ADJUSTMENT');
-                      setAdjustmentType('increase');
-                    }}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${movementCategory === 'ADJUSTMENT'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                  >
-                    ⚖️ Adjustment
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMovementCategory('DAMAGE');
-                      setAdjustmentType('decrease');
-                    }}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${movementCategory === 'DAMAGE'
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                  >
-                    ⚠️ Damage
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMovementCategory('EXPIRY');
-                      setAdjustmentType('decrease');
-                    }}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${movementCategory === 'EXPIRY'
-                      ? 'bg-red-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                  >
-                    ⏰ Expiry
-                  </button>
-                </ResponsiveGrid>
-              </div>
-
-              {/* Adjustment Type - only for ADJUSTMENT category */}
-              {movementCategory === 'ADJUSTMENT' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Adjustment Type
-                  </label>
-                  <div className="flex gap-4">
-                    <button
-                      type="button"
-                      onClick={() => setAdjustmentType('increase')}
-                      className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${adjustmentType === 'increase'
-                        ? 'bg-green-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                      ➕ Increase
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAdjustmentType('decrease')}
-                      className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${adjustmentType === 'decrease'
-                        ? 'bg-red-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
-                    >
-                      ➖ Decrease
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Quantity */}
-              <div>
-                <label
-                  htmlFor="adj-quantity"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Adjustment Quantity *
-                </label>
-                <input
-                  ref={quantityInputRef}
-                  id="adj-quantity"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={adjustmentQuantity}
-                  onChange={(e) => setAdjustmentQuantity(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      reasonInputRef.current?.focus();
-                    }
-                  }}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${formValidation.errors.quantity ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  placeholder="0.00"
-                />
-                {formValidation.errors.quantity && (
-                  <p className="text-red-600 text-sm mt-1">{formValidation.errors.quantity}</p>
-                )}
-              </div>
-
-              {/* Preview New Quantity */}
-              {previewNewQuantity !== null && (
-                <div
-                  className={`border rounded-lg p-3 ${previewNewQuantity < 0
-                    ? 'bg-red-50 border-red-300'
-                    : 'bg-blue-50 border-blue-200'
-                    }`}
-                >
-                  <div
-                    className={`text-sm ${previewNewQuantity < 0 ? 'text-red-800' : 'text-blue-800'
-                      }`}
-                  >
-                    <strong>
-                      {(movementCategory === 'DAMAGE' || movementCategory === 'EXPIRY') &&
-                      selectedBatch &&
-                      Number(adjustmentQuantity) > 0 &&
-                      Number(adjustmentQuantity) < Number(selectedBatch.remaining_quantity)
-                        ? 'Sellable left on this batch:'
-                        : 'New Quantity:'}
-                    </strong>{' '}
-                    {previewNewQuantity.toFixed(2)}
-                    {previewNewQuantity < 0 && (
-                      <span className="ml-2">⚠️ Negative quantity not allowed</span>
-                    )}
-                  </div>
-                  {quarantinePreviewHint && (
-                    <p className="text-xs text-blue-700 mt-1">{quarantinePreviewHint}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Reason */}
-              <div>
-                <label
-                  htmlFor="adj-reason"
-                  className="block text-sm font-medium text-gray-700 mb-1"
-                >
-                  Reason * (min 5 characters)
-                </label>
-                <textarea
-                  ref={reasonInputRef}
-                  id="adj-reason"
-                  value={adjustmentReason}
-                  onChange={(e) => setAdjustmentReason(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${formValidation.errors.reason ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  rows={3}
-                  placeholder={
-                    movementCategory === 'DAMAGE'
-                      ? 'Describe the damage: broken packaging, water damage, etc.'
-                      : movementCategory === 'EXPIRY'
-                        ? 'Expired batch disposal, date: ...'
-                        : 'Physical count correction, damaged goods, etc.'
-                  }
-                />
-                {formValidation.errors.reason && (
-                  <p className="text-red-600 text-sm mt-1">{formValidation.errors.reason}</p>
-                )}
-                <p
-                  className={`text-xs mt-1 ${adjustmentReason.length >= 5 ? 'text-green-600' : 'text-gray-500'
-                    }`}
-                >
-                  {adjustmentReason.length}/5 characters minimum
-                </p>
-              </div>
-
-              {/* Keyboard Shortcuts Hint */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
-                <p className="text-xs text-gray-600">
-                  <strong>Keyboard shortcuts:</strong> Enter to submit | Esc to cancel
-                </p>
-              </div>
-            </div>
-        </SlideDrawer>
-      )}
+      {/* Adjustment workspace — SSOT AdjustInventoryDrawer (also used from Products Edit) */}
+      <AdjustInventoryDrawer
+        open={showAdjustModal}
+        target={adjustTarget}
+        initialMovementCategory={adjustInitialCategory}
+        onClose={() => {
+          setShowAdjustModal(false);
+          setAdjustTarget(null);
+          setAdjustInitialCategory('ADJUSTMENT');
+        }}
+      />
 
       {/* Physical count workspace */}
       <SlideDrawer

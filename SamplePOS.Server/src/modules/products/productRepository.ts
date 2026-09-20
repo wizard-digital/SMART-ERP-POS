@@ -232,14 +232,16 @@ async function resolveCategoryId(
   pool: pg.Pool | pg.PoolClient,
   categoryName: string | null | undefined,
 ): Promise<string | null> {
-  const name = categoryName?.trim();
+  const name = String(categoryName ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
   if (!name) return null;
-  const result = await pool.query<{ id: string }>(
-    `SELECT id
+  const result = await pool.query<{ id: string; name: string }>(
+    `SELECT id, name
      FROM product_categories
      WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
        AND COALESCE(is_active, TRUE) = TRUE
-     ORDER BY name
+     ORDER BY created_at ASC NULLS LAST, id ASC
      LIMIT 1`,
     [name],
   );

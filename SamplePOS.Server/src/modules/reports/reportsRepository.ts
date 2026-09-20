@@ -105,9 +105,25 @@ function formatDateOnly(date: Date | string | null | undefined): string | null {
 /** SQL constant for AT TIME ZONE expressions */
 const TZ = BUSINESS_TIMEZONE;
 
-/** Exact category match (trimmed) — products.category is VARCHAR, not UUID */
+/** Category Intelligence / reports SSOT — FK + case-insensitive free-text. */
+function productCategoryMatchSql(productAlias: string, paramIndex: number): string {
+  return `(
+    ${productAlias}.category_id IN (
+      SELECT pc.id FROM product_categories pc
+      WHERE LOWER(TRIM(pc.name)) = LOWER(TRIM($${paramIndex}))
+    )
+    OR LOWER(TRIM(COALESCE(${productAlias}.category, ''))) = LOWER(TRIM($${paramIndex}))
+  )`;
+}
+
+/**
+ * @deprecated Use productCategoryMatchSql — kept for any leftover string greps.
+ * Exact category match (trimmed) — products.category is VARCHAR, not UUID
+ */
 function categoryMatchClause(columnRef: string, paramIndex: number): string {
-  return `TRIM(COALESCE(${columnRef}, 'Uncategorized')) = TRIM($${paramIndex})`;
+  // columnRef historically 'p.category' — derive alias
+  const alias = columnRef.includes('.') ? columnRef.split('.')[0]! : 'p';
+  return productCategoryMatchSql(alias, paramIndex);
 }
 
 /**
@@ -147,15 +163,46 @@ export interface ReportRunRecord {
 
 export const reportsRepository = {
   /**
-   * Get distinct product categories for filter dropdowns
+   * Get distinct product categories for filter dropdowns.
+   * SSOT: one display name per case-insensitive key — prefer product_categories.
    */
   async getProductCategories(pool: Pool): Promise<string[]> {
     const result = await pool.query(
-      `SELECT DISTINCT TRIM(category) AS category FROM products
-       WHERE is_active = true AND category IS NOT NULL AND TRIM(category) != ''
-       ORDER BY category`
+      `WITH linked AS (
+         SELECT
+           LOWER(TRIM(COALESCE(pc.name, p.category))) AS name_key,
+           COALESCE(pc.name, TRIM(p.category)) AS display_name,
+           CASE WHEN pc.id IS NOT NULL THEN 0 ELSE 1 END AS prefer_master
+         FROM products p
+         LEFT JOIN product_categories pc
+           ON pc.id = p.category_id
+           OR (
+             p.category_id IS NULL
+             AND LOWER(TRIM(COALESCE(p.category, ''))) = LOWER(TRIM(pc.name))
+           )
+         WHERE p.is_active = TRUE
+           AND (
+             pc.id IS NOT NULL
+             OR (p.category IS NOT NULL AND TRIM(p.category) <> '')
+           )
+       ),
+       ranked AS (
+         SELECT
+           display_name,
+           name_key,
+           ROW_NUMBER() OVER (
+             PARTITION BY name_key
+             ORDER BY prefer_master ASC, display_name ASC
+           ) AS rn
+         FROM linked
+         WHERE name_key IS NOT NULL AND name_key <> ''
+       )
+       SELECT display_name AS name
+       FROM ranked
+       WHERE rn = 1
+       ORDER BY display_name`
     );
-    return result.rows.map((r: { category: string }) => r.category);
+    return result.rows.map((r: { name: string }) => r.name);
   },
 
   /**
@@ -5582,7 +5629,7 @@ export const reportsRepository = {
         WHERE status = 'ACTIVE'
         GROUP BY product_id
       ) bs ON bs.product_id = p.id
-      WHERE ${categoryMatchClause('p.category', 1)}
+      WHERE ${productCategoryMatchSql('p', 1)}
         AND p.is_active = TRUE
       ORDER BY p.name
     `;

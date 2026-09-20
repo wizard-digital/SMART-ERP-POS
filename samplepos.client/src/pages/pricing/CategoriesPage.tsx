@@ -39,6 +39,10 @@ import type {
   UpdateProductCategoryInput,
   CategoryFilters,
 } from '../../types/pricing';
+import {
+  normalizeProductCategoryName,
+  productCategoryNamesEqual,
+} from '../../../../shared/utils/productCategoryName';
 
 // ============================================================================
 // Component
@@ -218,30 +222,43 @@ export default function CategoriesPage() {
   // ── Validation ──
   const validateForm = useCallback((): boolean => {
     const errors: Record<string, string> = {};
-    if (!formData.name.trim()) errors.name = 'Category name is required';
-    if (formData.name.length > 255) errors.name = 'Name must be 255 characters or less';
+    const normalized = normalizeProductCategoryName(formData.name);
+    if (!normalized) errors.name = 'Category name is required';
+    if (normalized.length > 255) errors.name = 'Name must be 255 characters or less';
     if (formData.description && formData.description.length > 1000) {
       errors.description = 'Description must be 1000 characters or less';
     }
+    // SSOT: no duplicate names (case-insensitive), excluding the row being edited
+    if (normalized && !errors.name) {
+      const clash = allCategories.find(
+        (c) =>
+          productCategoryNamesEqual(c.name, normalized) &&
+          (!editingCategory || c.id !== editingCategory.id),
+      );
+      if (clash) {
+        errors.name = `Category "${clash.name}" already exists. Names must be unique.`;
+      }
+    }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [formData]);
+  }, [formData, allCategories, editingCategory]);
 
   // ── Submit ──
   const handleSubmit = useCallback(async () => {
     if (!validateForm()) return;
 
     try {
+      const normalizedName = normalizeProductCategoryName(formData.name);
       if (editingCategory) {
         const data: UpdateProductCategoryInput = {
-          name: formData.name.trim(),
+          name: normalizedName,
           description: formData.description?.trim() || null,
         };
         await updateMutation.mutateAsync({ id: editingCategory.id, data });
         toast.success('Category updated');
       } else {
         await createMutation.mutateAsync({
-          name: formData.name.trim(),
+          name: normalizedName,
           description: formData.description?.trim() || undefined,
         });
         toast.success('Category created');

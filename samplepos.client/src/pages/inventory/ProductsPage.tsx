@@ -17,11 +17,20 @@ import { useOfflineProducts } from '../../hooks/useOfflineData';
 import { useOfflineContext } from '../../contexts/OfflineContext';
 import { useMultistoreEnabled } from '../../hooks/useMultistore';
 import { useAuth } from '../../hooks/useAuth';
+import { useHasAnyPermission } from '../../authorization/useAuthorization';
+import { INVENTORY_STOCK_ADJUST_PERMISSIONS } from '@shared/authorization/inventoryAdjustPermissions';
 import { hasWarehouseNetworkAccess } from '../../../../shared/utils/warehouseRbac';
 import { useStoreLocations, useStockLevelsByStore } from '../../hooks/useWarehouse';
 import { StoreLocationSelect } from '../../components/inventory/StoreLocationSelect';
 import { StockViewModeToggle } from '../../components/inventory/StockViewModeToggle';
 import { InventoryColumnPicker } from '../../components/inventory/InventoryColumnPicker';
+import {
+  AdjustInventoryDrawer,
+  resolveAdjustInventoryTarget,
+  resolveDefaultAdjustStoreId,
+  formatAdjustStoreLabel,
+  type AdjustInventoryTarget,
+} from '../../components/inventory/AdjustInventoryDrawer';
 import {
   readStockViewMode,
   readStockViewStoreId,
@@ -220,7 +229,9 @@ export default function ProductsPage() {
   const byStoreView = canUseStoreFilter && stockViewMode === 'store';
   const columnPrefs = useInventoryColumnPrefs('products', { includeStore: byStoreView });
   const { show: showCol } = columnPrefs;
-  const { data: storeLocations = [] } = useStoreLocations(canUseStoreFilter && isOnline);
+  const { data: storeLocations = [] } = useStoreLocations(
+    (canUseStoreFilter || isMultistoreEnabled) && isOnline,
+  );
   const networkStores = useMemo(
     () => operationalNetworkStores(storeLocations),
     [storeLocations],
@@ -329,6 +340,24 @@ export default function ProductsPage() {
     startDate?: string;
     endDate?: string;
   }>({});
+  const [adjustTarget, setAdjustTarget] = useState<AdjustInventoryTarget | null>(null);
+  const [showAdjustDrawer, setShowAdjustDrawer] = useState(false);
+  const [productAdjustStoreId, setProductAdjustStoreId] = useState<string>('');
+  const canAdjustInventory = useHasAnyPermission([...INVENTORY_STOCK_ADJUST_PERMISSIONS]);
+
+  // Multistore adjust store: list filter when in store view, else POS SELLING (INV-POS SSOT)
+  useEffect(() => {
+    if (!isMultistoreEnabled) {
+      setProductAdjustStoreId('');
+      return;
+    }
+    if (byStoreView && storeFilterId) {
+      setProductAdjustStoreId(storeFilterId);
+      return;
+    }
+    const def = resolveDefaultAdjustStoreId(storeLocations);
+    if (def) setProductAdjustStoreId((prev) => prev || def);
+  }, [isMultistoreEnabled, byStoreView, storeFilterId, storeLocations]);
 
   // Product UoM State
   const [productUoms, setProductUoms] = useState<ProductUomFormData[]>([]);
@@ -1072,6 +1101,82 @@ export default function ProductsPage() {
     setSelectedProductForHistory(null);
     setHistoryFilters({});
   };
+
+  /** Open shared Adjust Inventory drawer from Edit Product (same SSOT as Adjustments page). */
+  const handleOpenAdjustFromProduct = async () => {
+    if (!formData.id) return;
+    if (!canAdjustInventory) {
+      alert(
+        'You do not have permission to adjust inventory. Need inventory.adjust or inventory.approve.',
+      );
+      return;
+    }
+
+    const adjustStoreId = isMultistoreEnabled
+      ? productAdjustStoreId || resolveDefaultAdjustStoreId(storeLocations)
+      : undefined;
+    const adjustStore = adjustStoreId
+      ? storeLocations.find((s) => s.id === adjustStoreId)
+      : undefined;
+
+    const storeQty =
+      adjustStoreId && byStoreView && storeFilterId === adjustStoreId
+        ? storeStockByProductId.get(formData.id)
+        : undefined;
+    const displayedQoh = parseFloat(formData.quantityOnHand) || 0;
+    const seedQty =
+      storeQty != null && Number.isFinite(storeQty) ? Number(storeQty) : displayedQoh;
+
+    const target = await resolveAdjustInventoryTarget({
+      productId: formData.id,
+      productName: formData.name || 'Product',
+      currentQuantity: seedQty,
+      storeLocationId: adjustStoreId || undefined,
+      storeLabel: formatAdjustStoreLabel(adjustStore),
+    });
+    setAdjustTarget(target);
+    setShowAdjustDrawer(true);
+  };
+
+  const handleAdjustFromProductSuccess = () => {
+    void productsRefetch();
+    if (useMultistoreStock) void storeStockRefetch();
+    void queryClient.invalidateQueries({ queryKey: ['warehouse'] });
+    void queryClient.invalidateQueries({ queryKey: productKeys.lists() });
+    if (formData.id) {
+      void queryClient.invalidateQueries({ queryKey: productKeys.detail(formData.id) });
+    }
+  };
+
+  // Keep Edit Product QOH in sync with inventory stock-levels SSOT (incl. after Adjust drawer)
+  useEffect(() => {
+    if (!showModal || modalMode !== 'edit' || !formData.id) return;
+    let next: string | null = null;
+    if (isMultistoreEnabled) {
+      const qtyMap = byStoreView ? storeStockByProductId : companyStockByProductId;
+      if (qtyMap.has(formData.id)) {
+        next = String(qtyMap.get(formData.id) ?? 0);
+      }
+    } else {
+      const listed = products.find((p) => p.id === formData.id);
+      if (listed) next = String(listed.quantityOnHand ?? 0);
+    }
+    if (next == null) return;
+    setFormData((prev) =>
+      prev.id === formData.id && prev.quantityOnHand !== next
+        ? { ...prev, quantityOnHand: next }
+        : prev,
+    );
+  }, [
+    showModal,
+    modalMode,
+    formData.id,
+    isMultistoreEnabled,
+    byStoreView,
+    storeStockByProductId,
+    companyStockByProductId,
+    products,
+  ]);
 
   // Handle form field change
   const handleFieldChange = (field: keyof ProductFormData, value: string | boolean) => {
@@ -1924,20 +2029,61 @@ export default function ProductsPage() {
               <div className="border-t pt-4">
                 <h4 className="font-medium text-gray-900 mb-3">Inventory Snapshot</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
+                  <div className={isMultistoreEnabled ? 'md:col-span-2' : undefined}>
                     <label htmlFor="quantity-on-hand" className="block text-sm font-medium text-gray-700 mb-1">
                       Quantity On Hand (Read-only)
                     </label>
-                    <input
-                      id="quantity-on-hand"
-                      type="number"
-                      step="0.01"
-                      value={formData.quantityOnHand}
-                      readOnly
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
-                      placeholder="0"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Current stock from inventory</p>
+                    <div className="flex flex-wrap gap-2 items-stretch">
+                      <input
+                        id="quantity-on-hand"
+                        type="number"
+                        step="0.01"
+                        value={formData.quantityOnHand}
+                        readOnly
+                        className="min-w-0 flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                        placeholder="0"
+                      />
+                      {modalMode === 'edit' && formData.id && canAdjustInventory && isMultistoreEnabled ? (
+                        <select
+                          id="product-adjust-store"
+                          data-product-adjust-store="true"
+                          aria-label="Adjust at store"
+                          value={productAdjustStoreId}
+                          onChange={(e) => setProductAdjustStoreId(e.target.value)}
+                          className="min-w-[10rem] px-2 py-2 text-sm border border-gray-300 rounded-lg bg-white"
+                        >
+                          {storeLocations
+                            .filter(
+                              (s) =>
+                                s.isActive &&
+                                ['MAIN', 'SELLING', 'DAMAGE', 'EXPIRED', 'RETURN'].includes(s.storeType),
+                            )
+                            .map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name} ({s.code})
+                              </option>
+                            ))}
+                        </select>
+                      ) : null}
+                      {modalMode === 'edit' && formData.id && canAdjustInventory ? (
+                        <button
+                          type="button"
+                          data-product-adjust-inventory="true"
+                          onClick={() => {
+                            void handleOpenAdjustFromProduct();
+                          }}
+                          className="shrink-0 px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap"
+                          title="Adjust inventory quantity at selected store / FEFO lot"
+                        >
+                          Adjust
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {isMultistoreEnabled
+                        ? "Adjust posts to the selected store's FEFO lot/batch (store-available qty)."
+                        : 'Current stock from inventory. Adjust uses FEFO batch when multiple exist.'}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -2712,6 +2858,17 @@ export default function ProductsPage() {
           onSuccess={() => setOpeningStockProduct(null)}
         />
       )}
+
+      {/* Shared Adjust Inventory drawer (SSOT with Inventory → Adjustments) */}
+      <AdjustInventoryDrawer
+        open={showAdjustDrawer}
+        target={adjustTarget}
+        onClose={() => {
+          setShowAdjustDrawer(false);
+          setAdjustTarget(null);
+        }}
+        onSuccess={handleAdjustFromProductSuccess}
+      />
     </div>
   );
 }

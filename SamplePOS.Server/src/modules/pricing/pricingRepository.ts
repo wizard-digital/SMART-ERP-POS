@@ -144,7 +144,13 @@ export async function getCategoryByName(
     client: Pool | PoolClient,
     name: string,
 ): Promise<ProductCategoryDbRow | null> {
-    const res = await client.query(`SELECT * FROM product_categories WHERE name = $1`, [name]);
+    const res = await client.query(
+        `SELECT * FROM product_categories
+         WHERE LOWER(TRIM(name)) = LOWER(TRIM($1))
+         ORDER BY created_at ASC NULLS LAST, id ASC
+         LIMIT 1`,
+        [name],
+    );
     return res.rows[0] ?? null;
 }
 
@@ -154,7 +160,7 @@ export async function createCategory(
 ): Promise<ProductCategoryDbRow> {
     const res = await client.query(
         `INSERT INTO product_categories (name, description)
-         VALUES ($1, $2)
+         VALUES (TRIM(BOTH FROM regexp_replace($1, '\\s+', ' ', 'g')), $2)
          RETURNING *`,
         [data.name, data.description ?? null],
     );
@@ -171,7 +177,7 @@ export async function updateCategory(
     let idx = 2;
 
     if (data.name !== undefined) {
-        sets.push(`name = $${idx++}`);
+        sets.push(`name = TRIM(BOTH FROM regexp_replace($${idx++}, '\\s+', ' ', 'g'))`);
         values.push(data.name);
     }
     if (data.description !== undefined) {

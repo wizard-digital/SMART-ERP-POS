@@ -1,0 +1,104 @@
+{
+  "proof": "PRODUCT_CATEGORY_NAME_LIVE",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-20T16:57:13.766Z",
+  "startedAt": "2026-09-20T16:57:13.238Z",
+  "stamp": "20260920165713",
+  "baseName": "ProofCat 20260920165713",
+  "passed": 10,
+  "total": 10,
+  "gates": [
+    {
+      "id": "LIVE_DB_CONNECTED",
+      "ok": true,
+      "detail": "connected to database pos_system"
+    },
+    {
+      "id": "PRODUCT_CATEGORIES_TABLE",
+      "ok": true,
+      "detail": "product_categories table exists"
+    },
+    {
+      "id": "CI_UNIQUE_INDEX_LIVE",
+      "ok": true,
+      "detail": "uq_product_categories_name_ci present (migrationApplied=true)",
+      "evidence": {
+        "appliedSql": true,
+        "indexExists": true
+      }
+    },
+    {
+      "id": "ZERO_CI_DUPLICATE_GROUPS",
+      "ok": true,
+      "detail": "case-insensitive duplicate groups = 0",
+      "evidence": {
+        "dupGroups": 0
+      }
+    },
+    {
+      "id": "CREATE_CANONICAL_OK",
+      "ok": true,
+      "detail": "created id=63b732c5-6796-4e8e-b3cd-7cb009fa9903 name=\"ProofCat 20260920165713\"",
+      "evidence": {
+        "id": "63b732c5-6796-4e8e-b3cd-7cb009fa9903",
+        "name": "ProofCat 20260920165713"
+      }
+    },
+    {
+      "id": "REJECT_CASE_VARIANT",
+      "ok": true,
+      "detail": "rejected \"PROOFCAT 20260920165713\": Product category \"ProofCat 20260920165713\" already exists. Names must be unique (case-insensitive).",
+      "evidence": {
+        "attempted": "PROOFCAT 20260920165713",
+        "ok": true,
+        "message": "Product category \"ProofCat 20260920165713\" already exists. Names must be unique (case-insensitive).",
+        "status": 409
+      }
+    },
+    {
+      "id": "REJECT_WHITESPACE_VARIANT",
+      "ok": true,
+      "detail": "rejected whitespace variant: Product category \"ProofCat 20260920165713\" already exists. Names must be unique (case-insensitive).",
+      "evidence": {
+        "attempted": "  ProofCat 20260920165713  ",
+        "ok": true,
+        "message": "Product category \"ProofCat 20260920165713\" already exists. Names must be unique (case-insensitive).",
+        "status": 409
+      }
+    },
+    {
+      "id": "DB_23505_ON_RAW_INSERT",
+      "ok": true,
+      "detail": "raw INSERT duplicate → pg code 23505",
+      "evidence": {
+        "pgCode": "23505",
+        "attempted": "proofcat 20260920165713"
+      }
+    },
+    {
+      "id": "CI_LOOKUP_SINGLE_ROW",
+      "ok": true,
+      "detail": "LOWER(TRIM) lookup returns single canonical row id=63b732c5-6796-4e8e-b3cd-7cb009fa9903",
+      "evidence": {
+        "rows": [
+          {
+            "id": "63b732c5-6796-4e8e-b3cd-7cb009fa9903",
+            "name": "ProofCat 20260920165713"
+          }
+        ]
+      }
+    },
+    {
+      "id": "STILL_ZERO_CI_DUPLICATES",
+      "ok": true,
+      "detail": "duplicate groups after attempts = 0",
+      "evidence": {
+        "dupAfter": 0
+      }
+    }
+  ],
+  "integrity": "Measured live: unique index present, create succeeds once, case/whitespace duplicates ConflictError, raw INSERT 23505, zero CI duplicate groups.",
+  "howToRun": [
+    "cd SamplePOS.Server && npx tsx scripts/proof-product-category-name-live.ts"
+  ]
+}

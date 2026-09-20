@@ -71,6 +71,7 @@ export const productStoreDistributionService = {
         storeLocationId: string,
     ): Promise<Array<{
         productLotId: string;
+        inventoryBatchId: string | null;
         lotNumber: string;
         productId: string;
         productName: string;
@@ -84,6 +85,7 @@ export const productStoreDistributionService = {
         const result = await conn.query(
             `SELECT
                pl.id AS product_lot_id,
+               pl.inventory_batch_id,
                pl.lot_number,
                pl.product_id,
                p.name AS product_name,
@@ -106,6 +108,7 @@ export const productStoreDistributionService = {
 
         return result.rows.map((r) => ({
             productLotId: r.product_lot_id,
+            inventoryBatchId: r.inventory_batch_id ?? null,
             lotNumber: r.lot_number,
             productId: r.product_id,
             productName: r.product_name,
@@ -325,7 +328,7 @@ export const productStoreDistributionService = {
         }));
     },
 
-    /** FEFO-ordered lots for a product at a store (transfer allocation). */
+    /** FEFO-ordered lots for a product at a store (transfer allocation + adjust). */
     async listLotsForProductAtStore(
         conn: DbConn,
         storeLocationId: string,
@@ -333,6 +336,7 @@ export const productStoreDistributionService = {
     ): Promise<
         Array<{
             productLotId: string;
+            inventoryBatchId: string | null;
             lotNumber: string;
             productId: string;
             productName: string;
@@ -349,6 +353,7 @@ export const productStoreDistributionService = {
         const result = await conn.query(
             `SELECT
                pl.id AS product_lot_id,
+               pl.inventory_batch_id,
                pl.lot_number,
                pl.product_id,
                p.name AS product_name,
@@ -373,6 +378,7 @@ export const productStoreDistributionService = {
 
         return result.rows.map((r) => ({
             productLotId: r.product_lot_id,
+            inventoryBatchId: r.inventory_batch_id ?? null,
             lotNumber: r.lot_number,
             productId: r.product_id,
             productName: r.product_name,
