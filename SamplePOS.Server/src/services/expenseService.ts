@@ -3,11 +3,13 @@ import { ExpenseFilters, CreateExpenseData, UpdateExpenseData } from '../types/e
 import logger from '../utils/logger.js';
 import { BusinessError, NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import * as glEntryService from './glEntryService.js';
+import { AccountingCore } from './accountingCore.js';
 import { BankingService } from './bankingService.js';
 import { pool as globalPool } from '../db/pool.js';
 import { UnitOfWork } from '../db/unitOfWork.js';
 import { Pool, PoolClient } from 'pg';
 import { getBusinessDate } from '../utils/dateRange.js';
+import { LEDGER_NET_ACTIVE_SQL } from '../utils/ledgerNetActive.js';
 import { normalizeExpenseCategoryCode } from '../../../shared/expense/categoryGlMap.js';
 import { publishNotificationEvent } from '../modules/notifications/notificationPublisher.js';
 import {
@@ -572,6 +574,238 @@ export const markExpensePaid = async (
     logger.error('Error in expense service markExpensePaid', { error, id, paidById, paymentData });
     throw error;
   }
+};
+
+const EXPENSE_LIVE_JOURNAL_SQL = `
+  SELECT lt."Id", lt."ReferenceType"
+  FROM ledger_transactions lt
+  WHERE lt."ReferenceId" = $1
+    AND lt."ReferenceType" IN ('EXPENSE', 'EXPENSE_PAYMENT')
+    AND lt."ReversesTransactionId" IS NULL
+    AND COALESCE(lt."IsReversed", FALSE) = FALSE
+    AND lt."Status" = 'POSTED'
+  ORDER BY lt."CreatedAt" DESC
+`;
+
+const EXPENSE_LIVE_BANK_GL_SQL = `
+  SELECT lt."Id", lt."ReferenceType"
+  FROM bank_transactions bt
+  JOIN ledger_transactions lt ON lt."Id" = bt.gl_transaction_id
+  WHERE bt.source_type = 'EXPENSE'
+    AND bt.source_id = $1
+    AND lt."ReversesTransactionId" IS NULL
+    AND COALESCE(lt."IsReversed", FALSE) = FALSE
+    AND lt."Status" = 'POSTED'
+`;
+
+type LiveExpenseJournal = { Id: string; ReferenceType: string };
+
+const bankTransactionsTableExists = async (client: PoolClient): Promise<boolean> => {
+  const bankTable = await client.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = 'bank_transactions'
+     ) AS exists`
+  );
+  return Boolean(bankTable.rows[0]?.exists);
+};
+
+const listLiveExpenseJournals = async (
+  client: PoolClient,
+  expenseId: string,
+  hasBankTable: boolean
+): Promise<LiveExpenseJournal[]> => {
+  const primary = await client.query<LiveExpenseJournal>(EXPENSE_LIVE_JOURNAL_SQL, [expenseId]);
+  const byId = new Map<string, LiveExpenseJournal>(primary.rows.map((row) => [row.Id, row]));
+  if (hasBankTable) {
+    const bankGl = await client.query<LiveExpenseJournal>(EXPENSE_LIVE_BANK_GL_SQL, [expenseId]);
+    for (const row of bankGl.rows) {
+      byId.set(row.Id, row);
+    }
+  }
+  return [...byId.values()];
+};
+
+const assertExpenseReverseLeavesNoMismatch = async (
+  client: PoolClient,
+  expenseId: string,
+  originalJournalIds: string[],
+  hasBankTable: boolean
+): Promise<void> => {
+  const leftover = await listLiveExpenseJournals(client, expenseId, hasBankTable);
+  if (leftover.length > 0) {
+    throw new BusinessError(
+      'Expense reverse left posted GL. Reversal was not applied.',
+      'ERR_EXPENSE_016',
+      {
+        expenseId,
+        leftoverJournalIds: leftover.map((row) => row.Id),
+        leftoverTypes: leftover.map((row) => row.ReferenceType),
+      }
+    );
+  }
+
+  if (originalJournalIds.length === 0) return;
+
+  const residual = await client.query<{ AccountCode: string; net: string }>(
+    `SELECT a."AccountCode" AS "AccountCode",
+            SUM(le."DebitAmount" - le."CreditAmount")::text AS net
+     FROM ledger_entries le
+     JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
+     JOIN accounts a ON a."Id" = le."AccountId"
+     WHERE (lt."Id"::text = ANY($1::text[]) OR lt."ReversesTransactionId"::text = ANY($1::text[]))
+       AND ${LEDGER_NET_ACTIVE_SQL}
+     GROUP BY a."AccountCode"
+     HAVING ABS(SUM(le."DebitAmount" - le."CreditAmount")) > 0.0001`,
+    [originalJournalIds]
+  );
+
+  if (residual.rows.length > 0) {
+    throw new BusinessError(
+      'Expense reverse left a GL imbalance. Reversal was not applied.',
+      'ERR_EXPENSE_016',
+      {
+        expenseId,
+        residualAccounts: residual.rows.map((row) => ({
+          accountCode: row.AccountCode,
+          net: row.net,
+        })),
+      }
+    );
+  }
+};
+
+/**
+ * Reverse an approved or paid expense using AccountingCore.reverseTransaction.
+ * Original GL is immutable; opposite journals are posted. Double reverse is blocked.
+ * After reverse: voucher REVERSED, every related posted journal reversed, net-active GL = 0.
+ */
+export const reverseExpense = async (
+  id: string,
+  userId: string,
+  reason: string,
+  pool?: Pool
+) => {
+  const dbPool = pool || globalPool;
+  const trimmed = String(reason || '').trim();
+  if (trimmed.length < 3) {
+    throw new ValidationError('Reversal reason is required');
+  }
+
+  const existingExpense = await expenseRepository.getExpenseById(id, dbPool);
+  if (!existingExpense) {
+    return null;
+  }
+
+  if (existingExpense.status === 'REVERSED') {
+    throw new BusinessError('Expense has already been reversed', 'ERR_EXPENSE_012', {
+      expenseId: id,
+    });
+  }
+
+  if (existingExpense.status !== 'APPROVED' && existingExpense.status !== 'PAID') {
+    throw new BusinessError(
+      'Only approved or paid expenses can be reversed',
+      'ERR_EXPENSE_013',
+      { expenseId: id, currentStatus: existingExpense.status }
+    );
+  }
+
+  const reversalDate = getBusinessDate();
+
+  return UnitOfWork.run(dbPool, async (client: PoolClient) => {
+    const hasBankTable = await bankTransactionsTableExists(client);
+    const journals = await listLiveExpenseJournals(client, id, hasBankTable);
+
+    if (journals.length === 0) {
+      throw new BusinessError(
+        'No posted GL found for this expense. It cannot be reversed.',
+        'ERR_EXPENSE_014',
+        { expenseId: id }
+      );
+    }
+
+    let banks: Array<{
+      id: string;
+      gl_transaction_id: string | null;
+      is_reconciled: boolean;
+      is_reversed: boolean;
+    }> = [];
+    if (hasBankTable) {
+      const bankRows = await client.query<{
+        id: string;
+        gl_transaction_id: string | null;
+        is_reconciled: boolean;
+        is_reversed: boolean;
+      }>(
+        `SELECT id, gl_transaction_id, is_reconciled, is_reversed
+         FROM bank_transactions
+         WHERE source_type = 'EXPENSE' AND source_id = $1`,
+        [id]
+      );
+      banks = bankRows.rows;
+      for (const bank of banks) {
+        if (bank.is_reversed) continue;
+        if (bank.is_reconciled) {
+          throw new BusinessError(
+            'Linked bank transaction is reconciled. Unreconcile it before reversing this expense.',
+            'ERR_EXPENSE_015',
+            { expenseId: id, bankTransactionId: bank.id }
+          );
+        }
+      }
+    }
+
+    const reversedIds = new Set<string>();
+    for (const tx of journals) {
+      const bankRow = banks.find((b) => b.gl_transaction_id === tx.Id);
+      await AccountingCore.reverseTransaction(
+        {
+          originalTransactionId: tx.Id,
+          reversalDate,
+          reason: bankRow
+            ? `Expense ${existingExpense.expenseNumber} bank: ${trimmed}`
+            : `Expense ${existingExpense.expenseNumber}: ${trimmed}`,
+          userId,
+          idempotencyKey: bankRow
+            ? `REV-EXPENSE-BANK-${bankRow.id}`
+            : `REV-${tx.ReferenceType}-${id}`,
+        },
+        dbPool,
+        client
+      );
+      reversedIds.add(tx.Id);
+    }
+
+    for (const bank of banks) {
+      if (bank.is_reversed) continue;
+      await client.query(
+        `UPDATE bank_transactions
+         SET is_reversed = TRUE,
+             reversed_at = NOW(),
+             reversed_by = $2,
+             reversal_reason = $3
+         WHERE id = $1`,
+        [bank.id, userId, trimmed]
+      );
+    }
+
+    await assertExpenseReverseLeavesNoMismatch(client, id, [...reversedIds], hasBankTable);
+
+    const updated = await expenseRepository.markExpenseReversed(
+      id,
+      { reversedBy: userId, reversalReason: trimmed },
+      client
+    );
+    if (!updated || updated.status !== 'REVERSED') {
+      throw new BusinessError(
+        'Expense reverse did not set status REVERSED. Reversal was not applied.',
+        'ERR_EXPENSE_016',
+        { expenseId: id, status: updated?.status }
+      );
+    }
+    return updated;
+  });
 };
 
 /**

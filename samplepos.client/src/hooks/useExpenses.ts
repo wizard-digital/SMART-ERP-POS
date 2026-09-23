@@ -95,6 +95,11 @@ const expenseApi = {
     return (result.data ?? result) as Expense;
   },
 
+  reverseExpense: async ({ id, reason }: { id: string; reason: string }): Promise<Expense> => {
+    const { data: result } = await api.post<ApiEnvelope<Expense>>(`/expenses/${id}/reverse`, { reason });
+    return (result.data ?? result) as Expense;
+  },
+
   getExpensesByCategory: async (startDate?: string, endDate?: string): Promise<{
     category: string;
     total: number;
@@ -363,6 +368,19 @@ export const useMarkAsPaid = () => {
 
   return useMutation({
     mutationFn: expenseApi.markAsPaid,
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['expenses'] });
+      queryClient.invalidateQueries({ queryKey: ['expense', id] });
+      queryClient.invalidateQueries({ queryKey: ['payment-accounts'] });
+    },
+  });
+};
+
+export const useReverseExpense = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: expenseApi.reverseExpense,
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense', id] });

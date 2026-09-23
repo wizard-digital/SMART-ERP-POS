@@ -4,7 +4,8 @@ export type ExpenseStatus =
   | 'APPROVED'
   | 'REJECTED'
   | 'PAID'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'REVERSED';
 
 export type ExpenseCategory =
   | 'OFFICE'
@@ -85,6 +86,10 @@ export interface Expense {
   paidBy?: string; // UUID
   paidByName?: string;
   paidAt?: string; // ISO timestamp
+  reversedBy?: string;
+  reversedByName?: string;
+  reversedAt?: string;
+  reversalReason?: string;
 
   // Audit fields
   createdBy: string; // UUID
@@ -227,7 +232,8 @@ export const EXPENSE_STATUSES: Record<ExpenseStatus, string> = {
   APPROVED: 'Approved',
   REJECTED: 'Rejected',
   PAID: 'Paid',
-  CANCELLED: 'Cancelled'
+  CANCELLED: 'Cancelled',
+  REVERSED: 'Reversed'
 };
 
 export const PAYMENT_METHODS: Record<PaymentMethod, string> = {

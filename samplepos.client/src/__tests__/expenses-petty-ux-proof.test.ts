@@ -42,4 +42,13 @@ describe('Expenses vs Petty Cash — UX fix proof', () => {
     const layout = readSrc('components/AccountingLayout.tsx');
     expect(layout).toContain('Expense vouchers — approve, then pay from bank');
   });
+
+  it('ExpensesPage can reverse posted vouchers via AccountingCore reverse path', () => {
+    const expenses = readSrc('pages/accounting/ExpensesPage.tsx');
+    expect(expenses).toContain('useReverseExpense');
+    expect(expenses).toContain('Confirm Reverse');
+    expect(expenses).toContain("selectedExpense.status === 'PAID'");
+    const hook = readSrc('hooks/useExpenses.ts');
+    expect(hook).toContain('/expenses/${id}/reverse');
+  });
 });

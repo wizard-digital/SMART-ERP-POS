@@ -31,6 +31,9 @@ export interface Expense {
   rejectedBy?: string;
   paidBy?: string;
   rejectionReason?: string;
+  reversedBy?: string;
+  reversedAt?: string;
+  reversalReason?: string;
 
   // Display names (from joins)
   createdByName?: string;
@@ -89,7 +92,8 @@ export type ExpenseStatus =
   | 'APPROVED'
   | 'REJECTED'
   | 'PAID'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'REVERSED';
 
 export type PaymentMethod =
   | 'CASH'
@@ -199,6 +203,9 @@ export interface ExpenseDbRow {
   rejected_by?: string;
   paid_by?: string;
   rejection_reason?: string;
+  reversed_by?: string;
+  reversed_at?: string;
+  reversal_reason?: string;
   created_at: string;
   updated_at: string;
   approved_at?: string;
@@ -249,6 +256,8 @@ export interface ExpenseSummary {
   rejectedCount: number;
   paidCount: number;
   paidAmount: number;
+  reversedCount?: number;
+  reversedAmount?: number;
 }
 
 // API Response types

@@ -185,7 +185,7 @@ const SUMMARY_CARDS: Array<{ id: string; label: string; hint: string; money?: bo
   { id: 'unpaidApAmount', label: 'Unpaid AP', hint: 'Approved, not yet paid', money: true },
   { id: 'paidAmount', label: 'Paid (cash out)', hint: 'Cleared from bank / cash / MoMo', money: true },
   { id: 'pendingAmount', label: 'Awaiting approval', hint: 'Submitted, not decided', money: true },
-  { id: 'voucherCount', label: 'Vouchers', hint: 'Non-cancelled in period' },
+  { id: 'voucherCount', label: 'Vouchers', hint: 'Non-cancelled, non-reversed in period' },
   { id: 'draftAmount', label: 'Drafts', hint: 'Not yet submitted', money: true },
   { id: 'rejectedAmount', label: 'Rejected', hint: 'Not recognized', money: true },
 ];

@@ -151,6 +151,16 @@ router.post('/:id/reject', requirePermission('expenses.approve'), expenseControl
 router.post('/:id/mark-paid', requireAnyPermission(['expenses.approve', 'accounting.post']), expenseController.markExpensePaid);
 
 /**
+ * @route POST /api/expenses/:id/reverse
+ * @desc Reverse posted expense GL (mistake correction). Original journals stay; opposite entry posted.
+ */
+router.post(
+  '/:id/reverse',
+  requireAnyPermission(['expenses.approve', 'accounting.post']),
+  expenseController.reverseExpense
+);
+
+/**
  * @route GET /api/expenses/:id/documents
  * @desc Get expense documents
  */

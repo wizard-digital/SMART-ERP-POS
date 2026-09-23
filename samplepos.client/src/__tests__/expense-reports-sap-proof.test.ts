@@ -51,10 +51,13 @@ describe('Expense reports — SAP column chooser + business logic', () => {
     expect(page).not.toContain("id: 'glAccountCode'");
   });
 
-  it('repository aggregations exclude CANCELLED and expose recognized amounts', () => {
+  it('repository aggregations exclude CANCELLED and REVERSED from live spend', () => {
     const repo = readRepo('SamplePOS.Server/src/repositories/expenseRepository.ts');
-    expect(repo).toContain("e.status != 'CANCELLED'");
-    expect(repo).toContain("status IN ('APPROVED', 'PAID')");
+    const ssot = readRepo('shared/expense/expenseLiveStatusSsot.ts');
+    expect(ssot).toContain("e.status NOT IN ('CANCELLED', 'REVERSED')");
+    expect(ssot).toContain("e.status IN ('APPROVED', 'PAID')");
+    expect(repo).toContain('EXPENSE_NOT_VOID_SQL');
+    expect(repo).toContain('EXPENSE_RECOGNIZED_SQL');
     expect(repo).toContain('recognized_amount');
     expect(repo).toContain('unpaid_ap_amount');
     expect(existsSync(resolve(clientSrc, 'pages/reports/ExpenseReportsPage.tsx'))).toBe(true);

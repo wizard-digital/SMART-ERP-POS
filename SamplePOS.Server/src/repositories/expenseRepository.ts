@@ -8,6 +8,11 @@ import {
   mapExpenseCategoryCodeToGl,
   normalizeExpenseCategoryCode,
 } from '../../../shared/expense/categoryGlMap.js';
+import {
+  EXPENSE_NOT_VOID_SQL,
+  EXPENSE_RECOGNIZED_SQL,
+  expenseNotVoidSql,
+} from '../../../shared/expense/expenseLiveStatusSsot.js';
 
 type ResolvedExpenseCategory = {
   id: string;
@@ -151,6 +156,9 @@ export const getExpenses = async (filters: ExpenseFilters, dbPool?: pg.Pool | pg
         e.rejected_by,
         e.paid_by,
         e.rejection_reason,
+        e.reversed_by,
+        e.reversed_at,
+        e.reversal_reason,
         e.created_at,
         e.updated_at,
         e.approved_at,
@@ -352,6 +360,9 @@ export const getExpenseById = async (id: string, dbPool?: pg.Pool | pg.PoolClien
         e.rejected_by,
         e.paid_by,
         e.rejection_reason,
+        e.reversed_by,
+        e.reversed_at,
+        e.reversal_reason,
         e.created_at,
         e.updated_at,
         e.approved_at,
@@ -448,6 +459,9 @@ export const updateExpense = async (id: string, data: UpdateExpenseData, dbPool?
     const current = await pool.query('SELECT status FROM expenses WHERE id = $1', [id]);
     if (!current.rows[0]) return null;
     const currentStatus = current.rows[0].status;
+    if (currentStatus === 'REVERSED') {
+      throw new ConflictError('Cannot modify a reversed expense');
+    }
     if (currentStatus === 'PAID') {
       throw new ConflictError('Cannot modify a paid expense');
     }
@@ -517,6 +531,45 @@ export const updateExpense = async (id: string, data: UpdateExpenseData, dbPool?
 };
 
 /**
+ * Mark a posted expense reversed. Dedicated path — generic update blocks PAID.
+ */
+export const markExpenseReversed = async (
+  id: string,
+  data: { reversedBy: string; reversalReason: string },
+  dbPool?: pg.Pool | pg.PoolClient
+): Promise<Expense | null> => {
+  const pool = dbPool || globalPool;
+  const locked = await pool.query(
+    `SELECT status FROM expenses WHERE id = $1 FOR UPDATE`,
+    [id]
+  );
+  if (!locked.rows[0]) return null;
+  const status = locked.rows[0].status as string;
+  if (status === 'REVERSED') {
+    throw new ConflictError('Expense has already been reversed');
+  }
+  if (status !== 'APPROVED' && status !== 'PAID') {
+    throw new ConflictError(`Cannot reverse expense in status ${status}`);
+  }
+
+  const result = await pool.query(
+    `UPDATE expenses
+     SET status = 'REVERSED',
+         payment_status = 'UNPAID',
+         payment_account_id = NULL,
+         reversed_by = $2,
+         reversed_at = NOW(),
+         reversal_reason = $3,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [id, data.reversedBy, data.reversalReason]
+  );
+  if (result.rows.length === 0) return null;
+  return (await getExpenseById(id, pool)) ?? normalizeExpenseFromDb(result.rows[0]);
+};
+
+/**
  * Delete expense (soft delete by updating status)
  */
 export const deleteExpense = async (id: string, dbPool?: pg.Pool | pg.PoolClient): Promise<boolean> => {
@@ -528,6 +581,9 @@ export const deleteExpense = async (id: string, dbPool?: pg.Pool | pg.PoolClient
     const currentStatus = current.rows[0].status;
     if (currentStatus === 'PAID') {
       throw new ConflictError('Cannot delete a paid expense');
+    }
+    if (currentStatus === 'REVERSED') {
+      throw new ConflictError('Cannot delete a reversed expense');
     }
     if (currentStatus === 'APPROVED') {
       throw new ConflictError('Cannot delete an approved expense');
@@ -847,26 +903,29 @@ export const deleteExpenseDocument = async (documentId: string, dbPool?: pg.Pool
  * Expense summary — business KPIs (excludes CANCELLED).
  * Recognized = APPROVED + PAID (GL posts on approval).
  * Unpaid AP = APPROVED not yet paid. Cash out = PAID only.
+ * Live totals exclude REVERSED so voucher money matches net-active GL after reverse.
  */
 export const getExpenseSummary = async (filters: { startDate?: string; endDate?: string; categoryId?: string }, dbPool?: pg.Pool | pg.PoolClient) => {
   const pool = dbPool || globalPool;
   try {
     let query = `
       SELECT 
-        COUNT(*)::integer as voucher_count,
-        COALESCE(SUM(amount), 0)::numeric(12,2) as total_amount,
+        COUNT(*) FILTER (WHERE ${EXPENSE_NOT_VOID_SQL})::integer as voucher_count,
+        COALESCE(SUM(amount) FILTER (WHERE ${EXPENSE_NOT_VOID_SQL}), 0)::numeric(12,2) as total_amount,
         COUNT(*) FILTER (WHERE status = 'DRAFT')::integer as draft_count,
         COALESCE(SUM(amount) FILTER (WHERE status = 'DRAFT'), 0)::numeric(12,2) as draft_amount,
         COUNT(*) FILTER (WHERE status = 'PENDING_APPROVAL')::integer as pending_count,
         COALESCE(SUM(amount) FILTER (WHERE status = 'PENDING_APPROVAL'), 0)::numeric(12,2) as pending_amount,
         COUNT(*) FILTER (WHERE status = 'APPROVED')::integer as unpaid_ap_count,
         COALESCE(SUM(amount) FILTER (WHERE status = 'APPROVED'), 0)::numeric(12,2) as unpaid_ap_amount,
-        COUNT(*) FILTER (WHERE status IN ('APPROVED', 'PAID'))::integer as recognized_count,
-        COALESCE(SUM(amount) FILTER (WHERE status IN ('APPROVED', 'PAID')), 0)::numeric(12,2) as recognized_amount,
+        COUNT(*) FILTER (WHERE ${EXPENSE_RECOGNIZED_SQL})::integer as recognized_count,
+        COALESCE(SUM(amount) FILTER (WHERE ${EXPENSE_RECOGNIZED_SQL}), 0)::numeric(12,2) as recognized_amount,
         COUNT(*) FILTER (WHERE status = 'PAID')::integer as paid_count,
         COALESCE(SUM(amount) FILTER (WHERE status = 'PAID'), 0)::numeric(12,2) as paid_amount,
         COUNT(*) FILTER (WHERE status = 'REJECTED')::integer as rejected_count,
-        COALESCE(SUM(amount) FILTER (WHERE status = 'REJECTED'), 0)::numeric(12,2) as rejected_amount
+        COALESCE(SUM(amount) FILTER (WHERE status = 'REJECTED'), 0)::numeric(12,2) as rejected_amount,
+        COUNT(*) FILTER (WHERE status = 'REVERSED')::integer as reversed_count,
+        COALESCE(SUM(amount) FILTER (WHERE status = 'REVERSED'), 0)::numeric(12,2) as reversed_amount
       FROM expenses e
       WHERE e.status != 'CANCELLED'
     `;
@@ -908,6 +967,8 @@ export const getExpenseSummary = async (filters: { startDate?: string; endDate?:
       paidAmount: parseFloat(row.paid_amount || '0'),
       rejectedCount: parseInt(row.rejected_count || '0', 10),
       rejectedAmount: parseFloat(row.rejected_amount || '0'),
+      reversedCount: parseInt(row.reversed_count || '0', 10),
+      reversedAmount: parseFloat(row.reversed_amount || '0'),
     };
   } catch (error) {
     logger.error('Error in expenseRepository getExpenseSummary', { error, filters });
@@ -929,18 +990,18 @@ export const getExpensesByCategory = async (filters: { startDate?: string; endDa
         COALESCE(a."AccountCode", '') as gl_account_code,
         COUNT(e.id)::integer as expense_count,
         COALESCE(SUM(e.amount), 0)::numeric(12,2) as total_amount,
-        COALESCE(SUM(e.amount) FILTER (WHERE e.status IN ('APPROVED', 'PAID')), 0)::numeric(12,2) as recognized_amount,
+        COALESCE(SUM(e.amount) FILTER (WHERE ${EXPENSE_RECOGNIZED_SQL}), 0)::numeric(12,2) as recognized_amount,
         COALESCE(SUM(e.amount) FILTER (WHERE e.status = 'APPROVED'), 0)::numeric(12,2) as unpaid_ap_amount,
         COALESCE(SUM(e.amount) FILTER (WHERE e.status = 'PAID'), 0)::numeric(12,2) as paid_amount,
         COUNT(*) FILTER (WHERE e.status = 'PENDING_APPROVAL')::integer as pending_count
       FROM expense_categories c
       LEFT JOIN accounts a ON c.account_id = a."Id"
       LEFT JOIN expenses e ON c.id = e.category_id
-        AND e.status != 'CANCELLED'
+        AND ${EXPENSE_NOT_VOID_SQL}
         AND ($1::date IS NULL OR e.expense_date >= $1)
         AND ($2::date IS NULL OR e.expense_date <= $2)
       WHERE c.is_active = true OR EXISTS (
-        SELECT 1 FROM expenses ex WHERE ex.category_id = c.id AND ex.status != 'CANCELLED'
+        SELECT 1 FROM expenses ex WHERE ex.category_id = c.id AND ${expenseNotVoidSql('ex')}
       )
       GROUP BY c.id, c.name, c.code, a."AccountCode"
       HAVING COUNT(e.id) > 0
@@ -981,12 +1042,12 @@ export const getExpensesByVendor = async (filters: { startDate?: string; endDate
         COALESCE(NULLIF(TRIM(e.vendor), ''), 'Unknown') as vendor_name,
         COUNT(e.id)::integer as expense_count,
         COALESCE(SUM(e.amount), 0)::numeric(12,2) as total_amount,
-        COALESCE(SUM(e.amount) FILTER (WHERE e.status IN ('APPROVED', 'PAID')), 0)::numeric(12,2) as recognized_amount,
+        COALESCE(SUM(e.amount) FILTER (WHERE ${EXPENSE_RECOGNIZED_SQL}), 0)::numeric(12,2) as recognized_amount,
         COALESCE(SUM(e.amount) FILTER (WHERE e.status = 'PAID'), 0)::numeric(12,2) as paid_amount,
         MIN(e.expense_date)::date as first_expense_date,
         MAX(e.expense_date)::date as last_expense_date
       FROM expenses e
-      WHERE e.status != 'CANCELLED'
+      WHERE ${EXPENSE_NOT_VOID_SQL}
         AND ($1::date IS NULL OR e.expense_date >= $1)
         AND ($2::date IS NULL OR e.expense_date <= $2)
       GROUP BY COALESCE(NULLIF(TRIM(e.vendor), ''), 'Unknown')
@@ -1021,11 +1082,11 @@ export const getExpenseTrends = async (filters: { startDate?: string; endDate?: 
         TO_CHAR(DATE_TRUNC('month', e.expense_date), 'YYYY-MM') as period,
         COUNT(e.id)::integer as expense_count,
         COALESCE(SUM(e.amount), 0)::numeric(12,2) as total_amount,
-        COALESCE(SUM(e.amount) FILTER (WHERE e.status IN ('APPROVED', 'PAID')), 0)::numeric(12,2) as recognized_amount,
+        COALESCE(SUM(e.amount) FILTER (WHERE ${EXPENSE_RECOGNIZED_SQL}), 0)::numeric(12,2) as recognized_amount,
         COALESCE(SUM(e.amount) FILTER (WHERE e.status = 'PAID'), 0)::numeric(12,2) as paid_amount,
         COUNT(DISTINCT e.category_id)::integer as category_count
       FROM expenses e
-      WHERE e.status != 'CANCELLED'
+      WHERE ${EXPENSE_NOT_VOID_SQL}
         AND ($1::date IS NULL OR e.expense_date >= $1)
         AND ($2::date IS NULL OR e.expense_date <= $2)
       GROUP BY DATE_TRUNC('month', e.expense_date)
@@ -1059,10 +1120,10 @@ export const getExpensesByPaymentMethod = async (filters: { startDate?: string; 
         COALESCE(e.payment_method, 'UNKNOWN') as payment_method,
         COUNT(e.id)::integer as expense_count,
         COALESCE(SUM(e.amount), 0)::numeric(12,2) as total_amount,
-        COALESCE(SUM(e.amount) FILTER (WHERE e.status IN ('APPROVED', 'PAID')), 0)::numeric(12,2) as recognized_amount,
+        COALESCE(SUM(e.amount) FILTER (WHERE ${EXPENSE_RECOGNIZED_SQL}), 0)::numeric(12,2) as recognized_amount,
         COALESCE(SUM(e.amount) FILTER (WHERE e.status = 'PAID'), 0)::numeric(12,2) as paid_amount
       FROM expenses e
-      WHERE e.status != 'CANCELLED'
+      WHERE ${EXPENSE_NOT_VOID_SQL}
         AND ($1::date IS NULL OR e.expense_date >= $1)
         AND ($2::date IS NULL OR e.expense_date <= $2)
       GROUP BY e.payment_method
@@ -1115,6 +1176,9 @@ const normalizeExpenseFromDb = (row: ExpenseDbRow): Expense => {
     rejectedBy: row.rejected_by,
     paidBy: row.paid_by,
     rejectionReason: row.rejection_reason,
+    reversedBy: row.reversed_by,
+    reversedAt: row.reversed_at,
+    reversalReason: row.reversal_reason,
     createdByName: row.created_by_name,
     approvedByName: row.approved_by_name,
     rejectedByName: row.rejected_by_name,
@@ -1123,7 +1187,8 @@ const normalizeExpenseFromDb = (row: ExpenseDbRow): Expense => {
     updatedAt: row.updated_at,
     approvedAt: row.approved_at,
     rejectedAt: row.rejected_at,
-    paidAt: row.paid_at
+    paidAt: row.paid_at,
+    reversedAt: row.reversed_at
   };
 };
 
@@ -1422,6 +1487,7 @@ export const getExpenseApprovalPipeline = async (
           WHEN 'REJECTED' THEN 4
           WHEN 'PAID' THEN 5
           WHEN 'CANCELLED' THEN 6
+          WHEN 'REVERSED' THEN 7
         END
     `;
 

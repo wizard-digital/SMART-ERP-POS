@@ -11,6 +11,7 @@ import { classifyReorderPriority } from './reorderDashboardLogic.js';
 import { poItemOpenQuantitySql } from '../purchase-orders/purchaseOrderNetReceived.js';
 import { alignSalesComparisonBuckets } from '../../../../shared/reports/salesComparisonSsot.js';
 import { classifyExpiryUrgency } from '../../../../shared/reports/expiringItemsSsot.js';
+import { LEDGER_NET_ACTIVE_SQL } from '../../utils/ledgerNetActive.js';
 import type {
   SalesReportRow,
   SupplierCostAnalysisRow,
@@ -1700,7 +1701,7 @@ export const reportsRepository = {
         FROM ledger_entries le
         JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
         JOIN accounts a ON a."Id" = le."AccountId"
-        WHERE lt."Status" = 'POSTED'
+        WHERE ${LEDGER_NET_ACTIVE_SQL}
           AND lt."ReferenceType" IN ('EXPENSE', 'EXPENSE_PAYMENT')
           AND a."AccountType" = 'EXPENSE'
           AND le."DebitAmount" > 0
@@ -4473,7 +4474,7 @@ export const reportsRepository = {
         `
         SELECT 
           COALESCE(SUM(CASE WHEN movement_type IN ('CASH_IN', 'CASH_IN_FLOAT', 'CASH_IN_PAYMENT', 'CASH_IN_OTHER') THEN amount ELSE 0 END), 0) as total_cash_in,
-          COALESCE(SUM(CASE WHEN movement_type IN ('CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_EXPENSE', 'CASH_OUT_OTHER') THEN amount ELSE 0 END), 0) as total_cash_out,
+          COALESCE(SUM(CASE WHEN movement_type IN ('CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_OTHER') THEN amount ELSE 0 END), 0) as total_cash_out,
           COALESCE(SUM(CASE WHEN movement_type = 'SALE' THEN amount ELSE 0 END), 0) as total_sales,
           COALESCE(SUM(CASE WHEN movement_type = 'REFUND' THEN amount ELSE 0 END), 0) as total_refunds,
           -- Detailed breakdown
@@ -4696,7 +4697,7 @@ export const reportsRepository = {
         ) {
           totalCashIn = totalCashIn.plus(amount);
         } else if (
-          ['CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_EXPENSE', 'CASH_OUT_OTHER'].includes(
+          ['CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_OTHER'].includes(
             row.movement_type
           )
         ) {

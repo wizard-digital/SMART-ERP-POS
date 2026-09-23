@@ -417,6 +417,16 @@ function formatUserError(parsed: ParsedApiError): string {
 function formatExpenseError(parsed: ParsedApiError): string {
   const code = parsed.errorCode;
   switch (code) {
+    case 'ERR_EXPENSE_012':
+      return 'This expense has already been reversed.';
+    case 'ERR_EXPENSE_013':
+      return 'Only approved or paid expenses can be reversed.';
+    case 'ERR_EXPENSE_014':
+      return 'No posted GL found for this expense. It cannot be reversed.';
+    case 'ERR_EXPENSE_015':
+      return 'Linked bank transaction is reconciled. Unreconcile it before reversing this expense.';
+    case 'ERR_EXPENSE_016':
+      return 'Reversal would leave a GL mismatch. Nothing was changed.';
     case 'ERR_EXPENSE_007':
       return `Category code already exists: ${parsed.details?.code ?? ''}`.trim();
     case 'ERR_EXPENSE_008':

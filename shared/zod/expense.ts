@@ -7,7 +7,8 @@ export const ExpenseStatusSchema = z.enum([
   'APPROVED',
   'REJECTED',
   'PAID',
-  'CANCELLED'
+  'CANCELLED',
+  'REVERSED'
 ]);
 
 export const ExpenseCategorySchema = z.enum([
@@ -284,7 +285,15 @@ export const MarkExpensePaidSchema = z.object({
   payment_account_id: z.string().uuid('Invalid payment account ID').optional(),
 }).strict();
 
+export const ReverseExpenseSchema = z.object({
+  reason: z.string()
+    .trim()
+    .min(3, 'Reversal reason is required')
+    .max(1000, 'Reason cannot exceed 1000 characters'),
+}).strict();
+
 export type CreateExpenseCategoryData = z.infer<typeof CreateExpenseCategorySchema>;
 export type ApproveExpenseData = z.infer<typeof ApproveExpenseSchema>;
 export type RejectExpenseData = z.infer<typeof RejectExpenseSchema>;
 export type MarkExpensePaidData = z.infer<typeof MarkExpensePaidSchema>;
+export type ReverseExpenseData = z.infer<typeof ReverseExpenseSchema>;

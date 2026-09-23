@@ -12,6 +12,7 @@ import {
   ApproveExpenseSchema,
   RejectExpenseSchema,
   MarkExpensePaidSchema,
+  ReverseExpenseSchema,
 } from '../../../shared/zod/expense.js';
 import { getBusinessDate } from '../utils/dateRange.js';
 
@@ -327,6 +328,32 @@ export const markExpensePaid = asyncHandler(async (req, res) => {
     success: true,
     data: expense,
     message: 'Expense marked as paid successfully'
+  });
+});
+
+/**
+ * Reverse an approved or paid expense (opposite GL; original journals kept).
+ */
+export const reverseExpense = asyncHandler(async (req, res) => {
+  const pool = req.tenantPool || globalPool;
+  const { id } = req.params;
+  const { reason } = ReverseExpenseSchema.parse(req.body);
+  const user = getUser(req);
+  if (!user.id) throw new UnauthorizedError('User required');
+
+  const expense = await expenseService.reverseExpense(id, user.id, reason, pool);
+  if (!expense) throw new NotFoundError('Expense');
+
+  logger.info('Expense reversed', {
+    expenseId: id,
+    reversedBy: user.id,
+    reason,
+  });
+
+  res.json({
+    success: true,
+    data: expense,
+    message: 'Expense reversed successfully',
   });
 });
 

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTransactionGuard, ZINDEX } from '../../hooks/useTransactionGuard';
 import type { GuardHandle } from '../../hooks/useTransactionGuard';
-import { Plus, FileText, Eye, CheckCircle, XCircle, Send, DollarSign, Wallet, Loader2, BarChart3 } from 'lucide-react';
-import { useExpenses, useSubmitExpense, useApproveExpense, useRejectExpense, useMarkAsPaid, useDeleteExpense, usePaymentAccounts, useExpenseCategories, useExpenseStaffOptions } from '../../hooks/useExpenses';
+import { Plus, FileText, Eye, CheckCircle, XCircle, Send, DollarSign, Wallet, Loader2, BarChart3, RotateCcw } from 'lucide-react';
+import { useExpenses, useSubmitExpense, useApproveExpense, useRejectExpense, useMarkAsPaid, useReverseExpense, useDeleteExpense, usePaymentAccounts, useExpenseCategories, useExpenseStaffOptions } from '../../hooks/useExpenses';
 import { ExpenseFilter, Expense } from '@shared/types/expense';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,6 +33,8 @@ const ExpensesPage: React.FC = () => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [reverseDialogOpen, setReverseDialogOpen] = useState(false);
+  const [reversalReason, setReversalReason] = useState('');
 
   // ── Transaction Guard ──────────────────────────────────────────────────
   const { openGuard, closeGuard } = useTransactionGuard();
@@ -40,6 +42,7 @@ const ExpensesPage: React.FC = () => {
   const viewGuardRef = useRef<GuardHandle | null>(null);
   const rejectGuardRef = useRef<GuardHandle | null>(null);
   const paymentGuardRef = useRef<GuardHandle | null>(null);
+  const reverseGuardRef = useRef<GuardHandle | null>(null);
 
   useEffect(() => {
     if (isCreateModalOpen) {
@@ -72,6 +75,13 @@ const ExpensesPage: React.FC = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentDialogOpen]);
+  useEffect(() => {
+    if (reverseDialogOpen) {
+      reverseGuardRef.current = openGuard({ cancellable: false, label: 'Reverse expense' });
+      return () => { if (reverseGuardRef.current) { closeGuard(reverseGuardRef.current.id); reverseGuardRef.current = null; } };
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reverseDialogOpen]);
   const [selectedPaymentAccountId, setSelectedPaymentAccountId] = useState<string>('');
   const [filter, setFilter] = useState<ExpenseFilter>({
     page: 1,
@@ -95,6 +105,7 @@ const ExpensesPage: React.FC = () => {
   const approveMutation = useApproveExpense();
   const rejectMutation = useRejectExpense();
   const markPaidMutation = useMarkAsPaid();
+  const reverseMutation = useReverseExpense();
   const deleteMutation = useDeleteExpense();
 
   // Action handlers
@@ -160,6 +171,23 @@ const ExpensesPage: React.FC = () => {
     }
   };
 
+  const handleReverse = async () => {
+    if (!selectedExpense || reversalReason.trim().length < 3) return;
+    try {
+      await reverseMutation.mutateAsync({
+        id: selectedExpense.id,
+        reason: reversalReason.trim(),
+      });
+      toast.success('Expense reversed');
+      setReverseDialogOpen(false);
+      setReversalReason('');
+      setSelectedExpense(null);
+      refetch();
+    } catch (err) {
+      toast.error('Failed to reverse expense', { description: getErrorMessage(err) });
+    }
+  };
+
   const handleCancel = async () => {
     if (!selectedExpense) return;
     if (!confirm('Are you sure you want to cancel this expense?')) return;
@@ -195,7 +223,8 @@ const ExpensesPage: React.FC = () => {
       'APPROVED': 'bg-green-100 text-green-800',
       'REJECTED': 'bg-red-100 text-red-800',
       'PAID': 'bg-blue-100 text-blue-800',
-      'CANCELLED': 'bg-gray-100 text-gray-800'
+      'CANCELLED': 'bg-gray-100 text-gray-800',
+      'REVERSED': 'bg-orange-100 text-orange-800'
     };
     return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
@@ -206,6 +235,7 @@ const ExpensesPage: React.FC = () => {
 
   useSubmitOnEnter(rejectDialogOpen, !rejectMutation.isPending, handleReject);
   useSubmitOnEnter(paymentDialogOpen, !markPaidMutation.isPending, handleMarkPaid);
+  useSubmitOnEnter(reverseDialogOpen, !reverseMutation.isPending && reversalReason.trim().length >= 3, handleReverse);
 
   if (error) {
     return (
@@ -660,6 +690,18 @@ const ExpensesPage: React.FC = () => {
                 </div>
               )}
 
+              {selectedExpense.status === 'REVERSED' && (
+                <div className="p-4 bg-orange-50 rounded-lg border border-orange-200 space-y-3">
+                  <p className="text-sm font-semibold text-orange-800 uppercase tracking-wide">Reversal</p>
+                  <p className="text-orange-900 font-medium leading-relaxed">
+                    {selectedExpense.reversalReason || 'Reversed'}
+                  </p>
+                  {selectedExpense.reversedAt && (
+                    <p className="text-sm text-gray-700">{formatTimestamp(selectedExpense.reversedAt)}</p>
+                  )}
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex justify-between pt-6 mt-4 border-t-2 sticky bottom-0 bg-white -mx-6 px-6 pb-2">
                 <div className="flex gap-3">
@@ -752,6 +794,22 @@ const ExpensesPage: React.FC = () => {
                     >
                       <DollarSign className="h-4 w-4 mr-2" />
                       Mark as Paid
+                    </Button>
+                  )}
+
+                  {(selectedExpense.status === 'APPROVED' || selectedExpense.status === 'PAID') && canApproveExpense && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setReversalReason('');
+                        setReverseDialogOpen(true);
+                      }}
+                      disabled={reverseMutation.isPending}
+                      size="lg"
+                      className="border-orange-300 text-orange-800 hover:bg-orange-50"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Reverse
                     </Button>
                   )}
 
@@ -933,6 +991,70 @@ const ExpensesPage: React.FC = () => {
                 <>
                   <DollarSign className="h-4 w-4 mr-2" />
                   Confirm Payment
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={reverseDialogOpen} onOpenChange={setReverseDialogOpen} zIndex={reverseGuardRef.current?.panelZIndex ?? ZINDEX.PANEL}>
+        <DialogContent className="max-w-lg animate-in fade-in-0 zoom-in-95 duration-200">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2 text-orange-700">
+              <RotateCcw className="h-5 w-5" />
+              Reverse Expense
+            </DialogTitle>
+            <DialogDescription className="text-base">
+              Posts opposite GL to undo a mistaken approval or payment. Original journals are kept.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {selectedExpense && (
+              <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                <p className="font-semibold text-gray-900">{selectedExpense.title}</p>
+                <p className="text-sm text-gray-600">{selectedExpense.expenseNumber}</p>
+                <p className="text-lg font-bold text-orange-800 mt-1">{formatCurrency(selectedExpense.amount)}</p>
+              </div>
+            )}
+            <div>
+              <Label htmlFor="reversal-reason" className="text-base font-medium">Reason *</Label>
+              <Textarea
+                id="reversal-reason"
+                value={reversalReason}
+                onChange={(e) => setReversalReason(e.target.value)}
+                placeholder="e.g. Paid from the wrong account, duplicate voucher..."
+                rows={4}
+                className="mt-2 resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReverseDialogOpen(false);
+                setReversalReason('');
+              }}
+              size="lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReverse}
+              disabled={reversalReason.trim().length < 3 || reverseMutation.isPending}
+              className="bg-orange-600 hover:bg-orange-700"
+              size="lg"
+            >
+              {reverseMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Reversing...
+                </>
+              ) : (
+                <>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Confirm Reverse
                 </>
               )}
             </Button>

@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { pool as globalPool } from '../db/pool.js';
 import { toUtcRange, BUSINESS_TIMEZONE } from '../utils/dateRange.js';
+import { LEDGER_NET_ACTIVE_SQL } from '../utils/ledgerNetActive.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -287,7 +288,7 @@ export async function getExpensesByAccount(
       FROM ledger_entries le
       JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
       JOIN accounts a ON a."Id" = le."AccountId"
-      WHERE lt."Status" = 'POSTED'
+      WHERE ${LEDGER_NET_ACTIVE_SQL}
         AND lt."ReferenceType" IN ('EXPENSE', 'EXPENSE_PAYMENT')
         AND a."AccountType" = 'EXPENSE'
         AND le."DebitAmount" > 0
@@ -491,7 +492,7 @@ export async function getSummaryTotals(
     FROM ledger_entries le
     JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
     JOIN accounts a ON a."Id" = le."AccountId"
-    WHERE lt."Status" = 'POSTED'
+    WHERE ${LEDGER_NET_ACTIVE_SQL}
       AND lt."ReferenceType" IN ('EXPENSE', 'EXPENSE_PAYMENT')
       AND a."AccountType" = 'EXPENSE'
       AND le."DebitAmount" > 0
