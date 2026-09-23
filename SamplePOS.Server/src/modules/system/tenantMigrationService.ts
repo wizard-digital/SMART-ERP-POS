@@ -10,7 +10,7 @@ import {
     buildMigrationTableAnchors,
     findDriftedMigrationFiles,
     findColumnDriftedMigrationFiles,
-    migrationHasColumnDrift,
+    decideCopyMigrationLedgerRow,
     relationSatisfiesAnchor,
     TENANT_REQUIRED_TABLES,
     NUMBERED_MIGRATION,
@@ -96,15 +96,28 @@ export const tenantMigrationService = {
      * If any migration fails, the error propagates and the request is rejected.
      */
     async ensureTenantUpToDate(tenantPool: Pool, tenantSlug: string): Promise<void> {
-        // Fast path: already verified this process lifetime
         if (verifiedTenants.has(tenantSlug)) return;
 
-        // Serialise per-tenant: if another request is already migrating this
-        // tenant, wait for that to finish rather than running in parallel.
         const existing = migrationLocks.get(tenantSlug);
         if (existing) {
-            await existing;
-            return; // The other caller either succeeded (added to verifiedTenants) or threw.
+            try {
+                await existing;
+            } catch {
+                // Previous attempt failed — retry below rather than treating the tenant as current.
+            }
+            if (verifiedTenants.has(tenantSlug)) return;
+        }
+
+        if (migrationLocks.has(tenantSlug)) {
+            const inFlight = migrationLocks.get(tenantSlug);
+            if (inFlight) {
+                try {
+                    await inFlight;
+                } catch {
+                    /* retry */
+                }
+                if (verifiedTenants.has(tenantSlug)) return;
+            }
         }
 
         const task = this._doEnsure(tenantPool, tenantSlug);
@@ -112,39 +125,82 @@ export const tenantMigrationService = {
         try {
             await task;
         } finally {
-            migrationLocks.delete(tenantSlug);
+            if (migrationLocks.get(tenantSlug) === task) {
+                migrationLocks.delete(tenantSlug);
+            }
         }
     },
 
     async _doEnsure(tenantPool: Pool, tenantSlug: string): Promise<void> {
-        // Repair migration-record drift before version checks (schema_version can
-        // be current while DDL from an "applied" migration never ran on clone).
+        // Repair copied-ledger drift, then apply any file not recorded as run.
         await this._repairMigrationTableDrift(tenantPool, tenantSlug);
         await this._runPendingMigrations(tenantPool, tenantSlug);
 
         const tenantVersion = await schemaVersionRepository.getSchemaVersion(tenantPool);
-
-        if (tenantVersion >= CURRENT_SCHEMA_VERSION) {
-            verifiedTenants.add(tenantSlug);
-            await this._ensureApGovernance(tenantPool, tenantSlug);
-            return;
+        if (tenantVersion < CURRENT_SCHEMA_VERSION) {
+            logger.warn(
+                `Tenant "${tenantSlug}" schema v${tenantVersion} detected. Upgrading to v${CURRENT_SCHEMA_VERSION}...`
+            );
+            await this._runPendingMigrations(tenantPool, tenantSlug);
         }
 
-        logger.warn(`Tenant "${tenantSlug}" schema v${tenantVersion} detected. Upgrading to v${CURRENT_SCHEMA_VERSION}...`);
+        await this._assertTenantSchemaCurrent(tenantPool, tenantSlug);
+        await this._ensureApGovernance(tenantPool, tenantSlug);
+        verifiedTenants.add(tenantSlug);
+        logger.info(`Tenant "${tenantSlug}" schema current at v${await schemaVersionRepository.getSchemaVersion(tenantPool)}.`);
+    },
 
-        await this._runPendingMigrations(tenantPool, tenantSlug);
-
-        // Verify version is now current
-        const newVersion = await schemaVersionRepository.getSchemaVersion(tenantPool);
-        if (newVersion < CURRENT_SCHEMA_VERSION) {
+    /**
+     * A tenant is current only when files, version, required tables, and
+     * critical columns all match. Version alone is not enough (Bliss drift).
+     */
+    async _assertTenantSchemaCurrent(tenantPool: Pool, tenantSlug: string): Promise<void> {
+        const pending = await this._listPendingMigrationFiles(tenantPool);
+        if (pending.length > 0) {
             throw new Error(
-                `Tenant "${tenantSlug}" migration incomplete: expected v${CURRENT_SCHEMA_VERSION}, got v${newVersion}`
+                `Tenant "${tenantSlug}" has ${pending.length} pending migration(s): ${pending.slice(0, 8).join(', ')}`
             );
         }
 
-        verifiedTenants.add(tenantSlug);
-        logger.info(`Tenant "${tenantSlug}" migration complete. Now at v${newVersion}.`);
-        await this._ensureApGovernance(tenantPool, tenantSlug);
+        const version = await schemaVersionRepository.getSchemaVersion(tenantPool);
+        if (version < CURRENT_SCHEMA_VERSION) {
+            throw new Error(
+                `Tenant "${tenantSlug}" schema v${version}, expected v${CURRENT_SCHEMA_VERSION}`
+            );
+        }
+
+        const { rows } = await tenantPool.query<{ tablename: string }>(
+            `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
+        );
+        const existing = new Set(rows.map((r) => r.tablename));
+        const missing = TENANT_REQUIRED_TABLES.filter((t) => !existing.has(t));
+        if (missing.length > 0) {
+            throw new Error(
+                `Tenant "${tenantSlug}" missing required table(s): ${missing.join(', ')}`
+            );
+        }
+
+        await assertTenantSchemaIntegrity(tenantPool, tenantSlug);
+    },
+
+    async _listPendingMigrationFiles(tenantPool: Pool): Promise<string[]> {
+        await this.ensureSchemaMigrationsTable(tenantPool);
+        const { rows: applied } = await tenantPool.query<{ filename: string }>(
+            'SELECT filename FROM schema_migrations ORDER BY filename'
+        );
+        const appliedSet = new Set(applied.map((r) => r.filename));
+        return this._discoverNumberedMigrationFiles().filter((f) => !appliedSet.has(f));
+    },
+
+    _discoverNumberedMigrationFiles(): string[] {
+        const sqlDir = resolveSqlDir();
+        return fs
+            .readdirSync(sqlDir)
+            .filter((f: string) => f.endsWith('.sql'))
+            .filter((f: string) => NUMBERED_MIGRATION.test(f))
+            .filter((f: string) => !MIGRATION_FILE_EXCLUDE.test(f))
+            .filter((f: string) => !PLATFORM_MIGRATION_FILES.has(f))
+            .sort();
     },
 
     async _ensureApGovernance(tenantPool: Pool, tenantSlug: string): Promise<void> {
@@ -195,6 +251,9 @@ export const tenantMigrationService = {
         const targetTables = new Set(targetTableRows.map((r) => r.tablename));
         const targetViews = new Set(targetViewRows.map((r) => r.viewname));
         const targetColumns = await loadTableColumnMap(targetPool);
+        const missingRequired = TENANT_REQUIRED_TABLES.filter((t) => !targetTables.has(t));
+        const integrity = await verifyTenantSchemaIntegrity(targetPool);
+        const targetCoreSchemaComplete = missingRequired.length === 0 && integrity.ok;
 
         const { rows: sourceRows } = await sourcePool.query<{
             filename: string;
@@ -212,13 +271,18 @@ export const tenantMigrationService = {
         for (const row of sourceRows) {
             if (existing.has(row.filename)) continue;
 
-            const anchorTables = anchors[row.filename];
-            if (anchorTables?.some((t) => !relationSatisfiesAnchor(t, targetTables, targetViews))) {
-                skippedDrift++;
-                continue;
-            }
-
-            if (migrationHasColumnDrift(row.filename, targetColumns)) {
+            const decision = decideCopyMigrationLedgerRow({
+                filename: row.filename,
+                tableAnchors: anchors,
+                columnMap: targetColumns,
+                targetTables,
+                targetViews,
+                targetCoreSchemaComplete,
+                hasPostcondition: (MIGRATION_POSTCONDITION_FILES as readonly string[]).includes(
+                    row.filename
+                ),
+            });
+            if (decision !== 'copy') {
                 skippedDrift++;
                 continue;
             }
@@ -240,7 +304,7 @@ export const tenantMigrationService = {
 
         if (skippedDrift > 0) {
             logger.info(
-                `Skipped copying ${skippedDrift} migration record(s) — target missing anchor tables/columns (will run DDL)`
+                `Skipped copying ${skippedDrift} migration record(s) — target missing objects or incomplete core schema (will run DDL)`
             );
         }
 
@@ -515,38 +579,23 @@ export const tenantMigrationService = {
     async _runPendingMigrations(tenantPool: Pool, tenantSlug: string): Promise<void> {
         const sqlDir = resolveSqlDir();
 
-        // 1. Bootstrap schema_migrations table (idempotent)
         await this.ensureSchemaMigrationsTable(tenantPool);
 
-        // 2. Get already-applied migrations
-        const { rows: applied } = await tenantPool.query(
-            'SELECT filename FROM schema_migrations ORDER BY filename'
-        );
-        const appliedSet = new Set(applied.map((r: { filename: string }) => r.filename));
-
-        // 3. Discover numbered migration files only (same filter as migrationAnchors / migrate.mjs)
-        const allFiles = fs
-            .readdirSync(sqlDir)
-            .filter((f: string) => f.endsWith('.sql'))
-            .filter((f: string) => NUMBERED_MIGRATION.test(f))
-            .filter((f: string) => !MIGRATION_FILE_EXCLUDE.test(f))
-            .filter((f: string) => !PLATFORM_MIGRATION_FILES.has(f))
-            .sort();
-
-        // 4. Filter to pending
-        const pending = allFiles.filter((f: string) => !appliedSet.has(f));
-
+        const pending = await this._listPendingMigrationFiles(tenantPool);
         if (pending.length === 0) {
             return;
         }
 
         logger.info(`Tenant "${tenantSlug}": applying ${pending.length} pending migration(s)...`);
 
-        // 5. Execute each migration in its own transaction
         for (const filename of pending) {
             await this._applyMigrationFile(tenantPool, tenantSlug, filename, sqlDir);
             logger.info(`Tenant "${tenantSlug}": ✅ ${filename}`);
         }
+    },
+
+    isVerified(tenantSlug: string): boolean {
+        return verifiedTenants.has(tenantSlug);
     },
 
     /**
@@ -627,6 +676,8 @@ export const tenantMigrationService = {
 
                 await this._repairMigrationTableDrift(tenantPool, tenant.slug);
                 await this._runPendingMigrations(tenantPool, tenant.slug);
+                await this._assertTenantSchemaCurrent(tenantPool, tenant.slug);
+                await this._ensureApGovernance(tenantPool, tenant.slug);
 
                 const versionAfter = await schemaVersionRepository.getSchemaVersion(tenantPool);
                 verifiedTenants.add(tenant.slug);
@@ -646,6 +697,7 @@ export const tenantMigrationService = {
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
                 result.failed.push(tenant.slug);
+                verifiedTenants.delete(tenant.slug);
                 logger.error(`Tenant "${tenant.slug}" migration FAILED: ${msg}`);
             } finally {
                 if (tenantPool) {
@@ -699,22 +751,11 @@ export const tenantMigrationService = {
                     connectionTimeoutMillis: 10000,
                 });
 
-                const { rows } = await tenantPool.query<{ tablename: string }>(
-                    `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
-                );
-                const existingTables = new Set(rows.map(r => r.tablename));
-
-                const missing = this.REQUIRED_TABLES.filter(t => !existingTables.has(t));
-
-                if (missing.length > 0) {
-                    logger.error(
-                        `CRITICAL: Tenant "${tenant.slug}" missing ${missing.length} required table(s): ${missing.join(', ')}`
-                    );
-                } else {
-                    logger.info(`Tenant "${tenant.slug}" health check OK — all ${this.REQUIRED_TABLES.length} required tables present`);
-                }
+                await this._assertTenantSchemaCurrent(tenantPool, tenant.slug);
+                logger.info(`Tenant "${tenant.slug}" health check OK — schema current`);
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
+                verifiedTenants.delete(tenant.slug);
                 logger.error(`CRITICAL: Tenant "${tenant.slug}" health check FAILED: ${msg}`);
             } finally {
                 if (tenantPool) {

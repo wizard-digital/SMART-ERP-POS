@@ -208,6 +208,13 @@ export const MIGRATION_COLUMN_ANCHORS: Readonly<
     '609_lot_split_parent.sql': {
         inventory_batches: ['parent_lot_id'],
     },
+    '502_pos_session_enforcement.sql': {
+        system_settings: ['pos_session_policy'],
+        sales: ['cash_register_session_id'],
+    },
+    '622_expense_reversal_ssot.sql': {
+        expenses: ['reversed_by', 'reversed_at', 'reversal_reason'],
+    },
 };
 
 export type TableColumnMap = ReadonlyMap<string, ReadonlySet<string>>;
@@ -233,6 +240,39 @@ export function findColumnDriftedMigrationFiles(
     return Object.keys(MIGRATION_COLUMN_ANCHORS).filter((filename) =>
         migrationHasColumnDrift(filename, columnMap),
     );
+}
+
+export type CopyMigrationDecision = 'copy' | 'skip-drift' | 'skip-unproven';
+
+/**
+ * Ledger rows are copied only when the target can prove the migration ran,
+ * or when the target already has a complete core schema (true template clone).
+ * Incomplete DBs must not inherit filenames without DDL (Bliss drift).
+ */
+export function decideCopyMigrationLedgerRow(args: {
+    filename: string;
+    tableAnchors: Readonly<Record<string, readonly string[]>>;
+    columnMap: TableColumnMap;
+    targetTables: ReadonlySet<string>;
+    targetViews: ReadonlySet<string>;
+    targetCoreSchemaComplete: boolean;
+    hasPostcondition: boolean;
+}): CopyMigrationDecision {
+    const tables = args.tableAnchors[args.filename];
+    if (tables?.some((t) => !relationSatisfiesAnchor(t, args.targetTables, args.targetViews))) {
+        return 'skip-drift';
+    }
+    if (migrationHasColumnDrift(args.filename, args.columnMap)) {
+        return 'skip-drift';
+    }
+    const proven =
+        Boolean(tables?.length) ||
+        Boolean(MIGRATION_COLUMN_ANCHORS[args.filename]) ||
+        args.hasPostcondition;
+    if (!proven && !args.targetCoreSchemaComplete) {
+        return 'skip-unproven';
+    }
+    return 'copy';
 }
 
 /** Which anchor migrations need re-application because required tables are absent. */
@@ -295,6 +335,9 @@ export const TENANT_REQUIRED_TABLES: readonly string[] = [
     'item_uom_conversions',
     'supplier_invoice_grn_links',
     'import_jobs',
+    'cash_registers',
+    'cash_register_sessions',
+    'cash_register_session_participants',
 ] as const;
 
 /** Clear cached anchors (tests). */

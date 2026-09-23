@@ -20,6 +20,8 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '611_lot_write_down_clearance.sql',
     '612_lot_write_down_immutability.sql',
     '613_lot_write_down_journal_coupling.sql',
+    '618_product_category_name_unique_ssot.sql',
+    '620_pos_session_policy_ssot.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -227,6 +229,35 @@ export async function verifyMigrationPostcondition(
             const postedDef = postedFn[0]?.def ?? '';
             const postedCastsId = postedDef.includes('CAST(rec.id AS TEXT)');
             return increaseBlocked && nullJeNotAuthorization && deferred[0]?.ok === true && postedCastsId;
+        }
+        case '618_product_category_name_unique_ssot.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND indexname = 'uq_product_categories_name_ci'
+                ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '620_pos_session_policy_ssot.sql': {
+            const [participants, policyCol, policyChk] = await Promise.all([
+                tableExists(pool, 'cash_register_session_participants'),
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'system_settings'
+                          AND column_name = 'pos_session_policy'
+                    ) AS ok`,
+                ),
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'chk_pos_session_policy'
+                    ) AS ok`,
+                ),
+            ]);
+            return participants && policyCol.rows[0]?.ok === true && policyChk.rows[0]?.ok === true;
         }
         default:
             return true;

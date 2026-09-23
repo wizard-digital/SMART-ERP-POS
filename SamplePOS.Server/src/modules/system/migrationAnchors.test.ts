@@ -58,4 +58,13 @@ describe('migrationAnchors', () => {
     const views = new Set(['dist_invoices', 'dist_invoice_lines']);
     expect(findDriftedMigrationFiles(tables, anchors, views)).toHaveLength(0);
   });
+
+  it('anchors 620 participants table for drift repair', () => {
+    const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
+    if (!fs.existsSync(sqlDir)) return;
+    const anchors = buildMigrationTableAnchors(sqlDir);
+    expect(anchors['620_pos_session_policy_ssot.sql']).toEqual(
+      expect.arrayContaining(['cash_register_session_participants']),
+    );
+  });
 });

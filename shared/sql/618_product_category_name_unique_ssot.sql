@@ -6,8 +6,7 @@
 --
 -- Order matters: drop case-sensitive unique BEFORE normalize/merge, otherwise
 -- TRIM collisions abort the transaction under product_categories_name_key.
-
-BEGIN;
+-- Transaction is owned by tenantMigrationService / migrate.mjs.
 
 -- 1. Drop case-sensitive unique / name indexes so heal can rewrite rows
 ALTER TABLE product_categories DROP CONSTRAINT IF EXISTS product_categories_name_key;
@@ -77,4 +76,5 @@ END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_product_categories_name_ci
   ON product_categories (LOWER(TRIM(name)));
 
-COMMIT;
+INSERT INTO schema_version (version)
+SELECT 618 WHERE NOT EXISTS (SELECT 1 FROM schema_version WHERE version = 618);

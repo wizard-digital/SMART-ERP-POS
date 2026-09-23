@@ -55,4 +55,21 @@ describe('tenantSchemaIntegrity', () => {
     expect(result.ok).toBe(false);
     expect(result.missing).toContainEqual({ table: 'customers', column: 'customer_group_id' });
   });
+
+  it('fails when pos_session_policy is missing (session SSOT)', async () => {
+    const tables = Object.keys(CRITICAL_SCHEMA_COLUMNS);
+    const columnsByTable: Record<string, string[]> = {};
+    for (const [table, cols] of Object.entries(CRITICAL_SCHEMA_COLUMNS)) {
+      columnsByTable[table] = [...cols];
+    }
+    columnsByTable.system_settings = columnsByTable.system_settings.filter(
+      (c) => c !== 'pos_session_policy'
+    );
+    const result = await verifyTenantSchemaIntegrity(mockPool(tables, columnsByTable));
+    expect(result.ok).toBe(false);
+    expect(result.missing).toContainEqual({
+      table: 'system_settings',
+      column: 'pos_session_policy',
+    });
+  });
 });

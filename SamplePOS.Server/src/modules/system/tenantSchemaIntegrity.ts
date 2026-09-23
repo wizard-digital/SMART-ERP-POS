@@ -41,6 +41,9 @@ export const CRITICAL_SCHEMA_COLUMNS: Readonly<Record<string, readonly string[]>
   ],
   price_groups: ['pricing_mode'],
   customer_groups: ['default_price_group_id'],
+  system_settings: ['pos_session_policy'],
+  sales: ['cash_register_session_id'],
+  expenses: ['employee_id'],
 };
 
 export interface SchemaIntegrityResult {
