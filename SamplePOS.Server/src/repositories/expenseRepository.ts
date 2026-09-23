@@ -1188,7 +1188,6 @@ const normalizeExpenseFromDb = (row: ExpenseDbRow): Expense => {
     approvedAt: row.approved_at,
     rejectedAt: row.rejected_at,
     paidAt: row.paid_at,
-    reversedAt: row.reversed_at
   };
 };
 
