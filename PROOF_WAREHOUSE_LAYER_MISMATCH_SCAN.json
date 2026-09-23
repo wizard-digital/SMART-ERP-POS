@@ -1,0 +1,90 @@
+{
+  "proof": "WAREHOUSE_LAYER_MISMATCH_ALL_TENANTS",
+  "generatedAt": "2026-09-18T13:37:38.182Z",
+  "targetProduct": "9ae85de5-b5f6-44d5-a47f-7129e6c8c60f",
+  "targetLot": "MAIN-f0097255ec",
+  "tenants": [
+    {
+      "db": "pos_system",
+      "multistore": false,
+      "mismatchCount": 0,
+      "mismatches": [],
+      "target": null
+    },
+    {
+      "db": "pos_template",
+      "multistore": false,
+      "mismatchCount": 0,
+      "mismatches": [],
+      "target": null
+    },
+    {
+      "db": "pos_tenant_acme_store",
+      "multistore": false,
+      "mismatchCount": 0,
+      "mismatches": [],
+      "target": null
+    },
+    {
+      "db": "pos_tenant_blis",
+      "multistore": false,
+      "mismatchCount": 0,
+      "mismatches": [],
+      "target": null
+    },
+    {
+      "db": "pos_tenant_bliss_interior_ltd",
+      "multistore": true,
+      "mismatchCount": 0,
+      "mismatches": [],
+      "target": {
+        "productId": "9ae85de5-b5f6-44d5-a47f-7129e6c8c60f",
+        "aggregates": {
+          "pi": 5,
+          "products_qoh": 5
+        },
+        "rows": [
+          {
+            "batch_id": "f0097255-ec13-47ff-9a09-267b764a23d2",
+            "batch_number": "MAIN",
+            "batch_remaining": 5,
+            "batch_status": "ACTIVE",
+            "product_lot_id": "3ab4aff0-f8d8-4d07-8383-693241fe7df3",
+            "lot_number": "MAIN-f0097255ec",
+            "lot_status": "ACTIVE",
+            "store_code": "SELLING",
+            "store_type": "SELLING",
+            "on_hand": 5,
+            "reserved": 0,
+            "committed": 0,
+            "blocked": false
+          }
+        ]
+      }
+    },
+    {
+      "db": "pos_tenant_dynamics",
+      "multistore": false,
+      "mismatchCount": 0,
+      "mismatches": [],
+      "target": null
+    },
+    {
+      "db": "pos_tenant_henber_pharmacy",
+      "multistore": false,
+      "mismatchCount": 0,
+      "mismatches": [],
+      "target": null
+    }
+  ],
+  "summary": {
+    "databasesScanned": 7,
+    "multistoreTenants": 1,
+    "multistoreWithMismatch": 0,
+    "totalMismatchRows": 0,
+    "targetProductFoundIn": [
+      "pos_tenant_bliss_interior_ltd"
+    ],
+    "verdict": "PASS_NO_MISMATCHES"
+  }
+}

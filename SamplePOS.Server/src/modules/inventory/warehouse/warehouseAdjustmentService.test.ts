@@ -15,6 +15,7 @@ const mockMultistore = {
 const mockStoreRepo = {
   getById: jest.fn<MockFn>(),
   getDefaultReceivingStore: jest.fn<MockFn>(),
+  getActivePosSellingStore: jest.fn<MockFn>(),
   getStoreByType: jest.fn<MockFn>(),
   upsertByCode: jest.fn<MockFn>(),
 };
@@ -107,6 +108,7 @@ describe('warehouseAdjustmentService', () => {
     mockUnitOfWork.runOrJoin.mockImplementation(async (_conn, fn) => fn(makeClient()));
     mockUnitOfWork.isPool.mockReturnValue(false);
     mockStoreRepo.getById.mockResolvedValue({ id: 'store-1', code: 'MAIN', isActive: true });
+    mockStoreRepo.getActivePosSellingStore.mockResolvedValue({ id: 'sell-1', code: 'SELLING' });
     mockStoreRepo.getDefaultReceivingStore.mockResolvedValue({ id: 'store-1' });
     mockCoupling.alignBatchSubledgerToStoreBalances.mockResolvedValue(undefined);
     mockProductLotRepository.getById.mockResolvedValue({

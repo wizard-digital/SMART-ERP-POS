@@ -149,6 +149,48 @@ describe('PROOF: Warehouse layer + POS sellable SSOT', () => {
     );
   });
 
+  it('SSOT-7: outbound stock movements dual-write store balances (INV-002)', () => {
+    const handler = readServer('src/modules/inventory/stockMovementHandler.ts');
+    const lot = readServer('src/modules/inventory-lot/lotService.ts');
+    const adj = readServer('src/modules/inventory/warehouse/warehouseAdjustmentService.ts');
+    const coupling = readServer('src/services/warehouseInventoryCoupling.ts');
+    const consumeCall = handler.slice(
+      handler.indexOf('changeQty.lt(0)'),
+      handler.indexOf('changeQty.lt(0)') + 900,
+    );
+    gate(
+      'HANDLER_SOURCE_STORE',
+      handler.includes('sourceStoreLocationId') &&
+        consumeCall.includes('storeLocationId: params.sourceStoreLocationId') &&
+        consumeCall.includes('skipStoreBalanceDeduction'),
+      'processMovement outbound passes sourceStoreLocationId into consumeLot',
+    );
+    gate(
+      'CONSUME_DEFAULT_CROSS_STORE',
+      lot.includes('deductAcrossAllStoreBalances !== false') &&
+        lot.includes('skipStoreBalanceDeduction'),
+      'consumeLot defaults to cross-store balance deduct for specific-lot multistore consume',
+    );
+    gate(
+      'ADJUST_NO_PRE_BALANCE_OUT',
+      adj.includes('Qty dual-write owned by StockMovementHandler') ||
+        adj.includes('Do NOT pre-adjust balances here'),
+      'adjustAtStore OUT does not pre-decrement balances before processMovement',
+    );
+    gate(
+      'ADJUST_PASSES_SOURCE_STORE',
+      /sourceStoreLocationId:\s*\n?\s*params\.direction === 'OUT' \? params\.storeLocationId/.test(adj) ||
+        adj.includes("params.direction === 'OUT' ? params.storeLocationId"),
+      'adjustAtStore OUT passes sourceStoreLocationId to processMovement',
+    );
+    gate(
+      'HEAL_BALANCES_TO_BATCH',
+      coupling.includes('alignStoreBalancesToBatchSubledger') &&
+        coupling.includes('healAndAssertWarehouseLayer'),
+      'heal snaps store balances to batch then asserts INV-002',
+    );
+  });
+
   it('SSOT-6: behavioral unit proof — quarantine vs broken projection', async () => {
     const { isMultistoreEnabled } = await import(
       '../modules/inventory/warehouse/multistoreSettings.js'

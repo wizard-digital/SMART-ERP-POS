@@ -123,6 +123,124 @@ export async function alignBatchSubledgerToStoreBalances(
 }
 
 /**
+ * Align store balances TO batch.remaining_quantity (economic SSOT from stock_movements).
+ * Use to heal INV-002 drift where outbound paths mutated batch without balances (or vice versa).
+ * Returns number of batches healed.
+ */
+export async function alignStoreBalancesToBatchSubledger(
+    client: PoolClient,
+    productId?: string,
+): Promise<number> {
+    if (!(await isMultistoreEnabled(client))) {
+        return 0;
+    }
+
+    const mismatches = await findWarehouseLayerMismatches(client, productId);
+    if (mismatches.length === 0) {
+        return 0;
+    }
+
+    const { storeLocationRepository } = await import(
+        '../modules/inventory/warehouse/storeLocationRepository.js'
+    );
+    const { warehouseInventoryRepository } = await import(
+        '../modules/inventory/warehouse/warehouseInventoryRepository.js'
+    );
+
+    const selling = await storeLocationRepository.getActivePosSellingStore(client);
+    const main = await storeLocationRepository.getDefaultReceivingStore(client);
+    const fallbackStoreId = selling?.id ?? main?.id;
+    let healed = 0;
+
+    for (const m of mismatches) {
+        if (!m.inventoryBatchId) continue;
+        const delta = m.batchRemaining - m.balanceTotal; // +need more on balances; -reduce balances
+        if (Math.abs(delta) <= WAREHOUSE_LAYER_TOLERANCE) continue;
+
+        const lotRes = await client.query<{ id: string; product_id: string }>(
+            `SELECT id, product_id FROM product_lots
+             WHERE inventory_batch_id = $1
+             ORDER BY created_at ASC
+             LIMIT 1`,
+            [m.inventoryBatchId],
+        );
+        const lot = lotRes.rows[0];
+        if (!lot) continue;
+
+        if (delta < 0) {
+            let left = -delta;
+            const bals = await client.query<{
+                store_location_id: string;
+                quantity_on_hand: string;
+            }>(
+                `SELECT store_location_id, quantity_on_hand
+                 FROM inventory_balances
+                 WHERE product_lot_id = $1 AND quantity_on_hand > 0
+                 ORDER BY quantity_on_hand DESC
+                 FOR UPDATE`,
+                [lot.id],
+            );
+            for (const row of bals.rows) {
+                if (left <= WAREHOUSE_LAYER_TOLERANCE) break;
+                const oh = parseFloat(row.quantity_on_hand);
+                const take = Math.min(left, oh);
+                if (take <= WAREHOUSE_LAYER_TOLERANCE) continue;
+                await warehouseInventoryRepository.adjustSellableQuantity(client, {
+                    storeLocationId: row.store_location_id,
+                    productLotId: lot.id,
+                    productId: lot.product_id,
+                    quantity: take,
+                    direction: 'OUT',
+                });
+                left -= take;
+            }
+            if (left > WAREHOUSE_LAYER_TOLERANCE) {
+                logger.warn('[WAREHOUSE LAYER] Could not fully reduce balances to batch', {
+                    batchId: m.inventoryBatchId,
+                    lotNumber: m.lotNumber,
+                    short: left,
+                });
+            }
+        } else {
+            if (!fallbackStoreId) {
+                logger.warn('[WAREHOUSE LAYER] No store to seed balance heal', {
+                    batchId: m.inventoryBatchId,
+                });
+                continue;
+            }
+            await warehouseInventoryRepository.incrementBalanceAtStore(client, {
+                storeLocationId: fallbackStoreId,
+                productId: lot.product_id,
+                productLotId: lot.id,
+                quantity: delta,
+            });
+        }
+        healed += 1;
+    }
+
+    if (healed > 0) {
+        logger.info('[WAREHOUSE LAYER] Aligned store balances to batch subledger', {
+            productId: productId ?? 'ALL',
+            batchesHealed: healed,
+        });
+    }
+    return healed;
+}
+
+/**
+ * Heal INV-002 then assert. Used on multistore enable / repair.
+ */
+export async function healAndAssertWarehouseLayer(
+    client: PoolClient,
+    context: string,
+    productId?: string,
+): Promise<{ healed: number }> {
+    const healed = await alignStoreBalancesToBatchSubledger(client, productId);
+    await assertWarehouseLayerConsistent(client, context, productId);
+    return { healed };
+}
+
+/**
  * Roll back the transaction if warehouse balances diverged from batch subledger.
  */
 export async function assertWarehouseLayerConsistent(

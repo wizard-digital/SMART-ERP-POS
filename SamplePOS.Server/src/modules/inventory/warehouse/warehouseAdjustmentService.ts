@@ -78,9 +78,16 @@ async function ensureExpiredStore(client: PoolClient) {
 }
 
 async function resolveDefaultStoreId(conn: PoolClient): Promise<string> {
+    // INV-POS SSOT: sellable adjustments default to SELLING (same as GR/POS), not MAIN warehouse.
+    const selling = await storeLocationRepository.getActivePosSellingStore(conn);
+    if (selling) {
+        return selling.id;
+    }
     const main = await storeLocationRepository.getDefaultReceivingStore(conn);
     if (!main) {
-        throw new ValidationError('No MAIN receiving store configured for adjustments');
+        throw new ValidationError(
+            'No SELLING or MAIN store configured for adjustments. Run store network setup.',
+        );
     }
     return main.id;
 }
@@ -328,6 +335,32 @@ export const warehouseAdjustmentService = {
                 );
             }
 
+            // OUT must have sellable qty at the chosen store — never debit another store silently.
+            if (params.direction === 'OUT') {
+                const sellableRes = await client.query<{ sellable: string }>(
+                    `SELECT GREATEST(
+                       COALESCE(ib.quantity_on_hand, 0)
+                         - COALESCE(ib.quantity_reserved, 0)
+                         - COALESCE(ib.quantity_committed, 0),
+                       0
+                     )::text AS sellable
+                     FROM inventory_balances ib
+                     WHERE ib.store_location_id = $1
+                       AND ib.product_lot_id = $2
+                       AND NOT ib.blocked`,
+                    [params.storeLocationId, productLotId],
+                );
+                const sellable = parseFloat(sellableRes.rows[0]?.sellable ?? '0');
+                if (!(sellable >= params.quantity - 0.0001)) {
+                    throw new ValidationError(
+                        `Insufficient sellable stock at store ${store.code} for this lot ` +
+                            `(available ${sellable.toFixed(2)}, requested ${params.quantity.toFixed(2)}). ` +
+                            `Switch the Adjustments store to where the stock sits (usually SELLING), ` +
+                            `or transfer stock first.`,
+                    );
+                }
+            }
+
             // DAMAGE quarantine = internal store transfer only. Batch total and GL stay unchanged
             // until a later write-off/disposal consumes stock from the DAMAGE location.
             if (params.reason === 'DAMAGE' && params.direction === 'OUT') {
@@ -442,15 +475,9 @@ export const warehouseAdjustmentService = {
                 };
             }
 
-            if (params.direction === 'OUT') {
-                await warehouseInventoryRepository.adjustSellableQuantity(client, {
-                    storeLocationId: params.storeLocationId,
-                    productLotId,
-                    productId: params.productId,
-                    quantity: params.quantity,
-                    direction: params.direction,
-                });
-            }
+            // OUT qty is owned by StockMovementHandler → consumeLot (store dual-write).
+            // Do NOT pre-adjust balances here — that caused silent INV-002 drift when
+            // processMovement only mutated the batch master.
 
             const movementType = mapMovementType(params.reason, params.direction);
             let referenceType = 'ADJ_DOC';
@@ -498,6 +525,8 @@ export const warehouseAdjustmentService = {
                     unitCost: resolvedUnitCost,
                     targetStoreLocationId:
                         params.direction === 'IN' ? params.storeLocationId : undefined,
+                    sourceStoreLocationId:
+                        params.direction === 'OUT' ? params.storeLocationId : undefined,
                     reason: `${params.reason}: ${params.notes} ${storeTag}`,
                     referenceType,
                     referenceId: documentId,

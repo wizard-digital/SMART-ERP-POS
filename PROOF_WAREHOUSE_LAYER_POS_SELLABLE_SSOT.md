@@ -1,6 +1,6 @@
 # PROOF_WAREHOUSE_LAYER_POS_SELLABLE_SSOT
 
-Verdict: **PASS** (16/16) live=PASS
+Verdict: **PASS** (21/21)
 
 ## SSOT
 
@@ -26,6 +26,11 @@ Verdict: **PASS** (16/16) live=PASS
 - PASS `ADJUST_MULTISTORE`: adjustBatch delegates to adjustAtStore when multistore on
 - PASS `ADJUST_ALIGN_BEFORE`: adjustAtStore aligns batch to balances before mutating
 - PASS `ADJUST_IN_RETURN_LOT`: ADJUSTMENT_IN mutates via lotService.returnLot (projection + balance)
+- PASS `HANDLER_SOURCE_STORE`: processMovement outbound passes sourceStoreLocationId into consumeLot
+- PASS `CONSUME_DEFAULT_CROSS_STORE`: consumeLot defaults to cross-store balance deduct for specific-lot multistore consume
+- PASS `ADJUST_NO_PRE_BALANCE_OUT`: adjustAtStore OUT does not pre-decrement balances before processMovement
+- PASS `ADJUST_PASSES_SOURCE_STORE`: adjustAtStore OUT passes sourceStoreLocationId to processMovement
+- PASS `HEAL_BALANCES_TO_BATCH`: heal snaps store balances to batch then asserts INV-002
 - PASS `BEHAVIOR_RETURN_CASE`: behavior test covers RETURN quarantine allow-path
 - PASS `MULTISTORE_HELPER`: isMultistoreEnabled export present
 
@@ -44,10 +49,3 @@ Verdict: **PASS** (16/16) live=PASS
 
 - return SKU-3273: `C:\Users\Chase\source\repos\SamplePOS\SamplePOS.Server\scripts\proof-bliss-return-sku3273-rollback.mjs` exists=true
 - adjust SKU-3730: `C:\Users\Chase\source\repos\SamplePOS\SamplePOS.Server\scripts\proof-bliss-adjust-sku3730-rollback.mjs` exists=true
-
-## Live evidence (rollback-safe)
-
-- Return SKU-3273: **PASS** (exit 0) — gap reason `SELLING_ZERO_QUARANTINE_HAS`
-- Adjust SKU-3730 +8: **PASS** (exit 0) — batch 14, lots=1
-
-

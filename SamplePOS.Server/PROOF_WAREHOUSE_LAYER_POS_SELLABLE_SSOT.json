@@ -1,8 +1,8 @@
 {
   "feature": "WAREHOUSE_LAYER_POS_SELLABLE_SSOT",
   "verdict": "PASS",
-  "passed": 16,
-  "total": 16,
+  "passed": 21,
+  "total": 21,
   "gates": [
     {
       "id": "COUPLING_GROUP_BY_BATCH",
@@ -75,6 +75,31 @@
       "detail": "ADJUSTMENT_IN mutates via lotService.returnLot (projection + balance)"
     },
     {
+      "id": "HANDLER_SOURCE_STORE",
+      "ok": true,
+      "detail": "processMovement outbound passes sourceStoreLocationId into consumeLot"
+    },
+    {
+      "id": "CONSUME_DEFAULT_CROSS_STORE",
+      "ok": true,
+      "detail": "consumeLot defaults to cross-store balance deduct for specific-lot multistore consume"
+    },
+    {
+      "id": "ADJUST_NO_PRE_BALANCE_OUT",
+      "ok": true,
+      "detail": "adjustAtStore OUT does not pre-decrement balances before processMovement"
+    },
+    {
+      "id": "ADJUST_PASSES_SOURCE_STORE",
+      "ok": true,
+      "detail": "adjustAtStore OUT passes sourceStoreLocationId to processMovement"
+    },
+    {
+      "id": "HEAL_BALANCES_TO_BATCH",
+      "ok": true,
+      "detail": "heal snaps store balances to batch then asserts INV-002"
+    },
+    {
       "id": "BEHAVIOR_RETURN_CASE",
       "ok": true,
       "detail": "behavior test covers RETURN quarantine allow-path"
@@ -110,103 +135,5 @@
       "fix": "upsertProjection updates by inventory_batch_id; coupling groups by batch"
     }
   ],
-  "generatedAt": "2026-09-03T20:54:16.742Z",
-  "liveEvidence": {
-    "returnSku3273": {
-      "exitCode": 0,
-      "verdict": "PASS",
-      "result": {
-        "db": "pos_tenant_bliss_interior_ltd",
-        "productId": "67d3f2da-62e5-4416-b352-ccca5a32ceee",
-        "sku": "SKU-3273",
-        "steps": [
-          {
-            "step": "before",
-            "row": {
-              "sku": "SKU-3273",
-              "qoh": 0,
-              "batch_status": "DEPLETED",
-              "batch_qty": 0
-            }
-          },
-          {
-            "step": "restoreCustomerReturn",
-            "ok": true
-          },
-          {
-            "step": "after_sync",
-            "row": {
-              "qoh": 1,
-              "batch_status": "ACTIVE",
-              "batch_qty": 1
-            }
-          },
-          {
-            "step": "return_store_balance",
-            "rows": [
-              {
-                "code": "RETURN",
-                "qty": 1
-              }
-            ]
-          },
-          {
-            "step": "pos_gaps",
-            "gaps": [
-              {
-                "productId": "67d3f2da-62e5-4416-b352-ccca5a32ceee",
-                "sku": "SKU-3273",
-                "productName": "WOODEN BOTTLE&WINE GLASS HOLDER",
-                "inventoryBatchId": "07170a56-16d1-449b-8501-019c77491422",
-                "batchRemaining": 1,
-                "sellingSellable": 0,
-                "mainOnHand": 0,
-                "quarantineOnHand": 1,
-                "reason": "SELLING_ZERO_QUARANTINE_HAS"
-              }
-            ]
-          }
-        ],
-        "verdict": "PASS",
-        "rolledBack": true
-      }
-    },
-    "adjustSku3730": {
-      "exitCode": 0,
-      "verdict": "PASS",
-      "result": {
-        "db": "pos_tenant_bliss_interior_ltd",
-        "productId": "de04d835-0892-4477-a29a-e66aec097bb0",
-        "sku": "SKU-3730",
-        "steps": [
-          {
-            "step": "before",
-            "row": {
-              "batch_qty": 6,
-              "lot_count": 1,
-              "bal_total": 6
-            }
-          },
-          {
-            "step": "adjustAtStore",
-            "ok": true
-          },
-          {
-            "step": "after",
-            "row": {
-              "batch_qty": 14,
-              "lot_count": 1,
-              "lot_names": [
-                "MAIN-399acb3a1a"
-              ],
-              "bal_total": 14
-            }
-          }
-        ],
-        "verdict": "PASS",
-        "rolledBack": true
-      }
-    }
-  },
-  "liveVerdict": "PASS"
+  "generatedAt": "2026-09-23T06:13:56.617Z"
 }
