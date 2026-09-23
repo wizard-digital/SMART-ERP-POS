@@ -60,6 +60,11 @@ export interface CreateArPaymentInput {
   certificateNumber?: string;
   /** Optional bank book link (parity with supplier payments / deposit routing). */
   bankAccountId?: string | null;
+  /**
+   * Till AR collection: debit Cash Drawer 1010 (TILL_RECEIPT).
+   * Omit for office receipts (debit 1015 Undeposited Funds).
+   */
+  fundsAccountCode?: '1010';
 }
 
 export type ReverseCustomerPaymentResult = {
@@ -91,6 +96,9 @@ export async function createCustomerPayment(handle: DbConnection, input: CreateA
   const paymentAmount = new Decimal(input.amount);
   if (paymentAmount.lessThanOrEqualTo(0)) {
     throw new ValidationError('Payment amount must be greater than zero');
+  }
+  if (input.fundsAccountCode === '1010' && input.whtTypeId) {
+    throw new ValidationError('Till AR collections cannot include customer WHT');
   }
 
   const posted = await UnitOfWork.runOrJoin(handle, async (client) => {
@@ -157,6 +165,7 @@ export async function createCustomerPayment(handle: DbConnection, input: CreateA
         whtTypeName: whtCalc?.whtTypeName,
         whtEntryId,
         whtAccountCode: whtCalc?.accountCode,
+        fundsAccountCode: input.fundsAccountCode,
       },
       UnitOfWork.isPool(handle) ? handle : undefined,
       client,
