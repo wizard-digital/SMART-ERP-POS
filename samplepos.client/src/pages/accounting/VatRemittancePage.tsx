@@ -196,8 +196,7 @@ export default function VatRemittancePage() {
             <Label>Amount</Label>
             <Input
               type="number"
-              min={0}
-              step="0.01"
+              step="1"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="mt-1"

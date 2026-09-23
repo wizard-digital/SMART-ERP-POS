@@ -1,9 +1,9 @@
 /**
  * Treasury Transfer UI — Phase 1C (liquidity ↔ liquidity)
+ * Quiet by default: policy essays live behind hover/focus help, not always-on copy.
  */
 
-import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '../../utils/api';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -15,9 +15,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../components/ui/select';
-import { Loader2, RefreshCw, ArrowLeftRight } from 'lucide-react';
+import { Loader2, RefreshCw, ArrowLeftRight, Info } from 'lucide-react';
 import { formatCurrency } from '../../utils/currency';
 import { TreasuryFeatureDisabledNotice } from '../../components/treasury/TreasuryFeatureDisabledNotice';
+import { cn } from '../../lib/utils';
+
+/** Hover / focus-within tip — no always-visible essay noise. */
+function QuietHoverHelp({
+  title,
+  children,
+  className,
+  align = 'left',
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+  align?: 'left' | 'right';
+}) {
+  return (
+    <div className={cn('group relative inline-flex items-center', className)}>
+      <button
+        type="button"
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+        aria-label={`${title} — details`}
+      >
+        <Info className="h-3.5 w-3.5" aria-hidden />
+      </button>
+      <div
+        role="tooltip"
+        className={cn(
+          'pointer-events-none absolute top-full z-30 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-md border border-slate-200 bg-white p-3 text-xs leading-relaxed text-slate-600 opacity-0 shadow-md transition-opacity',
+          'invisible group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100',
+          align === 'right' ? 'right-0' : 'left-0',
+        )}
+      >
+        <div className="mb-1.5 font-medium text-slate-900">{title}</div>
+        <div className="space-y-2">{children}</div>
+      </div>
+    </div>
+  );
+}
 
 interface LiquidityAccount {
   accountCode: string;
@@ -162,37 +199,31 @@ export default function TreasuryTransferPage({ embedded = false }: { embedded?: 
 
   return (
     <div className={embedded ? 'space-y-6' : 'space-y-6 p-6'}>
-      {!embedded && (
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {!embedded && (
             <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
               <ArrowLeftRight className="h-6 w-6" />
               Move money
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Move funds between cash, bank, card clearing, and mobile money accounts.
+          )}
+          <QuietHoverHelp title="Move money">
+            <p>
+              Move between cash, bank, mobile money, card clearing, and petty cash. For
+              bank-book-to-bank-book only, use Transactions → Transfer (same posting when Treasury
+              is on).
             </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="ml-2">Refresh</span>
-          </Button>
+            <p>
+              Wrong move? Reverse from Banking → Transactions or Liquidity Documents → Reverse document
+              (blocked if bank-reconciled).
+            </p>
+          </QuietHoverHelp>
         </div>
-      )}
-
-      {embedded && (
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Move between any liquidity account (cash, bank, mobile money, card clearing). For
-            bank-account-to-bank-account only with bank books, use the Transactions → Transfer
-            action — it records the same movement when Treasury is enabled.
-          </p>
-          <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="ml-2">Refresh</span>
-          </Button>
-        </div>
-      )}
+        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          <span className="ml-2">Refresh</span>
+        </Button>
+      </div>
 
       {enabled === false && <TreasuryFeatureDisabledNotice featureLabel="Move money" />}
 
@@ -278,8 +309,7 @@ export default function TreasuryTransferPage({ embedded = false }: { embedded?: 
             <Label>Amount</Label>
             <Input
               type="number"
-              min={0}
-              step="0.01"
+              step="1"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
@@ -303,42 +333,40 @@ export default function TreasuryTransferPage({ embedded = false }: { embedded?: 
           </Button>
         </div>
 
-        <div className="rounded-lg border p-4 text-sm text-muted-foreground space-y-2">
-          <div className="font-medium text-foreground">Liquidity accounts</div>
-          <p>
-            Only cash, bank, mobile money, card clearing, petty cash, and undeposited accounts can be
-            used. Expense and customer/supplier balances are blocked.
-          </p>
-          <p className="text-xs">
-            Posted a wrong move? Open{' '}
-            <Link to="/accounting/treasury" className="text-blue-700 underline underline-offset-2">
-              Liquidity Documents
-            </Link>{' '}
-            → select the transfer → <span className="font-medium text-foreground">Reverse document</span>{' '}
-            (accounting permission; blocked if bank-reconciled). Then post the correct transfer.
-          </p>
-          <ul className="divide-y rounded border">
+        <div className="rounded-lg border p-4 text-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-medium text-foreground">Liquidity accounts</div>
+            <QuietHoverHelp title="Which accounts?" align="right">
+              <p>
+                Only cash, bank, mobile money, card clearing, petty cash, and undeposited accounts
+                appear here. Expense and customer/supplier balances are blocked.
+              </p>
+              <p>
+                Undeposited Funds (1015) is listed for balance visibility but cannot be used in Move
+                money — clear it via Undeposited receipts.
+              </p>
+            </QuietHoverHelp>
+          </div>
+          <ul className="divide-y rounded border text-muted-foreground">
             {accounts.map((a) => {
               const negative = a.currentBalance < -0.0001;
+              const undeposited = a.systemAccountTag === 'UNDEPOSITED_FUNDS';
               return (
                 <li
                   key={a.accountCode}
                   className={`flex justify-between gap-2 px-3 py-2 ${negative ? 'bg-red-50' : ''}`}
+                  title={
+                    negative
+                      ? 'Overdrawn — cannot pay out'
+                      : undeposited
+                        ? 'Clear via Undeposited receipts — not Move money'
+                        : undefined
+                  }
                 >
                   <span>
                     {a.accountCode} {a.accountName}
                     {a.systemAccountTag ? (
                       <span className="ml-2 text-xs">[{a.systemAccountTag}]</span>
-                    ) : null}
-                    {negative ? (
-                      <span className="mt-0.5 block text-[11px] font-medium text-red-700">
-                        Overdrawn / negative — cannot pay out from this account
-                      </span>
-                    ) : null}
-                    {a.systemAccountTag === 'UNDEPOSITED_FUNDS' ? (
-                      <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                        Clear via Undeposited receipts — not Move Money
-                      </span>
                     ) : null}
                   </span>
                   <span className={negative ? 'font-medium text-red-700' : ''}>

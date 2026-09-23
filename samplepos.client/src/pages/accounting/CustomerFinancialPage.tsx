@@ -604,8 +604,7 @@ const CustomerFinancialPage = () => {
                                                             amount: parseFloat(e.target.value) || 0
                                                         }))}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        step="1"
                                                     />
                                                 </div>
                                                 <div>
@@ -672,8 +671,7 @@ const CustomerFinancialPage = () => {
                                                             amount: parseFloat(e.target.value) || 0
                                                         }))}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        step="1"
                                                     />
                                                 </div>
                                                 <div>
@@ -741,8 +739,7 @@ const CustomerFinancialPage = () => {
                                                             amount: parseFloat(e.target.value) || 0
                                                         }))}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        step="1"
                                                     />
                                                 </div>
                                                 <div>

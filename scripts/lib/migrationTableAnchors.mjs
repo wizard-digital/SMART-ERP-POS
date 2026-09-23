@@ -129,4 +129,7 @@ export const TENANT_REQUIRED_TABLES = [
   'item_uom_conversions',
   'supplier_invoice_grn_links',
   'import_jobs',
+  'cash_registers',
+  'cash_register_sessions',
+  'cash_register_session_participants',
 ];

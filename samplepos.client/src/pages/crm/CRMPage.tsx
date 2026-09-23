@@ -1279,7 +1279,7 @@ function CreateOpportunityModal({
                             <label className="block text-sm font-medium text-gray-700 mb-1">Value</label>
                             <input
                                 type="number"
-                                step="0.01"
+                                step="1"
                                 value={form.estimatedValue}
                                 onChange={(e) => setForm({ ...form, estimatedValue: e.target.value })}
                                 className="w-full border rounded-lg px-3 py-2 text-sm"
@@ -1289,7 +1289,6 @@ function CreateOpportunityModal({
                             <label className="block text-sm font-medium text-gray-700 mb-1">Probability %</label>
                             <input
                                 type="number"
-                                min="0"
                                 max="100"
                                 value={form.probability}
                                 onChange={(e) => setForm({ ...form, probability: e.target.value })}

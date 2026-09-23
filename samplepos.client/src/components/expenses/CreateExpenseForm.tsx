@@ -129,8 +129,7 @@ export const CreateExpenseForm: React.FC<CreateExpenseFormProps> = ({ onSuccess,
                 <Input
                   id="amount"
                   type="number"
-                  step="0.01"
-                  min="0"
+                  step="1"
                   placeholder="0.00"
                   {...register('amount', { valueAsNumber: true })}
                   className={errors.amount ? 'border-red-500 h-9' : 'h-9'}

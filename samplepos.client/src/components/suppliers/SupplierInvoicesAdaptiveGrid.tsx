@@ -229,9 +229,8 @@ export function SupplierInvoicesAdaptiveGrid<T extends SupplierInvoiceGridRow>({
                 onChange={(e) => onSetMultiAmount(inv.id, e.target.value)}
                 onClick={(e) => e.stopPropagation()}
                 className="w-28 border border-purple-300 rounded px-2 py-1 text-xs text-right focus:ring-1 focus:ring-purple-500 min-h-[var(--layout-touch-target)]"
-                min="0.01"
                 max={balance}
-                step="0.01"
+                step="1"
               />
               <button
                 type="button"
@@ -303,9 +302,8 @@ export function SupplierInvoicesAdaptiveGrid<T extends SupplierInvoiceGridRow>({
                   value={String(multiSelected.get(inv.id) ?? '')}
                   onChange={(e) => onSetMultiAmount(inv.id, e.target.value)}
                   className="flex-1 border border-purple-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-purple-500 min-h-[var(--layout-touch-target)]"
-                  min="0.01"
                   max={balance}
-                  step="0.01"
+                  step="1"
                 />
                 <button
                   type="button"

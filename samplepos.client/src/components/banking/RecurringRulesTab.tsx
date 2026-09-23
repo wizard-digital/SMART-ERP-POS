@@ -250,7 +250,7 @@ export const RecurringRulesTab: React.FC = () => {
                                     <Input
                                         id="expectedAmount"
                                         type="number"
-                                        step="0.01"
+                                        step="1"
                                         value={formData.expectedAmount}
                                         onChange={(e) => setFormData({ ...formData, expectedAmount: parseFloat(e.target.value) || 0 })}
                                         required

@@ -886,10 +886,11 @@ export class BankingService {
 
             // Resolve contra account
             let contraAccountCode: string | null = null;
+            let resolvedContraAccountId: string | null = dto.contraAccountId || null;
             if (dto.contraAccountId) {
                 const contraAccount = await client.query(
                     `
-          SELECT "AccountCode" FROM accounts WHERE "Id" = $1
+          SELECT "Id", "AccountCode" FROM accounts WHERE "Id" = $1
         `,
                     [dto.contraAccountId]
                 );
@@ -897,11 +898,12 @@ export class BankingService {
                     throw new Error(`Contra account ${dto.contraAccountId} not found`);
                 }
                 contraAccountCode = contraAccount.rows[0].AccountCode;
+                resolvedContraAccountId = contraAccount.rows[0].Id;
             } else if (dto.categoryId) {
                 // Get default account from category
                 const category = await client.query(
                     `
-          SELECT bc.*, a."AccountCode" as default_account_code
+          SELECT bc.*, a."Id" as default_account_id, a."AccountCode" as default_account_code
           FROM bank_categories bc
           LEFT JOIN accounts a ON a."Id" = bc.default_account_id
           WHERE bc.id = $1
@@ -910,13 +912,35 @@ export class BankingService {
                 );
                 if (category.rows.length > 0 && category.rows[0].default_account_code) {
                     contraAccountCode = category.rows[0].default_account_code;
+                    resolvedContraAccountId = category.rows[0].default_account_id || null;
                 }
             }
 
             if (!contraAccountCode) {
                 throw new Error(
-                    'Contra account is required. Either specify contraAccountId or use a category with a default account.'
+                    'Offset account is required. Pick a ledger (e.g. Owner Capital 3200) or a category with a default account — same as Journal Entry.'
                 );
+            }
+
+            // Add Transaction is for external funds (owner capital, drawings, fees).
+            // POS owns sales revenue; Customer Payments owns AR collections.
+            const sourceType = dto.sourceType || 'MANUAL';
+            if (sourceType === 'MANUAL') {
+                if (contraAccountCode === '4000') {
+                    throw new Error(
+                        'Sales revenue is posted by POS, not Add Transaction. Use Owner Capital (3200) for owner capital, or Transfer / Move money to move cash between books.',
+                    );
+                }
+                if (contraAccountCode === '1200') {
+                    throw new Error(
+                        'Customer invoice collections: use Accounting → Customer Payments so the receipt allocates to an invoice.',
+                    );
+                }
+                if (/^10\d{2}/.test(String(contraAccountCode))) {
+                    throw new Error(
+                        'Cash↔bank moves use Transfer or Move money, not Add Transaction (Tally Contra / SAP bank transfer).',
+                    );
+                }
             }
 
             // Generate transaction number
@@ -977,7 +1001,7 @@ export class BankingService {
                     dto.description,
                     dto.reference || null,
                     dto.amount,
-                    dto.contraAccountId || null,
+                    resolvedContraAccountId,
                     glResult.transactionId,
                     dto.sourceType || 'MANUAL',
                     dto.sourceId || null,
@@ -1291,6 +1315,54 @@ export class BankingService {
         dbPool?: pg.Pool
     ): Promise<BankTransaction> {
         const pool = dbPool || globalPool;
+
+        const existing = await pool.query<BankTransactionDbRow>(
+            `SELECT * FROM bank_transactions WHERE id = $1`,
+            [dto.transactionId],
+        );
+        if (existing.rows.length === 0) {
+            throw new Error(`Transaction ${dto.transactionId} not found`);
+        }
+        const existingTxn = existing.rows[0];
+        if (existingTxn.is_reversed) {
+            throw new Error(`Transaction ${dto.transactionId} is already reversed`);
+        }
+        if (existingTxn.is_reconciled) {
+            throw new Error(
+                `Transaction ${dto.transactionId} is reconciled and cannot be reversed. Unreconcile first or post a correcting transfer.`,
+            );
+        }
+
+        // Posted liquidity documents own the JE — reverse the document (opposite TD + bank flags).
+        // Must run outside this method's UnitOfWork (treasury reverse starts its own).
+        if (existingTxn.gl_transaction_id) {
+            const td = await pool.query<{ id: string }>(
+                `SELECT id FROM treasury_documents
+                  WHERE journal_entry_id = $1
+                    AND reversed_by_document_id IS NULL
+                    AND status = 'POSTED'
+                    AND document_type <> 'TREASURY_REVERSAL'
+                  LIMIT 1`,
+                [existingTxn.gl_transaction_id],
+            );
+            if (td.rows[0]?.id) {
+                const { reverse: reverseTreasuryDocument } = await import(
+                    '../modules/treasury/treasuryService.js'
+                );
+                await reverseTreasuryDocument(pool, td.rows[0].id, userId, dto.reason);
+                const updated = await this.getTransactionById(dto.transactionId, pool);
+                if (!updated) {
+                    throw new Error(`Transaction ${dto.transactionId} not found after treasury reverse`);
+                }
+                logger.info('Bank transaction reversed via Treasury Document', {
+                    originalId: dto.transactionId,
+                    treasuryDocumentId: td.rows[0].id,
+                    reason: dto.reason,
+                });
+                return updated;
+            }
+        }
+
         return UnitOfWork.run(pool, async (client) => {
             // Get original transaction
             const original = await client.query<BankTransactionDbRow>(
@@ -1314,24 +1386,6 @@ export class BankingService {
                 throw new Error(
                     `Transaction ${dto.transactionId} is reconciled and cannot be reversed. Unreconcile first or post a correcting transfer.`,
                 );
-            }
-
-            // Prefer Treasury Document reverse when this JE belongs to a posted TD (single SSOT)
-            if (origTxn.gl_transaction_id) {
-                const td = await client.query<{ id: string }>(
-                    `SELECT id FROM treasury_documents
-                      WHERE journal_entry_id = $1
-                        AND reversed_by_document_id IS NULL
-                        AND status = 'POSTED'
-                        AND document_type <> 'TREASURY_REVERSAL'
-                      LIMIT 1`,
-                    [origTxn.gl_transaction_id],
-                );
-                if (td.rows[0]?.id) {
-                    throw new Error(
-                        `This bank move is owned by a Treasury Document. Reverse it from Accounting → Liquidity Documents (document id ${td.rows[0].id}).`,
-                    );
-                }
             }
 
             if (!origTxn.gl_transaction_id) {

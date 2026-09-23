@@ -365,9 +365,8 @@ export default function DepositWorksheetPage({ embedded = false }: { embedded?: 
                             <Input
                               className="h-8 w-36"
                               type="number"
-                              min={0}
                               max={receipt.residualAmount}
-                              step="0.01"
+                              step="1"
                               value={selected[key]}
                               onChange={(e) => setPartialAmount(receipt, e.target.value)}
                             />
@@ -465,8 +464,7 @@ export default function DepositWorksheetPage({ embedded = false }: { embedded?: 
               <Label>Shortage</Label>
               <Input
                 type="number"
-                min={0}
-                step="0.01"
+                step="1"
                 value={shortageAmount}
                 onChange={(e) => setShortageAmount(e.target.value)}
               />
@@ -478,8 +476,7 @@ export default function DepositWorksheetPage({ embedded = false }: { embedded?: 
               <Label>Overage</Label>
               <Input
                 type="number"
-                min={0}
-                step="0.01"
+                step="1"
                 value={overageAmount}
                 onChange={(e) => setOverageAmount(e.target.value)}
               />

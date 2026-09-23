@@ -462,9 +462,8 @@ export function AdjustSupplierInvoiceModal({ open, onClose, invoiceId, invoiceNu
                                     <Input
                                         id="correction-amount"
                                         type="number"
-                                        min="0"
                                         max={String(maxCorrectionAmount)}
-                                        step="0.01"
+                                        step="1"
                                         value={correctionAmount}
                                         onChange={e => setCorrectionAmount(e.target.value)}
                                         placeholder="0.00"

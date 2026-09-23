@@ -23,6 +23,7 @@
     "proof:pos-adaptive-layout": "vitest run src/__tests__/pos-adaptive-layout.proof.test.ts",
     "proof:pos-cart-compact": "vitest run src/__tests__/pos-cart-compact.proof.test.ts",
     "proof:pos-quantity-stepper": "vitest run src/__tests__/pos-quantity-stepper.proof.test.ts",
+    "proof:money-input-step": "vitest run src/__tests__/money-input-step.proof.test.ts && node scripts/proof-money-input-step-e2e.mjs",
     "proof:touch-keyboard-pos": "vitest run src/__tests__/touch-keyboard-pos-integration.proof.test.ts",
     "proof:pos-search-typing-perf": "vitest run src/__tests__/pos-search-typing-perf.proof.test.ts",
     "proof:foh-keyboard-ownership-deploy": "node ../scripts/proof-foh-keyboard-ownership-deploy.mjs",

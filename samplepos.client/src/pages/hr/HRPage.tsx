@@ -1067,7 +1067,7 @@ function EmployeesTab() {
                             'monthlyAllowance',
                             'Monthly Allowance (payroll)',
                             <>
-                                <input type="number" min={0} step="0.01" value={form.monthlyAllowance} onChange={(e) => setForm((f) => ({ ...f, monthlyAllowance: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0" />
+                                <input type="number" step="1" value={form.monthlyAllowance} onChange={(e) => setForm((f) => ({ ...f, monthlyAllowance: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0" />
                                 <p className="mt-1 text-[11px] text-gray-500">Contractual gross add-on. Daily transport ? Expenses, not here.</p>
                             </>
                         )}
@@ -1778,7 +1778,7 @@ function PayrollTab() {
                                                                         type="number"
                                                                         min={0.01}
                                                                         max={rem}
-                                                                        step="0.01"
+                                                                        step="1"
                                                                         value={payPartialAmounts[e.employeeId] ?? ''}
                                                                         onChange={(ev) =>
                                                                             setPayPartialAmounts((m) => ({

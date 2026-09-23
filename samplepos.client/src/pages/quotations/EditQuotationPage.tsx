@@ -847,8 +847,7 @@ export default function EditQuotationPage() {
                                 onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
                                 onKeyDown={(e) => handleItemKeyDown(e, rowIndex, 3)}
                                 className="w-full px-2 py-1 text-sm text-right border border-transparent hover:border-gray-300 focus:border-blue-500 rounded focus:ring-1 focus:ring-blue-500 bg-transparent"
-                                min="0"
-                                step="0.01"
+                                step="1"
                               />
                             </td>
                             <td className="py-2 px-3">
@@ -863,7 +862,7 @@ export default function EditQuotationPage() {
                                 onKeyDown={(e) => handleItemKeyDown(e, rowIndex, 4)}
                                 className="w-full px-2 py-1 text-sm text-right border border-transparent hover:border-gray-300 focus:border-blue-500 rounded focus:ring-1 focus:ring-blue-500 bg-transparent"
                                 min="0"
-                                step="0.01"
+                                step="1"
                               />
                             </td>
                             {showTax && (

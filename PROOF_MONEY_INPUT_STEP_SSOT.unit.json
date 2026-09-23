@@ -1,0 +1,95 @@
+{
+  "proof": "MONEY_INPUT_STEP_SSOT_UNIT",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-23T22:08:01.316Z",
+  "passed": 17,
+  "total": 17,
+  "gates": [
+    {
+      "id": "SSOT_CONSTANT",
+      "ok": true,
+      "detail": "MONEY_INPUT_STEP=1"
+    },
+    {
+      "id": "SSOT_OMIT_MIN",
+      "ok": true,
+      "detail": "omit HTML min with step 1"
+    },
+    {
+      "id": "MODEL_BUG_PAIR",
+      "ok": true,
+      "detail": "1000 stepMismatch under min=0.01"
+    },
+    {
+      "id": "INPUT_DEFAULT_RESOLVE",
+      "ok": true,
+      "detail": "type=number → step 1"
+    },
+    {
+      "id": "SPINNER_DELTA_ONE",
+      "ok": true,
+      "detail": "1200.06±1 and 0.05→1.05"
+    },
+    {
+      "id": "TYPED_DECIMALS_OK",
+      "ok": true,
+      "detail": "200.11 / 1200.06 / 8.02"
+    },
+    {
+      "id": "BANKING_NOVALIDATE",
+      "ok": true,
+      "detail": "txn + transfer forms"
+    },
+    {
+      "id": "BANKING_AMOUNT_STEP",
+      "ok": true,
+      "detail": "step=1"
+    },
+    {
+      "id": "BANKING_AMOUNT_NO_MIN",
+      "ok": true,
+      "detail": "min omitted"
+    },
+    {
+      "id": "BANKING_AMOUNT_GT_ZERO_GUARD",
+      "ok": true,
+      "detail": "JS amount > 0"
+    },
+    {
+      "id": "MOVE_MONEY_QUIET",
+      "ok": true,
+      "detail": "essays behind hover"
+    },
+    {
+      "id": "MOVE_MONEY_AMOUNT_STEP",
+      "ok": true,
+      "detail": "step=1"
+    },
+    {
+      "id": "MOVE_MONEY_AMOUNT_NO_MIN",
+      "ok": true,
+      "detail": "min omitted"
+    },
+    {
+      "id": "PETTY_AMOUNT_NO_MIN",
+      "ok": true,
+      "detail": "petty amount"
+    },
+    {
+      "id": "DEPOSIT_NO_MIN_STEP1",
+      "ok": true,
+      "detail": "deposit worksheet money fields"
+    },
+    {
+      "id": "NO_FRACTIONAL_MONEY_STEP",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "id": "NO_MIN_001_ON_MONEY",
+      "ok": true,
+      "detail": "clean"
+    }
+  ],
+  "note": "Canonical E2E artifacts from scripts/proof-money-input-step-e2e.mjs"
+}

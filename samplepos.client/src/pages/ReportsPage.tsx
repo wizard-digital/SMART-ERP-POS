@@ -1916,9 +1916,8 @@ export default function ReportsPage() {
               type="number"
               value={minMargin}
               onChange={(e) => setMinMargin(parseFloat(e.target.value))}
-              min="0"
               max="100"
-              step="0.1"
+              step="1"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Minimum profit margin"
             />
@@ -6038,5 +6037,4 @@ export default function ReportsPage() {
     </Layout>
   );
 }
-
 

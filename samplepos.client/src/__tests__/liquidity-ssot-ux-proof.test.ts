@@ -42,7 +42,10 @@ describe('Liquidity SSOT / report UX proof', () => {
     const page = readSrc('pages/accounting/TreasuryTransferPage.tsx');
     expect(page).toContain('insufficient');
     expect(page).toContain('Insufficient funds');
-    expect(page).toContain('disabled={posting || enabled === false || insufficient}');
+    expect(page).toContain('blockReason');
+    expect(page).toContain('QuietHoverHelp');
+    expect(page).not.toContain('Move between any liquidity account');
+    expect(page).toMatch(/disabled=\{posting \|\| enabled === false \|\| !!blockReason/);
   });
 
   it('App routes liquidity movements report', () => {

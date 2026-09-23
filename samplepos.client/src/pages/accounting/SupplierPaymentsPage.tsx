@@ -1831,7 +1831,6 @@ const SupplierPaymentsPage: React.FC = () => {
                                                             {isSelected ? (
                                                                 <Input
                                                                     type="number"
-                                                                    min="0"
                                                                     max={inv.outstandingBalance.toString()}
                                                                     step="1"
                                                                     value={massSelected.get(inv.id)?.toString() ?? ''}
@@ -2093,8 +2092,7 @@ const SupplierPaymentsPage: React.FC = () => {
                                         <Input
                                             id="payment-amount"
                                             type="number"
-                                            step="0.01"
-                                            min="0"
+                                            step="1"
                                             value={
                                                 paymentFormData.amount === '' || paymentFormData.amount === 0
                                                     ? paymentFormData.amount === 0
@@ -2480,7 +2478,7 @@ const SupplierPaymentsPage: React.FC = () => {
                                             <Input
                                                 placeholder="Price"
                                                 type="number"
-                                                step="0.01"
+                                                step="1"
                                                 value={item.unitPrice.toString()}
                                                 onChange={(e) => updateLineItem(index, 'unitPrice', e.target.value)}
                                             />
@@ -2656,7 +2654,7 @@ const SupplierPaymentsPage: React.FC = () => {
                                         <Label className="text-sm">Allocate Amount:</Label>
                                         <Input
                                             type="number"
-                                            step="0.01"
+                                            step="1"
                                             value={(allocations[index]?.allocationAmount || 0).toString()}
                                             onChange={(e) => updateAllocation(bill.id, parseFloat(e.target.value) || 0)}
                                             className="w-32"

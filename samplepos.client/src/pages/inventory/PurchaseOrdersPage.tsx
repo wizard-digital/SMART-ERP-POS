@@ -347,7 +347,7 @@ function LineItemRow({
             if (next != null) onUpdate(item.id, 'unitCost', next);
           }}
           onKeyDown={handleKeyDown('cost')}
-          step="0.01"
+          step="1"
           min="0"
           className="w-full px-2 py-1 text-right text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           placeholder="0.00"
@@ -372,7 +372,7 @@ function LineItemRow({
             onUpdate(item.id, 'lineTotal', synced.lineTotal);
           }}
           onKeyDown={handleKeyDown('total')}
-          step="0.01"
+          step="1"
           min="0"
           className="w-full px-2 py-1 text-right text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           placeholder="0.00"

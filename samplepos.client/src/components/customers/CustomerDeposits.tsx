@@ -491,8 +491,7 @@ const CustomerDeposits: React.FC<CustomerDepositsProps> = (props) => {
                   <input
                     id="deposit-amount"
                     type="number"
-                    step="0.01"
-                    min="0"
+                    step="1"
                     value={depositForm.amount}
                     onChange={(e) => setDepositForm({ ...depositForm, amount: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md"

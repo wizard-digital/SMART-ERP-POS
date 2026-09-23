@@ -332,7 +332,7 @@ export default function BadDebtWriteoffPage() {
                           type="number"
                           min={0}
                           max={line.amountDue}
-                          step="0.01"
+                          step="1"
                           className="h-8 w-28 ml-auto text-right"
                           disabled={!featureOn || !isOn}
                           value={selected[line.invoiceId]?.amount ?? ''}

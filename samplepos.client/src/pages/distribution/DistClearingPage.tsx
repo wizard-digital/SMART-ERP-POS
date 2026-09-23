@@ -193,9 +193,8 @@ export default function DistClearingPage() {
                             </div>
                             <input
                               type="number"
-                              min={0}
                               max={dep.remainingAmount}
-                              step="0.01"
+                              step="1"
                               value={depositAllocations[dep.id] ?? 0}
                               onChange={e => {
                                 const val = Math.min(dep.remainingAmount, Math.max(0, Number(e.target.value)));
@@ -217,8 +216,7 @@ export default function DistClearingPage() {
                         <label className="text-xs text-gray-500">Amount</label>
                         <input
                           type="number"
-                          min={0}
-                          step="0.01"
+                          step="1"
                           value={cashAmount}
                           onChange={e => setCashAmount(Math.max(0, Number(e.target.value)))}
                           className="w-full border rounded px-2 py-1.5 text-sm"

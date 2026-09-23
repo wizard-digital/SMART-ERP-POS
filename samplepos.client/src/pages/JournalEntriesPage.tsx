@@ -304,7 +304,10 @@ export default function JournalEntriesPage() {
     const applyPreset = (preset: 'capital-investment' | 'owner-withdrawal') => {
         const accountList = accounts as Account[];
         const cashOrBank = accountList.find(a => a.accountNumber === '1010') || accountList.find(a => a.accountNumber === '1020');
-        const ownerCapital = accountList.find(a => a.accountNumber === '3200');
+        const ownerCapital =
+            accountList.find(a => a.accountNumber === '3200' && !/opening balance/i.test(a.accountName)) ||
+            accountList.find(a => a.accountNumber === '3200') ||
+            accountList.find(a => a.accountNumber === '3000');
         const ownerDrawings = accountList.find(a => a.accountNumber === '3300');
 
         if (preset === 'capital-investment') {
@@ -711,8 +714,7 @@ export default function JournalEntriesPage() {
                                                 value={presetAmount || ''}
                                                 onChange={(e) => handlePresetAmountChange(parseFloat(e.target.value) || 0)}
                                                 placeholder="Enter total amount"
-                                                min="0"
-                                                step="0.01"
+                                                step="1"
                                                 className="w-52 px-3 py-1.5 border border-blue-300 rounded-lg text-right focus:ring-2 focus:ring-blue-500 bg-white"
                                                 autoFocus
                                             />
@@ -805,8 +807,7 @@ export default function JournalEntriesPage() {
                                                                             if (parseFloat(e.target.value) > 0) updateLine(idx, 'creditAmount', 0);
                                                                         }}
                                                                         placeholder="0.00"
-                                                                        min="0"
-                                                                        step="0.01"
+                                                                        step="1"
                                                                         className="w-full px-2 py-1 border rounded text-right focus:ring-2 focus:ring-blue-500"
                                                                     />
                                                                 </td>
@@ -819,8 +820,7 @@ export default function JournalEntriesPage() {
                                                                             if (parseFloat(e.target.value) > 0) updateLine(idx, 'debitAmount', 0);
                                                                         }}
                                                                         placeholder="0.00"
-                                                                        min="0"
-                                                                        step="0.01"
+                                                                        step="1"
                                                                         className="w-full px-2 py-1 border rounded text-right focus:ring-2 focus:ring-blue-500"
                                                                     />
                                                                 </td>

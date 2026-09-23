@@ -736,7 +736,7 @@ export function AdjustInventoryDrawer({
             id="adj-quantity"
             type="number"
             min="0"
-            step="0.01"
+            step="1"
             value={adjustmentQuantity}
             onChange={(e) => setAdjustmentQuantity(e.target.value)}
             onKeyDown={(e) => {

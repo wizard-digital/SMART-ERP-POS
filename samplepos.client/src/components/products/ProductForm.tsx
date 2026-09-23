@@ -404,7 +404,6 @@ export default function ProductForm({
                 id="tax-rate"
                 type="number"
                 step="1"
-                min="0"
                 max="100"
                 value={values.taxRate}
                 onChange={(e) => onChange('taxRate', e.target.value)}

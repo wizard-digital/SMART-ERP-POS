@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { useQuery } from '@tanstack/react-query';
 import {
     useBankAccounts,
     useBankTransactions,
@@ -29,6 +30,44 @@ import {
 } from '../../hooks/useBanking';
 import { useTreasuryEnabled } from '../../hooks/useTreasuryEnabled';
 import { formatCurrency } from '../../utils/currency';
+import { toast } from 'react-hot-toast';
+import { api } from '../../services/api';
+
+/** CoA posting accounts for bank receipt/payment offset (same source as Journal Entries). */
+type GlAccount = {
+    id: string;
+    accountNumber: string;
+    accountName: string;
+    accountType: string;
+};
+
+/**
+ * Bank receipt offset: not AR, not sales, not OBE, not cash/bank (those have their own screens).
+ */
+function isBankOffsetAccount(acc: GlAccount): boolean {
+    const code = String(acc.accountNumber || '');
+    const name = String(acc.accountName || '');
+    if (!code) return false;
+    if (['1200', '1250', '1300', '4000', '1015', '3050'].includes(code)) return false;
+    if (/^10\d{2}/.test(code)) return false;
+    if (/opening balance/i.test(name)) return false;
+    return true;
+}
+
+function resolveOwnerCapitalId(accounts: GlAccount[]): string {
+    const named = accounts.find((a) => /owner\s*capital/i.test(a.accountName));
+    if (named) return named.id;
+    const code3200 = accounts.find((a) => a.accountNumber === '3200');
+    if (code3200) return code3200.id;
+    const equity = accounts.find((a) => a.accountNumber === '3000' && /equity|capital/i.test(a.accountName));
+    return equity?.id || '';
+}
+
+function resolveOwnerDrawingId(accounts: GlAccount[]): string {
+    const named = accounts.find((a) => /owner\s*drawing/i.test(a.accountName));
+    if (named) return named.id;
+    return accounts.find((a) => a.accountNumber === '3300')?.id || '';
+}
 
 /** Disambiguate same-named bank books (e.g. three "PHARMACURE ACCOUNT") in dropdowns. */
 function formatBankAccountLabel(
@@ -64,6 +103,8 @@ type TransactionFormData = {
     transactionDate: string;
     type: 'DEPOSIT' | 'WITHDRAWAL' | 'FEE' | 'INTEREST';
     categoryId: string;
+    /** Offset ledger — same idea as Journal Entry / Tally Receipt “Particulars”. */
+    contraAccountId: string;
     description: string;
     reference: string;
     amount: number;
@@ -83,6 +124,7 @@ const emptyTransactionForm: TransactionFormData = {
     transactionDate: new Date().toLocaleDateString('en-CA'),
     type: 'DEPOSIT',
     categoryId: '',
+    contraAccountId: '',
     description: '',
     reference: '',
     amount: 0
@@ -145,6 +187,22 @@ export const BankTransactionsTab: React.FC = () => {
     const { data: accounts = [] } = useBankAccounts();
     const { data: categories = [] } = useBankCategories();
     const { data: treasuryOn = false } = useTreasuryEnabled();
+    const { data: glAccounts = [] } = useQuery({
+        queryKey: ['chart-of-accounts', 'bank-offset'],
+        queryFn: async (): Promise<GlAccount[]> => {
+            const { data } = await api.get('/accounting/chart-of-accounts?isPostingAccount=true&isActive=true');
+            const rows = (data?.data || data || []) as Array<Record<string, unknown>>;
+            return rows
+                .map((a) => ({
+                    id: String(a.id ?? a.Id ?? ''),
+                    accountNumber: String(a.accountNumber ?? a.AccountCode ?? a.accountCode ?? ''),
+                    accountName: String(a.accountName ?? a.AccountName ?? ''),
+                    accountType: String(a.accountType ?? a.AccountType ?? ''),
+                }))
+                .filter((a) => a.id && a.accountNumber && isBankOffsetAccount(a));
+        },
+        staleTime: 5 * 60_000,
+    });
     const { data: transactionsData, isLoading, refetch } = useBankTransactions({
         bankAccountId: filterAccountId || undefined,
         type: filterType || undefined,
@@ -162,19 +220,35 @@ export const BankTransactionsTab: React.FC = () => {
         (a) => a.isActive !== false && !isTransferEligibleBankAccount(a),
     ).length;
 
-    /** Deposit/interest → IN categories; withdrawal/fee → OUT. Exclude transfer categories. */
-    const categoriesForType = useMemo(() => {
-        const isInflow = transactionForm.type === 'DEPOSIT' || transactionForm.type === 'INTEREST';
-        const wantDirection = isInflow ? 'IN' : 'OUT';
-        return categories.filter(
-            (c) =>
-                c.direction === wantDirection &&
-                c.code !== 'TRANSFER_IN' &&
-                c.code !== 'TRANSFER_OUT' &&
-                c.code !== 'CUSTOMER_PAYMENT' &&
-                c.defaultAccountId,
-        );
-    }, [categories, transactionForm.type]);
+    const preferredCapitalAccountId = useMemo(() => resolveOwnerCapitalId(glAccounts), [glAccounts]);
+    const preferredDrawingAccountId = useMemo(() => resolveOwnerDrawingId(glAccounts), [glAccounts]);
+
+    const offsetAccounts = useMemo(() => {
+        const preferred =
+            transactionForm.type === 'DEPOSIT' || transactionForm.type === 'INTEREST'
+                ? preferredCapitalAccountId
+                : preferredDrawingAccountId;
+        if (!preferred) return glAccounts;
+        const head = glAccounts.find((a) => a.id === preferred);
+        const rest = glAccounts.filter((a) => a.id !== preferred);
+        return head ? [head, ...rest] : glAccounts;
+    }, [glAccounts, preferredCapitalAccountId, preferredDrawingAccountId, transactionForm.type]);
+
+    const resolveDefaultsForType = (type: TransactionFormData['type']) => {
+        const isIn = type === 'DEPOSIT' || type === 'INTEREST';
+        const contra = isIn ? preferredCapitalAccountId : preferredDrawingAccountId;
+        const catCode = isIn ? 'OWNER_CAPITAL' : 'OWNER_DRAWING';
+        const cat = categories.find((c) => c.code === catCode);
+        return {
+            categoryId: cat?.id || '',
+            contraAccountId: contra,
+            description: isIn
+                ? 'Capital investment by owner'
+                : type === 'WITHDRAWAL'
+                  ? 'Owner withdrawal / drawings'
+                  : '',
+        };
+    };
 
     const createTransactionMutation = useCreateBankTransaction();
     const createTransferMutation = useCreateBankTransfer();
@@ -192,9 +266,11 @@ export const BankTransactionsTab: React.FC = () => {
     }, [transactions, searchText]);
 
     const handleOpenTransactionModal = () => {
+        const defaults = resolveDefaultsForType('DEPOSIT');
         setTransactionForm({
             ...emptyTransactionForm,
-            bankAccountId: filterAccountId || accounts[0]?.id || ''
+            bankAccountId: filterAccountId || accounts[0]?.id || '',
+            ...defaults,
         });
         setTransactionError(null);
         setIsTransactionModalOpen(true);
@@ -218,8 +294,12 @@ export const BankTransactionsTab: React.FC = () => {
     const handleSubmitTransaction = async (e: React.FormEvent) => {
         e.preventDefault();
         setTransactionError(null);
-        if (!transactionForm.categoryId) {
-            setTransactionError('Select a category with a GL account (e.g. Sales Deposit or Expense Payment).');
+        if (!transactionForm.contraAccountId) {
+            setTransactionError('Select who the money is from or to (e.g. Owner Capital).');
+            return;
+        }
+        if (!Number.isFinite(transactionForm.amount) || transactionForm.amount <= 0) {
+            setTransactionError('Enter an amount greater than 0.');
             return;
         }
         try {
@@ -228,10 +308,12 @@ export const BankTransactionsTab: React.FC = () => {
                 transactionDate: transactionForm.transactionDate,
                 type: transactionForm.type,
                 categoryId: transactionForm.categoryId || undefined,
+                contraAccountId: transactionForm.contraAccountId,
                 description: transactionForm.description,
                 reference: transactionForm.reference || undefined,
                 amount: transactionForm.amount
             });
+            toast.success('Transaction saved');
             setIsTransactionModalOpen(false);
             refetch();
         } catch (error) {
@@ -241,6 +323,10 @@ export const BankTransactionsTab: React.FC = () => {
 
     const handleSubmitTransfer = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!Number.isFinite(transferForm.amount) || transferForm.amount <= 0) {
+            toast.error('Enter an amount greater than 0.');
+            return;
+        }
         try {
             await createTransferMutation.mutateAsync({
                 fromAccountId: transferForm.fromAccountId,
@@ -264,10 +350,13 @@ export const BankTransactionsTab: React.FC = () => {
                 id: selectedTransaction.id,
                 reason: reverseReason
             });
+            toast.success('Transaction reversed');
             setIsReverseModalOpen(false);
             setSelectedTransaction(null);
             refetch();
         } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to reverse transaction';
+            toast.error(message);
             console.error('Failed to reverse transaction:', error);
         }
     };
@@ -445,10 +534,10 @@ export const BankTransactionsTab: React.FC = () => {
                     <DialogHeader>
                         <DialogTitle>Add Transaction</DialogTitle>
                         <DialogDescription>
-                            Record a manual bank transaction
+                            Record money into or out of a bank book.
                         </DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleSubmitTransaction} className="space-y-4">
+                    <form noValidate onSubmit={handleSubmitTransaction} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="txn-account">Bank Account *</Label>
                             <Select
@@ -481,11 +570,14 @@ export const BankTransactionsTab: React.FC = () => {
                                 <Label htmlFor="txn-type">Type *</Label>
                                 <Select
                                     value={transactionForm.type}
-                                    onValueChange={value => setTransactionForm(prev => ({
-                                        ...prev,
-                                        type: value as TransactionFormData['type'],
-                                        categoryId: '',
-                                    }))}
+                                    onValueChange={value => {
+                                        const type = value as TransactionFormData['type'];
+                                        setTransactionForm((prev) => ({
+                                            ...prev,
+                                            type,
+                                            ...resolveDefaultsForType(type),
+                                        }));
+                                    }}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
@@ -501,31 +593,28 @@ export const BankTransactionsTab: React.FC = () => {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="txn-category">Category *</Label>
+                            <Label htmlFor="txn-offset">
+                                {transactionForm.type === 'DEPOSIT' || transactionForm.type === 'INTEREST'
+                                    ? 'Received from *'
+                                    : 'Paid to *'}
+                            </Label>
                             <Select
-                                value={transactionForm.categoryId}
-                                onValueChange={value => setTransactionForm(prev => ({ ...prev, categoryId: value }))}
+                                value={transactionForm.contraAccountId || undefined}
+                                onValueChange={(value) =>
+                                    setTransactionForm((prev) => ({ ...prev, contraAccountId: value }))
+                                }
                             >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select category..." />
+                                <SelectTrigger id="txn-offset">
+                                    <SelectValue placeholder="Select account..." />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {categoriesForType.map(cat => (
-                                        <SelectItem key={cat.id} value={cat.id}>
-                                            {cat.name}
-                                            {cat.defaultAccountCode
-                                                ? ` → ${cat.defaultAccountCode}${cat.defaultAccountName ? ` ${cat.defaultAccountName}` : ''}`
-                                                : ''}
+                                    {offsetAccounts.map((acc) => (
+                                        <SelectItem key={acc.id} value={acc.id}>
+                                            {acc.accountNumber} – {acc.accountName}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {transactionForm.type === 'DEPOSIT' && (
-                                <p className="text-xs text-muted-foreground">
-                                    Customer invoice payments: use Accounting → Customer Payments so receipts
-                                    allocate to invoices. Use Sales Deposit for cash sales banked directly.
-                                </p>
-                            )}
                         </div>
 
                         {transactionError && (
@@ -537,8 +626,7 @@ export const BankTransactionsTab: React.FC = () => {
                             <Input
                                 id="txn-amount"
                                 type="number"
-                                step="0.01"
-                                min="0.01"
+                                step="1"
                                 value={transactionForm.amount || ''}
                                 onChange={e => setTransactionForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
                                 required
@@ -589,7 +677,7 @@ export const BankTransactionsTab: React.FC = () => {
                                 : 'Transfer funds between bank accounts. Cross-account cash / mobile money moves become available when Treasury Documents are enabled in Settings → Tax.'}
                         </DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={handleSubmitTransfer} className="space-y-4">
+                    <form noValidate onSubmit={handleSubmitTransfer} className="space-y-4">
                         <div className="space-y-2">
                             <Label htmlFor="transfer-from">From Account *</Label>
                             <Select
@@ -652,8 +740,7 @@ export const BankTransactionsTab: React.FC = () => {
                                 <Input
                                     id="transfer-amount"
                                     type="number"
-                                    step="0.01"
-                                    min="0.01"
+                                    step="1"
                                     value={transferForm.amount || ''}
                                     onChange={e => setTransferForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
                                     required
@@ -689,7 +776,9 @@ export const BankTransactionsTab: React.FC = () => {
                     <DialogHeader>
                         <DialogTitle>Reverse Transaction</DialogTitle>
                         <DialogDescription>
-                            This will create a reversing entry. This action cannot be undone.
+                            {treasuryOn
+                                ? 'Creates a reversing liquidity document (original stays on file). Linked bank lines drop off the live register. Blocked if already statement-reconciled.'
+                                : 'This will create a reversing entry. This action cannot be undone.'}
                         </DialogDescription>
                     </DialogHeader>
                     {selectedTransaction && (

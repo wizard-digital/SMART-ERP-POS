@@ -754,7 +754,7 @@ const CustomerPaymentsPage: React.FC = () => {
                 <Label>Amount (invoice settlement)</Label>
                 <Input
                   type="number"
-                  step="0.01"
+                  step="1"
                   value={formData.amount}
                   onChange={(e) => setFormData((p) => ({ ...p, amount: e.target.value }))}
                 />

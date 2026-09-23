@@ -156,8 +156,7 @@ export default function DunningPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Fee Amount</label>
               <input
                 type="number"
-                min={0}
-                step="0.01"
+                step="1"
                 value={form.feeAmount}
                 onChange={(e) => setForm({ ...form, feeAmount: parseFloat(e.target.value) })}
                 className="w-full px-3 py-2 border rounded-lg text-sm"

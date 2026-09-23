@@ -1,0 +1,88 @@
+{
+  "proof": "MONEY_INPUT_STEP_SSOT",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-23T22:08:03.561Z",
+  "mode": "chromium-e2e",
+  "passed": 15,
+  "total": 15,
+  "moneyInputStep": "1",
+  "gates": [
+    {
+      "id": "CHROMIUM_BUG_MIN_001_BLOCKS_1000",
+      "ok": true,
+      "detail": "{\"brokenValidity\":{\"stepMismatch\":true,\"valid\":false},\"brokenSubmitted\":false}"
+    },
+    {
+      "id": "CHROMIUM_MIN0_SNAPS_DECIMALS",
+      "ok": true,
+      "detail": "got 1201 (must be 1201 snap)"
+    },
+    {
+      "id": "CHROMIUM_SAVE_1000",
+      "ok": true,
+      "detail": "{\"submitted\":true,\"amount\":1000}"
+    },
+    {
+      "id": "CHROMIUM_SAVE_0_05",
+      "ok": true,
+      "detail": "{\"submitted\":true,\"amount\":0.05}"
+    },
+    {
+      "id": "CHROMIUM_ARROWUP_PLUS_ONE",
+      "ok": true,
+      "detail": "got 1201.06"
+    },
+    {
+      "id": "CHROMIUM_ARROWDOWN_MINUS_ONE",
+      "ok": true,
+      "detail": "got 1199.06"
+    },
+    {
+      "id": "WIRING_TXN_FORM_NOVALIDATE",
+      "ok": true,
+      "detail": "Add Transaction form"
+    },
+    {
+      "id": "WIRING_TRANSFER_FORM_NOVALIDATE",
+      "ok": true,
+      "detail": "Transfer form"
+    },
+    {
+      "id": "WIRING_TXN_STEP_1",
+      "ok": true,
+      "detail": "txn-amount step=1"
+    },
+    {
+      "id": "WIRING_TXN_NO_MIN",
+      "ok": true,
+      "detail": "txn-amount omits min"
+    },
+    {
+      "id": "WIRING_NO_MIN_001",
+      "ok": true,
+      "detail": "no min=0.01 in banking tab"
+    },
+    {
+      "id": "WIRING_AMOUNT_GT_ZERO",
+      "ok": true,
+      "detail": "JS amount > 0"
+    },
+    {
+      "id": "WIRING_MOVE_MONEY_QUIET",
+      "ok": true,
+      "detail": "quiet hover"
+    },
+    {
+      "id": "WIRING_MOVE_MONEY_STEP",
+      "ok": true,
+      "detail": "move amount step=1 no min"
+    },
+    {
+      "id": "WIRING_SSOT_STEP",
+      "ok": true,
+      "detail": "MONEY_INPUT_STEP"
+    }
+  ],
+  "integrity": "Chromium E2E: ↑↓ ±1 keeping cents (no HTML min); min=0.01+step=1 must not ship; banking Add Transaction noValidate + step=1 + JS amount>0.",
+  "runner": "npm run proof:money-input-step"
+}

@@ -255,8 +255,7 @@ export function CreateAmountNoteDialog({
                     <Label>Amount *</Label>
                     <Input
                         type="number"
-                        min="0.01"
-                        step="0.01"
+                        step="1"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         placeholder="0.00"

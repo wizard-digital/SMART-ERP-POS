@@ -211,7 +211,7 @@ export default function MultiCurrencyPage() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" min={0} step="0.01" value={convertForm.amount} onChange={(e) => setConvertForm({ ...convertForm, amount: parseFloat(e.target.value) })} required className="w-full px-3 py-2 border rounded-lg text-sm" />
+              <input type="number" step="1" value={convertForm.amount} onChange={(e) => setConvertForm({ ...convertForm, amount: parseFloat(e.target.value) })} required className="w-full px-3 py-2 border rounded-lg text-sm" />
             </div>
             <div className="flex items-end">
               <button type="submit" className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">

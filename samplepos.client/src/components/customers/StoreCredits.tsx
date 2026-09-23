@@ -552,7 +552,7 @@ const StoreCredits: React.FC<StoreCreditsProps> = (props) => {
                                 <input
                                     id="credit-amount-input"
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     value={creditForm.amount}
                                     onChange={(e) => setCreditForm({ ...creditForm, amount: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md"

@@ -791,7 +791,7 @@ const ComprehensiveInvoicesPage: React.FC = () => {
                                             <Input
                                                 placeholder="Price"
                                                 type="number"
-                                                step="0.01"
+                                                step="1"
                                                 value={item.unitPrice.toString()}
                                                 onChange={(e) => updateLineItem(index, 'unitPrice', e.target.value)}
                                             />
@@ -870,7 +870,7 @@ const ComprehensiveInvoicesPage: React.FC = () => {
                             <Input
                                 id="amount"
                                 type="number"
-                                step="0.01"
+                                step="1"
                                 value={paymentFormData.amount.toString()}
                                 onChange={(e) => setPaymentFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
                                 className="col-span-3"

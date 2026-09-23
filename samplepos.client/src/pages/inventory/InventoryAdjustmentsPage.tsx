@@ -1148,7 +1148,7 @@ export default function InventoryAdjustmentsPage() {
                                 type="number"
                                 value={countedValue || ''}
                                 onChange={(e) => handleCountedQtyChange(item.id, e.target.value)}
-                                step="0.01"
+                                step="1"
                                 min="0"
                                 placeholder="0.00"
                                 className="w-32 px-2 py-1 border border-gray-300 rounded text-right focus:ring-2 focus:ring-purple-500 focus:border-purple-500"

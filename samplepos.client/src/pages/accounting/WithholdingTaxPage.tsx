@@ -488,9 +488,8 @@ export default function WithholdingTaxPage() {
                 <Input
                   id="wht-rate"
                   type="number"
-                  min="0"
                   max={100}
-                  step="0.01"
+                  step="1"
                   value={String(form.rate)}
                   onChange={(e) => setForm({ ...form, rate: parseFloat(e.target.value) || 0 })}
                 />
@@ -562,8 +561,7 @@ export default function WithholdingTaxPage() {
               <Input
                 id="remit-amount"
                 type="number"
-                min="0.01"
-                step="0.01"
+                step="1"
                 value={remitForm.amount}
                 onChange={(e) => setRemitForm({ ...remitForm, amount: e.target.value })}
                 placeholder={`Max ${fmt(payable.balance)}`}
@@ -637,8 +635,7 @@ export default function WithholdingTaxPage() {
               <Input
                 id="recover-amount"
                 type="number"
-                min="0.01"
-                step="0.01"
+                step="1"
                 value={recoverForm.amount}
                 onChange={(e) => setRecoverForm({ ...recoverForm, amount: e.target.value })}
                 placeholder={`Max ${fmt(receivable.balance)}`}

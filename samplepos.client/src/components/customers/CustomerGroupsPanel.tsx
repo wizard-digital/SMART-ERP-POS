@@ -539,7 +539,7 @@ function GroupFormModal({
             </label>
             <input
               type="number"
-              step="0.01"
+              step="1"
               min="0"
               max="100"
               value={discount}

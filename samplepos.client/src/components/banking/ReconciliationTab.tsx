@@ -258,7 +258,7 @@ export const ReconciliationTab: React.FC = () => {
                             <div className="flex gap-2">
                                 <Input
                                     type="number"
-                                    step="0.01"
+                                    step="1"
                                     value={statementBalance}
                                     onChange={(e) => {
                                         statementBalanceTouched.current = true;

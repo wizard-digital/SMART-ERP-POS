@@ -1325,7 +1325,7 @@ export default function CustomerDetailPage() {
                     id="creditLimit"
                     name="creditLimit"
                     type="number"
-                    step="0.01"
+                    step="1"
                     placeholder="0.00"
                     defaultValue={(customer as CustomerDetailData).creditLimit}
                     disabled={editUnlimitedCredit}

@@ -177,8 +177,7 @@ export function DamagedItemsBanner({
                                             <div className="flex items-center gap-2 shrink-0">
                                                 <input
                                                     type="number"
-                                                    min="0.01"
-                                                    step="0.01"
+                                                    step="1"
                                                     placeholder="Unit cost"
                                                     value={unitCosts[item.productId] ?? ''}
                                                     onChange={(e) =>
@@ -344,8 +343,7 @@ export function OpeningStockDialog({
                                 </label>
                                 <input
                                     type="number"
-                                    min="0.01"
-                                    step="0.01"
+                                    step="1"
                                     value={unitCost}
                                     onChange={(e) => setUnitCost(e.target.value)}
                                     placeholder="e.g. 2500"

@@ -341,7 +341,7 @@ export default function ManualGRModal({ open, onClose }: ManualGRModalProps) {
                           id={`unitcost-${idx}`}
                           type="number"
                           min={0}
-                          step="0.01"
+                          step="1"
                           className="w-full px-2 py-1.5 border rounded"
                           value={item.unitCost}
                           onChange={(e) => updateItem(idx, "unitCost", Number(e.target.value))}

@@ -1186,7 +1186,7 @@ export default function CustomerDetailModal({
                                                                     ? depositPaymentCap(selectedInvoice.outstanding, depositBalance.available).toNumber()
                                                                     : money2(selectedInvoice.outstanding).toNumber()}
                                                                 min={0.01}
-                                                                step="0.01"
+                                                                step="1"
                                                                 placeholder={`Max: ${payMethod === 'DEPOSIT'
                                                                     ? depositPaymentCap(selectedInvoice.outstanding, depositBalance.available).toFixed(2)
                                                                     : money2(selectedInvoice.outstanding).toFixed(2)}`}
@@ -1744,8 +1744,7 @@ export default function CustomerDetailModal({
                                                     <input
                                                         id="modal-customer-default-vat"
                                                         type="number"
-                                                        min={0}
-                                                        step={0.01}
+                                                        step={1}
                                                         value={editDefaultVatRate}
                                                         onChange={(e) => setEditDefaultVatRate(e.target.value)}
                                                         disabled={editTaxExempt}

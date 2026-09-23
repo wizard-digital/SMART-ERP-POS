@@ -550,7 +550,6 @@ export const OpeningBalancePanel: React.FC<Props> = ({
               </Label>
               <Input
                 type="number"
-                min="0"
                 step="1"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

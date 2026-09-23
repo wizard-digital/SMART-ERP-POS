@@ -54,9 +54,12 @@ describe('Sales Analysis + transfer reverse — UI contract', () => {
     expect(docs).toContain('reason');
   });
 
-  it('Move money points operators to Liquidity Documents for reverse', () => {
+  it('Move money points operators to Transactions or Liquidity Documents for reverse', () => {
     const transfer = readSrc('pages/accounting/TreasuryTransferPage.tsx');
-    expect(transfer).toContain('/accounting/treasury');
+    // Quiet UX: guidance lives in QuietHoverHelp (no always-on essay / no hard-coded tab URLs).
+    expect(transfer).toContain('QuietHoverHelp');
+    expect(transfer).toContain('Transactions');
+    expect(transfer).toContain('Liquidity Documents');
     expect(transfer).toContain('Reverse document');
   });
 });

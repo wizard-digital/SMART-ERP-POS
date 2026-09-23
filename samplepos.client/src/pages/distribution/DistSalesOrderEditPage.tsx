@@ -463,7 +463,7 @@ export default function DistSalesOrderEditPage() {
                             <input
                               type="number"
                               min={0}
-                              step="0.01"
+                              step="1"
                               value={line.unitPrice}
                               onChange={e => updateLine(line.key, 'unitPrice', Number(e.target.value))}
                               className="w-24 px-2 py-1 text-sm text-right border border-transparent hover:border-gray-300 focus:border-blue-500 rounded focus:ring-1 focus:ring-blue-500 bg-transparent"

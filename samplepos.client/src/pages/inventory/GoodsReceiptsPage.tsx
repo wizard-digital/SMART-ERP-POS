@@ -2217,7 +2217,7 @@ export default function GoodsReceiptsPage() {
                             </label>
                             <input
                               type="number"
-                              step="0.01"
+                              step="1"
                               min="0"
                               className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               value={draftPaperInvoiceTotal}
@@ -3195,8 +3195,7 @@ export default function GoodsReceiptsPage() {
                   </label>
                   <input
                     type="number"
-                    step="0.01"
-                    min="0"
+                    step="1"
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={billPrompt.supplierReportedTotal}
                     onChange={(e) => applyPaperTotal(e.target.value)}
@@ -3762,7 +3761,7 @@ function AddGRItemForm({
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-700 mb-1">Unit Cost</label>
-          <input type="number" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} min="0" step="0.01"
+          <input type="number" value={unitCost} onChange={(e) => setUnitCost(e.target.value)} step="1"
             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-green-500" />
         </div>
         <div className="flex items-end">
@@ -4014,8 +4013,7 @@ function GRItemRow({
           <>
             <input
               type="number"
-              min={0}
-              step="0.01"
+              step="1"
               className={`w-28 border rounded px-2 py-1 ${unitCostError ? 'border-red-500' : ''}`}
               value={Number.isFinite(displayedUnitCost) ? displayedUnitCost : ''}
               disabled={disabled}

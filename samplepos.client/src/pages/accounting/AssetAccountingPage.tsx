@@ -468,7 +468,7 @@ export default function AssetAccountingPage() {
                 <FormField label="Useful Life (Months) *" type="number" min={1} value={String(catForm.usefulLifeMonths)}
                   onChange={v => setCatForm({ ...catForm, usefulLifeMonths: parseInt(v) || 60 })} required />
                 {catForm.depreciationMethod === 'DECLINING_BALANCE' && (
-                  <FormField label="Annual Rate (%)" type="number" step="0.01" placeholder="e.g., 0.20"
+                  <FormField label="Annual Rate (%)" type="number" step="1" placeholder="e.g., 0.20"
                     value={catForm.depreciationRate}
                     onChange={v => setCatForm({ ...catForm, depreciationRate: v })} />
                 )}
@@ -597,9 +597,9 @@ export default function AssetAccountingPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <FormField label="Acquisition Date *" type="date" value={assetForm.acquisitionDate}
                     onChange={v => setAssetForm({ ...assetForm, acquisitionDate: v })} required />
-                  <FormField label="Acquisition Cost *" type="number" min={0} step="0.01" placeholder="0.00" value={assetForm.acquisitionCost}
+                  <FormField label="Acquisition Cost *" type="number" step="1" placeholder="0.00" value={assetForm.acquisitionCost}
                     onChange={v => setAssetForm({ ...assetForm, acquisitionCost: v })} required />
-                  <FormField label="Salvage Value" type="number" min={0} step="0.01" placeholder="0.00" value={assetForm.salvageValue}
+                  <FormField label="Salvage Value" type="number" step="1" placeholder="0.00" value={assetForm.salvageValue}
                     onChange={v => setAssetForm({ ...assetForm, salvageValue: v })} />
                   {/* Payment Method — PURCHASE mode only */}
                   {assetForm.registrationMode === 'PURCHASE' ? (
@@ -756,7 +756,7 @@ export default function AssetAccountingPage() {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Proceeds / Sale Amount</label>
-                        <input type="number" min={0} step="0.01" value={disposeForm.disposalAmount}
+                        <input type="number" step="1" value={disposeForm.disposalAmount}
                           onChange={e => setDisposeForm({ ...disposeForm, disposalAmount: e.target.value })}
                           className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500" />
                         <p className="text-xs text-gray-500 mt-0.5">Enter 0 for write-off with no proceeds</p>
