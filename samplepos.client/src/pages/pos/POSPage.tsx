@@ -102,6 +102,11 @@ import { RegisterStatusIndicator, OpenRegisterDialog } from '../../components/ca
 import ServerClock from '../../components/ServerClock';
 import { DatePicker } from '../../components/ui/date-picker';
 import { useCurrentSession } from '../../hooks/useCashRegister';
+import {
+  getPosSessionPolicyDefinition,
+  parsePosSessionPolicy,
+  posSessionRequiresOpenSession,
+} from '@shared/pos/posSessionPolicySsot';
 import type { DiscountType, DiscountScope } from '@shared/zod/discount';
 import quotationApi from '../../api/quotations';
 import type {
@@ -467,8 +472,10 @@ export default function POSPage() {
   >('CASH');
 
   // Cash register session + policy + transaction mode (single API call, no dual queries)
-  const { data: currentSession, posSessionPolicy, posTransactionMode, isLoading: isLoadingSession, isError: isSessionError } = useCurrentSession();
-  const sessionEnforced = posSessionPolicy !== 'DISABLED';
+  const { data: currentSession, posSessionPolicy, posTransactionMode, isLoading: isLoadingSession, isError: isSessionError, refetch: refetchSession } = useCurrentSession();
+  const sessionPolicy = parsePosSessionPolicy(posSessionPolicy);
+  const sessionPolicyDef = getPosSessionPolicyDefinition(sessionPolicy);
+  const sessionEnforced = posSessionRequiresOpenSession(sessionPolicy);
   const isOrderMode = posTransactionMode === 'OrderToPayment';
 
   // State for showing open register dialog when required
@@ -3021,14 +3028,17 @@ export default function POSPage() {
   const handleFinalizeSale = async () => {
     console.log('🔵 handleFinalizeSale called');
 
-    // CRITICAL: Block sales if no cash register session is open (ONLINE only)
-    // Only enforce when session policy is enabled (not DISABLED)
-    // Offline sales bypass register check – tagged for reconciliation on sync
-    // Also allow if session query errored (don't block on network blips)
-    if (sessionEnforced && !hasOpenRegister && isOnline && !isSessionError) {
-      console.log('⚠️ BLOCKED: No open cash register session');
-      toast.error('Please open a cash register before making sales');
-      setShowOpenRegisterDialog(true);
+    // CRITICAL: Block sales if no cash register session, or if session could not be verified.
+    // Only enforce when session policy is enabled (not DISABLED).
+    // Offline sales bypass register check – tagged for reconciliation on sync.
+    if (sessionEnforced && isOnline && (isSessionError || !hasOpenRegister)) {
+      console.log('⚠️ BLOCKED: Register session missing or unverified');
+      toast.error(
+        isSessionError
+          ? 'Could not verify cash register session. Sale was not posted.'
+          : 'Please open a cash register before making sales'
+      );
+      if (!isSessionError) setShowOpenRegisterDialog(true);
       return;
     }
 
@@ -3675,7 +3685,9 @@ export default function POSPage() {
           } else if (errorCode === 'ERR_SESSION_003') {
             userMessage += `💡 Your register session was closed. Please open a new session to continue.`;
           } else if (errorCode === 'ERR_SESSION_004') {
-            userMessage += `💡 This register is assigned to another cashier. Open your own session on an available register.`;
+            userMessage += `💡 This register is assigned to another cashier, or you have not joined this counter.`;
+          } else if (errorCode === 'ERR_SESSION_005') {
+            userMessage += `💡 Register session could not be verified. Retry — the sale was not saved.`;
           }
           // Auto-trigger open register dialog so the user can fix it immediately
           setShowOpenRegisterDialog(true);
@@ -5749,14 +5761,12 @@ export default function POSPage() {
         onOpenChange={setShowOpenRegisterDialog}
         onSuccess={() => {
           setShowOpenRegisterDialog(false);
-          toast.success('Cash register opened successfully!');
+          toast.success('Register session ready');
         }}
       />
 
-      {/* Blocking overlay when no cash register session - prevents sales (ONLINE ONLY) */}
-      {/* Only shown when session policy is enforced (not DISABLED) */}
-      {/* Also skip when session query errored (network blip ≠ no session) */}
-      {sessionEnforced && !isLoadingSession && !isSessionError && !hasOpenRegister && isOnline && (
+      {/* Blocking overlay: missing session OR session could not be verified */}
+      {sessionEnforced && !isLoadingSession && isOnline && (!hasOpenRegister || isSessionError) && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md mx-4 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow-100 flex items-center justify-center">
@@ -5774,20 +5784,33 @@ export default function POSPage() {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Cash Register Required</h2>
-            <p className="text-gray-600 mb-6">
-              You must open a cash register before processing sales. This ensures proper cash
-              accountability and audit trail.
-            </p>
-            <button
-              onClick={() => setShowOpenRegisterDialog(true)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
-            >
-              Open Cash Register
-            </button>
-            <p className="mt-4 text-xs text-gray-500">
-              All sales will be linked to your session for end-of-day reconciliation.
-            </p>
+            {isSessionError ? (
+              <>
+                <h2 className="text-xl font-bold text-gray-900 mb-2">Could not verify register session</h2>
+                <p className="text-gray-600 mb-6">
+                  Sales are blocked until the cash register session can be confirmed. The sale was not posted.
+                </p>
+                <button
+                  onClick={() => { void refetchSession(); }}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+                >
+                  Retry
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="text-xl font-bold text-gray-900 mb-2">{sessionPolicyDef.cashierPromptTitle}</h2>
+                <p className="text-gray-600 mb-6">
+                  {sessionPolicyDef.cashierPromptBody}
+                </p>
+                <button
+                  onClick={() => setShowOpenRegisterDialog(true)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
+                >
+                  {sessionPolicyDef.cashierPromptAction}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

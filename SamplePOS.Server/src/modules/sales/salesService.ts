@@ -48,6 +48,10 @@ import { DISCOUNT_THRESHOLD_RATIO } from '../notifications/catalog.js';
 import { buildProductLineNotificationPayload } from '../notifications/businessNotificationPayload.js';
 import { assertQuoteConvertibleForPosSale } from './quoteConvertibilityGuard.js';
 import { assertSaleLineNotBelowAllocatedCost } from './saleBelowCostGuard.js';
+import {
+  posSessionRequiresParticipantToSell,
+} from '@shared/pos/posSessionPolicySsot.js';
+import { decideSaleSession } from '@shared/pos/posSessionEnforcement.js';
 import { recordSaleLinePriceEvent } from './salePriceAuditService.js';
 import {
   previewFefoIssueCostForBaseQty,
@@ -262,77 +266,53 @@ export const salesService = {
         await client.query('SAVEPOINT session_policy_check');
 
         // Read policy inside the transaction (same client) for serialisation safety
-        const policyRow = await client.query(
-          `SELECT pos_session_policy FROM system_settings LIMIT 1`
-        );
-        const policy = (policyRow.rows[0]?.pos_session_policy as string) || 'DISABLED';
-
-        if (policy !== 'DISABLED') {
-          if (!input.cashRegisterSessionId) {
-            throw new BusinessError(
-              'POS session is required. Please open a cash register session before making sales.',
-              'ERR_SESSION_001',
-              { policy }
-            );
-          }
-
-          // Validate session via the canonical repository method (reuses client = same TX)
-          const session = await cashRegisterRepository.getSessionById(
+        const policy = await cashRegisterRepository.getPosSessionPolicy(client);
+        let isParticipant: boolean | null = false;
+        let session = null as Awaited<ReturnType<typeof cashRegisterRepository.getSessionById>>;
+        if (input.cashRegisterSessionId) {
+          session = await cashRegisterRepository.getSessionById(
             client,
             input.cashRegisterSessionId
           );
-
-          if (!session) {
-            throw new BusinessError(
-              'Invalid cash register session. The session does not exist.',
-              'ERR_SESSION_002',
-              { sessionId: input.cashRegisterSessionId }
+          if (
+            session &&
+            posSessionRequiresParticipantToSell(policy) &&
+            session.userId !== input.soldBy
+          ) {
+            isParticipant = await cashRegisterRepository.isSessionParticipant(
+              client,
+              session.id,
+              input.soldBy
             );
           }
-
-          if (session.status !== 'OPEN') {
-            throw new BusinessError(
-              `Cash register session is ${session.status}. Only OPEN sessions can process sales.`,
-              'ERR_SESSION_003',
-              { sessionId: input.cashRegisterSessionId, status: session.status }
-            );
-          }
-
-          // Policy-specific validation
-          if (policy === 'PER_CASHIER_SESSION') {
-            if (session.userId !== input.soldBy) {
-              throw new BusinessError(
-                'This session belongs to a different cashier. Per-cashier policy requires your own session.',
-                'ERR_SESSION_004',
-                { sessionUserId: session.userId, currentUserId: input.soldBy, registerId: session.registerId }
-              );
-            }
-          }
-
-          validatedSessionId = input.cashRegisterSessionId;
-          logger.info('POS session validated for sale', {
-            sessionId: validatedSessionId,
-            policy,
-            registerId: session.registerId,
-            userId: input.soldBy,
-          });
-        } else if (input.cashRegisterSessionId) {
-          // Policy is DISABLED but session was provided — still link it
-          validatedSessionId = input.cashRegisterSessionId;
         }
+
+        const decision = decideSaleSession({
+          policy,
+          cashRegisterSessionId: input.cashRegisterSessionId,
+          session,
+          soldBy: input.soldBy,
+          isParticipant,
+        });
+        if (!decision.allow) {
+          throw new BusinessError(decision.message, decision.code, { policy });
+        }
+        validatedSessionId = decision.sessionId;
 
         await client.query('RELEASE SAVEPOINT session_policy_check');
       } catch (sessionError: unknown) {
         if (sessionError instanceof BusinessError) throw sessionError;
-        // Rollback savepoint to keep the TX usable even if the query failed
         await client.query('ROLLBACK TO SAVEPOINT session_policy_check').catch(() => { });
-        // Non-blocking: settings fetch failure should not block sales
-        logger.warn('Session policy check failed, proceeding without enforcement', {
+        logger.error('Session policy check failed — sale not posted', {
           error: sessionError instanceof Error ? sessionError.message : String(sessionError),
         });
-        if (input.cashRegisterSessionId) {
-          validatedSessionId = input.cashRegisterSessionId;
-        }
+        throw new BusinessError(
+          'Could not verify cash register session. Sale was not posted.',
+          'ERR_SESSION_005',
+          {
+            cause: sessionError instanceof Error ? sessionError.message : String(sessionError),
+          }
+        );
       }
       profiler.mark('session_policy');
 
@@ -2014,15 +1994,15 @@ export const salesService = {
                 client,
               );
               // Drawer tracking when residual leaves as cash
-              if (paymentMethod === 'CASH' || paymentMethod === 'MOBILE_MONEY' || paymentMethod === 'AIRTEL_MONEY') {
+              if (paymentMethod === 'CASH') {
                 try {
                   let sessionId: string | null = input.cashRegisterSessionId || null;
                   if (!sessionId) {
-                    const openSession = await cashRegisterRepository.getUserOpenSession(
-                      client,
+                    const { session: current } = await cashRegisterService.getCurrentSessionForUser(
                       input.soldBy,
+                      client,
                     );
-                    sessionId = openSession?.id || null;
+                    sessionId = current?.id || null;
                   }
                   if (sessionId) {
                     await cashRegisterService.recordRefundMovement(
@@ -4263,10 +4243,9 @@ export const salesService = {
 
       // CASH REGISTER: Record refund movement for drawer tracking (REFUND only — not exchange store credit)
       const isCashPayment = sale.payment_method === 'CASH';
-      const isMobilePayment = sale.payment_method === 'MOBILE_MONEY' || sale.payment_method === 'AIRTEL_MONEY';
       if (
         refundType === 'REFUND'
-        && (isCashPayment || isMobilePayment)
+        && isCashPayment
         && refundTotalAmount.greaterThan(0)
       ) {
         try {
@@ -4279,8 +4258,11 @@ export const salesService = {
             }
           }
           if (!sessionId) {
-            const openSession = await cashRegisterRepository.getUserOpenSession(pool, refundedById);
-            sessionId = openSession?.id || null;
+            const { session: current } = await cashRegisterService.getCurrentSessionForUser(
+              refundedById,
+              pool
+            );
+            sessionId = current?.id || null;
           }
           if (sessionId) {
             await cashRegisterService.recordRefundMovement(
@@ -4481,6 +4463,7 @@ export const salesService = {
     }
 
     const client = await pool.connect();
+    let payoutMethod: string = 'CASH';
     try {
       await client.query('BEGIN');
 
@@ -4502,6 +4485,7 @@ export const salesService = {
         | 'AIRTEL_MONEY'
         | 'CREDIT'
         | 'DEPOSIT';
+      payoutMethod = paymentMethod;
 
       await salesRepository.applyExchangeResidualPayout(client, refundId, remaining);
       await glEntryService.recordExchangeResidualPayoutToGL(
@@ -4528,10 +4512,10 @@ export const salesService = {
     try {
       let sessionId: string | null = input.cashRegisterSessionId || null;
       if (!sessionId) {
-        const openSession = await cashRegisterRepository.getUserOpenSession(pool, userId);
-        sessionId = openSession?.id || null;
+        const { session: current } = await cashRegisterService.getCurrentSessionForUser(userId, pool);
+        sessionId = current?.id || null;
       }
-      if (sessionId) {
+      if (sessionId && payoutMethod === 'CASH') {
         await cashRegisterService.recordRefundMovement(
           sessionId,
           refundId,

@@ -37,8 +37,16 @@ import {
 import { AccountingCore, JournalLine } from '../../services/accountingCore.js';
 import logger from '../../utils/logger.js';
 import Decimal from 'decimal.js';
-import { v4 as uuidv4 } from 'uuid';
 import { getBusinessDate } from '../../utils/dateRange.js';
+import { ValidationError } from '../../middleware/errorHandler.js';
+import * as arPaymentService from '../ar-payments/arPaymentService.js';
+import * as openItemEngine from '../ar-payments/openItemAllocationEngine.js';
+import {
+    parsePosSessionPolicy,
+    posSessionAllowsJoin,
+    type PosSessionPolicy,
+} from '@shared/pos/posSessionPolicySsot.js';
+import { resolveCurrentSession } from '@shared/pos/posSessionEnforcement.js';
 
 // =============================================================================
 // ACCOUNT CODES (from Chart of Accounts)
@@ -112,6 +120,54 @@ export class SessionNotClosedError extends CashRegisterError {
     }
 }
 
+function isPgUniqueViolation(error: unknown): boolean {
+    return (error as { code?: string }).code === '23505';
+}
+
+function isOneOpenSessionConstraint(error: unknown): boolean {
+    const constraint = String((error as { constraint?: string }).constraint || '');
+    const detail = String((error as { detail?: string }).detail || '');
+    const message = error instanceof Error ? error.message : String(error);
+    return /uq_cash_register_one_open_session|register_id/i.test(`${constraint} ${detail} ${message}`);
+}
+
+async function attachToExistingRegisterSession(
+    client: PoolClient,
+    existing: CashRegisterSession,
+    data: OpenSessionData,
+    policy: PosSessionPolicy
+): Promise<CashRegisterSession> {
+    if (existing.userId === data.userId) {
+        await cashRegisterRepository.ensureSessionParticipant(client, existing.id, data.userId);
+        logger.info('Auto-resuming existing session for same user', {
+            sessionId: existing.id,
+            sessionNumber: existing.sessionNumber,
+            registerId: data.registerId,
+            userId: data.userId,
+        });
+        return existing;
+    }
+    if (posSessionAllowsJoin(policy)) {
+        const ownedElsewhere = await cashRegisterRepository.getUserOpenSession(client, data.userId);
+        if (ownedElsewhere) {
+            throw new UserAlreadyHasSessionError(
+                ownedElsewhere.sessionNumber,
+                ownedElsewhere.registerName || 'Unknown Register'
+            );
+        }
+        await cashRegisterRepository.ensureSessionParticipant(client, existing.id, data.userId);
+        logger.info('Joined existing register session', {
+            sessionId: existing.id,
+            sessionNumber: existing.sessionNumber,
+            registerId: data.registerId,
+            userId: data.userId,
+            policy,
+        });
+        return existing;
+    }
+    throw new RegisterBusyError(data.registerId, existing.sessionNumber);
+}
+
 // =============================================================================
 // SERVICE
 // =============================================================================
@@ -172,6 +228,16 @@ export const cashRegisterService = {
         dbPool?: Pool
     ): Promise<CashRegister | null> {
         const pool = dbPool || globalPool;
+        if (data.isActive === false) {
+            const open = await cashRegisterRepository.getOpenSession(pool, id);
+            if (open) {
+                const existing = await cashRegisterRepository.getRegisterById(pool, id);
+                throw new CashRegisterError(
+                    `Cannot deactivate ${existing?.name || 'register'} while session ${open.sessionNumber} is open. Close the session first.`,
+                    'REGISTER_HAS_OPEN_SESSION'
+                );
+            }
+        }
         const register = await cashRegisterRepository.updateRegister(pool, id, data);
 
         if (register) {
@@ -198,17 +264,14 @@ export const cashRegisterService = {
     // ===========================================================================
 
     /**
-     * Open a new register session
+     * Open a new register session (or join an existing one when policy allows).
      *
-     * Business Rules:
-     * - Register must exist and be active
-     * - Register must not have an existing open session BY ANOTHER USER
-     * - If the SAME user already has an open session on THIS register → auto-resume
-     * - User must not have an open session on a DIFFERENT register
+     * Always: one OPEN session per physical register.
+     * PER_CASHIER: one open session per cashier; cannot join another cashier's drawer.
+     * PER_COUNTER / GLOBAL: join the register's open session instead of creating a second float.
      */
     async openSession(data: OpenSessionData, dbPool?: Pool): Promise<CashRegisterSession> {
         const pool = dbPool || globalPool;
-        // Validate register exists and is active (read outside txn is fine)
         const register = await cashRegisterRepository.getRegisterById(pool, data.registerId);
         if (!register) {
             throw new RegisterNotFoundError(data.registerId);
@@ -217,26 +280,17 @@ export const cashRegisterService = {
             throw new CashRegisterError(`Register ${register.name} is not active`, 'REGISTER_INACTIVE');
         }
 
-        // Wrap all session checks + creation in a transaction for atomicity.
-        // Without this, INSERT + recordMovement (opening float) are non-atomic,
-        // and concurrent openSession calls could race past the checks.
         const session = await UnitOfWork.run<CashRegisterSession>(pool, async (client) => {
-            // Re-check inside transaction for snapshot consistency
+            const policy = parsePosSessionPolicy(
+                await cashRegisterRepository.getPosSessionPolicy(client)
+            );
             const existingRegisterSession = await cashRegisterRepository.getOpenSession(
                 client,
-                data.registerId
+                data.registerId,
+                { forUpdate: true }
             );
             if (existingRegisterSession) {
-                if (existingRegisterSession.userId === data.userId) {
-                    logger.info('Auto-resuming existing session for same user', {
-                        sessionId: existingRegisterSession.id,
-                        sessionNumber: existingRegisterSession.sessionNumber,
-                        registerId: data.registerId,
-                        userId: data.userId,
-                    });
-                    return existingRegisterSession;
-                }
-                throw new RegisterBusyError(data.registerId, existingRegisterSession.sessionNumber);
+                return attachToExistingRegisterSession(client, existingRegisterSession, data, policy);
             }
 
             const existingUserSession = await cashRegisterRepository.getUserOpenSession(
@@ -250,19 +304,64 @@ export const cashRegisterService = {
                 );
             }
 
-            // INSERT session + recordMovement (opening float) — now atomic
-            return cashRegisterRepository.openSession(client, data);
-        });
-
-        logger.info('Cash register session opened', {
-            sessionId: session.id,
-            sessionNumber: session.sessionNumber,
-            registerId: data.registerId,
-            userId: data.userId,
-            openingFloat: data.openingFloat,
+            try {
+                const opened = await cashRegisterRepository.openSession(client, data);
+                await cashRegisterRepository.ensureSessionParticipant(client, opened.id, data.userId);
+                logger.info('Cash register session opened', {
+                    sessionId: opened.id,
+                    sessionNumber: opened.sessionNumber,
+                    registerId: data.registerId,
+                    userId: data.userId,
+                    openingFloat: data.openingFloat,
+                    policy,
+                });
+                return opened;
+            } catch (error: unknown) {
+                if (isPgUniqueViolation(error) && isOneOpenSessionConstraint(error)) {
+                    const raced = await cashRegisterRepository.getOpenSession(client, data.registerId);
+                    if (raced) {
+                        return attachToExistingRegisterSession(client, raced, data, policy);
+                    }
+                }
+                throw error;
+            }
         });
 
         return session;
+    },
+
+    /**
+     * Session this cashier should sell against, according to POS session policy.
+     */
+    async getCurrentSessionForUser(
+        userId: string,
+        dbPool?: Pool | PoolClient
+    ): Promise<{ session: CashRegisterSession | null; posSessionPolicy: PosSessionPolicy }> {
+        const pool = dbPool || globalPool;
+        const posSessionPolicy = parsePosSessionPolicy(
+            await cashRegisterRepository.getPosSessionPolicy(pool)
+        );
+        const owned = await cashRegisterRepository.getUserOpenSession(pool, userId);
+        let joined: CashRegisterSession | null = null;
+        let openSessions: CashRegisterSession[] = [];
+        if (posSessionAllowsJoin(posSessionPolicy)) {
+            joined = await cashRegisterRepository.getJoinedOpenSession(pool, userId);
+            openSessions = await cashRegisterRepository.listOpenSessions(pool);
+        }
+        const resolved = resolveCurrentSession({
+            policy: posSessionPolicy,
+            owned,
+            joined,
+            openSessions,
+        });
+        if (resolved.persistJoin && resolved.session) {
+            await cashRegisterRepository.ensureSessionParticipant(
+                pool,
+                resolved.session.id,
+                userId
+            );
+        }
+        return { session: resolved.session, posSessionPolicy };
     },
 
     /**
@@ -322,6 +421,15 @@ export const cashRegisterService = {
                 throw new CashRegisterError(
                     'Cannot close another user\'s session. Use force-close for admin override.',
                     'SESSION_OWNERSHIP_VIOLATION'
+                );
+            }
+
+            const expected = await cashRegisterRepository.calculateExpectedClosing(client, data.sessionId);
+            const pendingVariance = new Decimal(data.actualClosing).minus(expected);
+            if (pendingVariance.abs().greaterThan('0.01') && !data.varianceReason?.trim()) {
+                throw new CashRegisterError(
+                    'Reason for variance is required when counted cash does not match expected till cash.',
+                    'VARIANCE_REASON_REQUIRED'
                 );
             }
 
@@ -513,19 +621,19 @@ export const cashRegisterService = {
      *   DR Checking Account (1030), CR Cash (1010)
      *   No P&L impact - transfer between cash locations
      *
-     * CASH_OUT_EXPENSE: Petty cash expense (from 1012 when treasury enabled)
+     * CASH_OUT_EXPENSE: Petty cash expense — credits 1012, never the till 1010
      *   DR General Expense (6900), CR Petty Cash (1012)
-     *   P&L impact - expense
+     *   P&L impact - expense. Does NOT change expected till cash.
      *
      * CASH_OUT_OTHER: Other drawer withdrawal
      *   DR General Expense (6900), CR Cash Drawer (1010)
      *   P&L impact - expense
      *
-     * NOTE: CASH_IN_PAYMENT is NOT posted here - AR payment is posted
-     *       separately by the payment receipt workflow.
+     * NOTE: CASH_IN_PAYMENT posts AR + 1010 in recordTillArPayment (TILL_RECEIPT).
+     *       Do not post a second journal here.
      * NOTE: SALE and REFUND are NOT posted here - handled by sales GL posting.
      * NOTE: FLOAT_ADJUSTMENT is NOT posted - it's the opening float.
-     * NOTE: 1015 Undeposited Funds is NEVER used for petty/float (Phase 1D).
+     * NOTE: 1015 Undeposited Funds is NEVER used for petty/float or till AR.
      */
     async createMovementGLEntry(
         movement: CashMovement,
@@ -681,7 +789,7 @@ export const cashRegisterService = {
                     return;
                 }
 
-                // Flag-off legacy: expense from drawer (pre-1D behaviour)
+                // Flag-off: petty expense still credits 1012 (petty), never till 1010
                 lines = [
                     {
                         accountCode: ACCOUNT_CODES.GENERAL_EXPENSE,
@@ -692,7 +800,7 @@ export const cashRegisterService = {
                         entityId: movement.id,
                     },
                     {
-                        accountCode: ACCOUNT_CODES.CASH,
+                        accountCode: ACCOUNT_CODES.PETTY_CASH,
                         description,
                         debitAmount: 0,
                         creditAmount: amount,
@@ -877,6 +985,10 @@ export const cashRegisterService = {
             }
         }
 
+        if (data.movementType === 'CASH_IN_PAYMENT') {
+            return this.recordTillArPayment(data, pool);
+        }
+
         // Validate session exists and is open
         const session = await cashRegisterRepository.getSessionById(pool, data.sessionId);
         if (!session) {
@@ -902,6 +1014,129 @@ export const cashRegisterService = {
         });
 
         return movement;
+    },
+
+    /**
+     * POS till collection of customer AR — one event, one GL, one drawer movement.
+     *
+     * SSOT:
+     *   DR 1010 Cash Drawer (TILL_RECEIPT)
+     *   CR 1200 Accounts Receivable (allocated to the selected invoice)
+     *   cash_movements CASH_IN_PAYMENT with reference AR_PAYMENT
+     *
+     * Must not debit 1015 (would duplicate undeposited + till cash).
+     * Must not post createMovementGLEntry (would duplicate 1010).
+     */
+    async recordTillArPayment(data: RecordMovementData, dbPool?: Pool): Promise<CashMovement> {
+        const pool = dbPool || globalPool;
+        const customerId = data.customerId?.trim();
+        const invoiceId = data.invoiceId?.trim();
+        if (!customerId) {
+            throw new ValidationError(
+                'Customer Payment requires a customer. Select the customer whose invoice is being paid.',
+            );
+        }
+        if (!invoiceId) {
+            throw new ValidationError(
+                'Customer Payment requires an open invoice. This is not a free-text till note.',
+            );
+        }
+        const amount = new Decimal(data.amount);
+        if (!amount.greaterThan(0)) {
+            throw new ValidationError('Payment amount must be greater than zero');
+        }
+
+        return UnitOfWork.run(pool, async (client) => {
+            const session = await cashRegisterRepository.getSessionById(client, data.sessionId);
+            if (!session) {
+                throw new SessionNotFoundError(data.sessionId);
+            }
+            if (session.status !== 'OPEN') {
+                throw new SessionNotOpenError(data.sessionId, session.status);
+            }
+
+            const openBalance = await openItemEngine.getInvoiceOpenBalance(client, invoiceId);
+            if (openBalance.lessThanOrEqualTo(0.009)) {
+                throw new ValidationError('Selected invoice has no outstanding balance.');
+            }
+            if (amount.greaterThan(openBalance.plus(0.009))) {
+                throw new ValidationError(
+                    `Amount ${amount.toFixed(2)} exceeds invoice outstanding ${openBalance.toFixed(2)}.`,
+                );
+            }
+
+            const invRow = await client.query<{
+                invoice_number: string;
+                customer_id: string;
+            }>(
+                `SELECT invoice_number, customer_id FROM invoices WHERE id = $1`,
+                [invoiceId],
+            );
+            const invoice = invRow.rows[0];
+            if (!invoice) {
+                throw new ValidationError('Invoice not found');
+            }
+            if (invoice.customer_id !== customerId) {
+                throw new ValidationError('Invoice does not belong to the selected customer.');
+            }
+
+            const paymentDate = getBusinessDate();
+            const arResult = await arPaymentService.createCustomerPayment(client, {
+                customerId,
+                amount: amount.toNumber(),
+                paymentDate,
+                paymentMethod: 'CASH',
+                reference: data.reason?.trim() || invoice.invoice_number,
+                notes: `Till collection session ${session.sessionNumber}`,
+                createdById: data.userId,
+                autoAllocate: false,
+                allocationType: 'MANUAL',
+                allocations: [{ invoiceId, amount: amount.toNumber() }],
+                fundsAccountCode: '1010',
+            });
+
+            const payment = arResult.payment;
+            if (!payment) {
+                throw new ValidationError('AR payment was not created');
+            }
+
+            const reason =
+                data.reason?.trim() ||
+                `${arResult.customerName} ${invoice.invoice_number} ${payment.paymentNumber}`;
+
+            const movement = await cashRegisterRepository.recordMovement(client, {
+                sessionId: data.sessionId,
+                userId: data.userId,
+                movementType: 'CASH_IN_PAYMENT',
+                amount: amount.toNumber(),
+                reason,
+                referenceType: 'AR_PAYMENT',
+                referenceId: payment.id,
+                paymentMethod: 'CASH',
+                clientUuid: data.clientUuid,
+                metadata: {
+                    customerId,
+                    invoiceId,
+                    invoiceNumber: invoice.invoice_number,
+                    paymentNumber: payment.paymentNumber,
+                    arPaymentId: payment.id,
+                    fundsAccountCode: '1010',
+                },
+            });
+
+            logger.info('Till AR collection posted', {
+                movementId: movement.id,
+                sessionId: data.sessionId,
+                arPaymentId: payment.id,
+                paymentNumber: payment.paymentNumber,
+                customerId,
+                invoiceId,
+                amount: amount.toNumber(),
+                gl: 'DR 1010 CR 1200 TILL_RECEIPT',
+            });
+
+            return movement;
+        });
     },
 
     /**

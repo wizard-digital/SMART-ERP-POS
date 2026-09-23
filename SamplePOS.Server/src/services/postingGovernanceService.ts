@@ -36,6 +36,7 @@ export type PostingSource =
     | 'SALES_INVOICE'           // POS sale / invoice posting
     | 'SALES_REFUND'            // Sale refund/return — reverses revenue and credits cash/AR
     | 'PAYMENT_RECEIPT'         // Customer payment/deposit → Dr Undeposited Funds / Cr AR or Customer Deposits
+    | 'TILL_RECEIPT'            // POS till AR collection → Dr Cash Drawer 1010 / Cr AR (cash already in till)
     | 'PAYMENT_DEPOSIT'         // Bank deposit → Dr Cash / Cr Undeposited Funds
     | 'DEPOSIT_APPLICATION'     // Apply prepayment liability → Dr Customer Deposits (2200) / Cr AR (no cash)
     | 'PURCHASE_BILL'           // Supplier bill / goods receipt (creates AP liability)
@@ -224,6 +225,7 @@ export class PostingGovernanceService {
             // ------------------------------------------------------------------
             const isPaymentSource =
                 source === 'PAYMENT_RECEIPT' ||
+                source === 'TILL_RECEIPT' ||
                 source === 'PAYMENT_DEPOSIT' ||
                 source === 'DEPOSIT_APPLICATION' || // structure validated by Rule E (liability→AR)
                 source === 'TREASURY_DEPOSIT' ||
@@ -340,6 +342,33 @@ export class PostingGovernanceService {
                     `PAYMENT_RECEIPT must credit Accounts Receivable (tag: ACCOUNTS_RECEIVABLE) ` +
                     `or Customer Deposits (2200). Invoice payments reduce AR; advances increase deposit liability.`,
                     'GOV_RULE_E_RECEIPT_STRUCTURE',
+                    { source }
+                );
+            }
+        }
+
+        if (source === 'TILL_RECEIPT') {
+            const hasDebitTillCash = lines.some((l) => {
+                const acct = findAccount(accounts, l.accountCode);
+                return (
+                    l.debitAmount > 0 &&
+                    acct?.accountCode === '1010' &&
+                    acct.systemAccountTag === 'CASH'
+                );
+            });
+            const hasCreditAR = lines.some((l) => {
+                const acct = findAccount(accounts, l.accountCode);
+                return l.creditAmount > 0 && acct?.systemAccountTag === 'ACCOUNTS_RECEIVABLE';
+            });
+            const hasUndepositedDebit = lines.some((l) => {
+                const acct = findAccount(accounts, l.accountCode);
+                return l.debitAmount > 0 && acct?.systemAccountTag === 'UNDEPOSITED_FUNDS';
+            });
+            if (!hasDebitTillCash || !hasCreditAR || hasUndepositedDebit) {
+                throw new PostingGovernanceError(
+                    `TILL_RECEIPT must debit Cash Drawer 1010 and credit Accounts Receivable. ` +
+                    `Till collections must not debit Undeposited Funds (1015).`,
+                    'GOV_RULE_E_TILL_RECEIPT_STRUCTURE',
                     { source }
                 );
             }

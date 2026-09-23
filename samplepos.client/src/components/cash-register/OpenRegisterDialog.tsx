@@ -29,11 +29,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '../ui/select';
-import { useRegisters, useOpenSession, useForceCloseSession } from '../../hooks/useCashRegister';
+import { useRegisters, useOpenSession, useForceCloseSession, useCurrentSession } from '../../hooks/useCashRegister';
 import { useAuth } from '../../hooks/useAuth';
 import { useHasPermission } from '../../authorization/useAuthorization';
 import { Loader2, DollarSign, AlertTriangle, User } from 'lucide-react';
 import { formatTimestamp } from '../../utils/businessDate';
+import {
+    getPosSessionPolicyDefinition,
+    parsePosSessionPolicy,
+    posSessionAllowsJoin,
+} from '@shared/pos/posSessionPolicySsot';
 
 interface OpenRegisterDialogProps {
     open: boolean;
@@ -65,6 +70,10 @@ export function OpenRegisterDialog({
     const openSession = useOpenSession();
     const forceCloseSession = useForceCloseSession();
     const { user } = useAuth();
+    const { data: currentSession, posSessionPolicy } = useCurrentSession();
+    const policy = parsePosSessionPolicy(posSessionPolicy);
+    const canJoinOccupied = posSessionAllowsJoin(policy);
+    const policyDef = getPosSessionPolicyDefinition(policy);
 
     const activeRegisters = registers?.filter((r) => r.isActive) || [];
 
@@ -74,11 +83,15 @@ export function OpenRegisterDialog({
         [activeRegisters, registerId]
     );
 
-    // Determine register status for the selected register
+    const isOnSelectedSession =
+        !!selectedRegister?.currentSessionId &&
+        currentSession?.id === selectedRegister.currentSessionId;
+    const isOccupiedByMe = selectedRegister?.currentSessionId != null && (
+        selectedRegister.currentSessionUserId === user?.id || isOnSelectedSession
+    );
     const isOccupiedByOther = selectedRegister?.currentSessionId != null
-        && selectedRegister.currentSessionUserId !== user?.id;
-    const isOccupiedByMe = selectedRegister?.currentSessionId != null
-        && selectedRegister.currentSessionUserId === user?.id;
+        && selectedRegister.currentSessionUserId !== user?.id
+        && !isOnSelectedSession;
     const isAvailable = selectedRegister != null && selectedRegister.currentSessionId == null;
     const canForceCloseRegister = useHasPermission('pos.approve');
 
@@ -129,10 +142,10 @@ export function OpenRegisterDialog({
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <DollarSign className="h-5 w-5 text-green-600" />
-                        Open Cash Register
+                        {policyDef.cashierPromptAction}
                     </DialogTitle>
                     <DialogDescription>
-                        Start your shift by selecting a register and entering the opening float amount.
+                        {policyDef.cashierPromptBody}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -156,7 +169,8 @@ export function OpenRegisterDialog({
                                 <SelectContent>
                                     {activeRegisters.map((register) => {
                                         const occupied = register.currentSessionId != null;
-                                        const isMine = register.currentSessionUserId === user?.id;
+                                        const isMine = register.currentSessionUserId === user?.id
+                                            || register.currentSessionId === currentSession?.id;
                                         return (
                                             <SelectItem key={register.id} value={register.id}>
                                                 <span className="flex items-center gap-2">
@@ -169,7 +183,12 @@ export function OpenRegisterDialog({
                                                     />
                                                     {register.name}
                                                     {register.location && ` - ${register.location}`}
-                                                    {occupied && !isMine && (
+                                                {occupied && !isMine && canJoinOccupied && (
+                                                        <span className="text-xs text-blue-600 ml-1">
+                                                            (Join)
+                                                        </span>
+                                                    )}
+                                                    {occupied && !isMine && !canJoinOccupied && (
                                                         <span className="text-xs text-red-500 ml-1">
                                                             (In use)
                                                         </span>
@@ -205,17 +224,21 @@ export function OpenRegisterDialog({
 
                     {/* Status message for occupied by another user */}
                     {isOccupiedByOther && (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-700">
+                        <div className={`p-3 border rounded-md text-sm ${canJoinOccupied ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
                             <div className="flex items-center gap-2 font-medium">
                                 <AlertTriangle className="h-4 w-4" />
-                                Register in use by {selectedRegister?.currentSessionUserName || 'another user'}
+                                {canJoinOccupied
+                                    ? `Open on this counter — ${selectedRegister?.currentSessionUserName || 'another cashier'} started session ${selectedRegister?.currentSessionNumber}`
+                                    : `Register in use by ${selectedRegister?.currentSessionUserName || 'another user'}`}
                             </div>
                             <p className="mt-1 text-xs">
                                 Session {selectedRegister?.currentSessionNumber} — opened{' '}
                                 {formatSessionTime(selectedRegister?.currentSessionOpenedAt)}.
-                                {canForceCloseRegister
-                                    ? ' You can force-close this session as a manager.'
-                                    : ' Please select a different register or ask a manager to close this session.'}
+                                {canJoinOccupied
+                                    ? ' Join this session to sell on the same drawer. Do not count a second float.'
+                                    : canForceCloseRegister
+                                        ? ' You can force-close this session as a manager.'
+                                        : ' Please select a different register or ask a manager to close this session.'}
                             </p>
                             {canForceCloseRegister && !showForceCloseConfirm && (
                                 <Button
@@ -317,6 +340,21 @@ export function OpenRegisterDialog({
                                     </>
                                 ) : (
                                     'Resume Session'
+                                )}
+                            </Button>
+                        ) : isOccupiedByOther && canJoinOccupied ? (
+                            <Button
+                                type="submit"
+                                disabled={!registerId || openSession.isPending}
+                                className="bg-blue-600 hover:bg-blue-700"
+                            >
+                                {openSession.isPending ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                        Joining...
+                                    </>
+                                ) : (
+                                    'Join Session'
                                 )}
                             </Button>
                         ) : (

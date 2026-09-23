@@ -22,6 +22,7 @@ import { authenticate } from '../../middleware/auth.js';
 import { requirePermission } from '../../rbac/middleware.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import logger from '../../utils/logger.js';
+import { cashRegisterService } from '../cash-register/index.js';
 
 // ── Validation ────────────────────────────────────────────────
 const SyncPayloadSchema = z.object({
@@ -134,21 +135,13 @@ export function createOfflineSyncRoutes(pool: Pool): Router {
                 return;
             }
 
-            // ── 3. Resolve cash register session ──
-            // Use the user's current open session, or null
+            // Resolve the session this cashier should sell against (policy SSOT).
             const userId = req.user?.id;
             let cashRegisterSessionId: string | null = null;
 
             if (userId) {
-                const sessionRes = await dbPool.query(
-                    `SELECT id FROM cash_register_sessions
-             WHERE user_id = $1 AND status = 'OPEN'
-             ORDER BY opened_at DESC LIMIT 1`,
-                    [userId]
-                );
-                if (sessionRes.rows.length > 0) {
-                    cashRegisterSessionId = sessionRes.rows[0].id;
-                }
+                const { session } = await cashRegisterService.getCurrentSessionForUser(userId, dbPool);
+                cashRegisterSessionId = session?.id || null;
             }
 
             // ── 4. Build service input ──

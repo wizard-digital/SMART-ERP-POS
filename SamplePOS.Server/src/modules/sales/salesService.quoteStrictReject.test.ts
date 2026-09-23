@@ -56,10 +56,16 @@ jest.unstable_mockModule('../../services/bankingService.js', () => ({
 jest.unstable_mockModule('../cash-register/index.js', () => ({
   cashRegisterService: {
     recordSaleMovement: jest.fn<MockFn>().mockResolvedValue(undefined),
+    getCurrentSessionForUser: jest.fn<MockFn>().mockResolvedValue({
+      session: null,
+      posSessionPolicy: 'DISABLED',
+    }),
   },
   cashRegisterRepository: {
     getSessionById: jest.fn<MockFn>().mockResolvedValue(null),
     getUserOpenSession: jest.fn<MockFn>().mockResolvedValue(null),
+    getPosSessionPolicy: jest.fn<MockFn>().mockResolvedValue('DISABLED'),
+    isSessionParticipant: jest.fn<MockFn>().mockResolvedValue(null),
   },
 }));
 
@@ -79,6 +85,9 @@ jest.unstable_mockModule('../../middleware/errorHandler.js', () => ({
   },
   NotFoundError: class extends Error {
     constructor(resource: string) { super(`${resource} not found`); this.name = 'NotFoundError'; }
+  },
+  ForbiddenError: class extends Error {
+    constructor(msg: string = 'Forbidden') { super(msg); this.name = 'ForbiddenError'; }
   },
   ConflictError: class extends Error {
     constructor(msg: string) { super(msg); this.name = 'ConflictError'; }

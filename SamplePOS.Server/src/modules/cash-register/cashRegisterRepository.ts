@@ -8,6 +8,27 @@
 import { Pool, PoolClient } from 'pg';
 import Decimal from 'decimal.js';
 import { getBusinessYear } from '../../utils/dateRange.js';
+import {
+  parsePosSessionPolicy,
+  type PosSessionPolicy,
+} from '@shared/pos/posSessionPolicySsot.js';
+
+export class ParticipantsSchemaMissingError extends Error {
+  readonly code = 'PARTICIPANTS_SCHEMA_MISSING';
+  constructor() {
+    super(
+      'cash_register_session_participants is missing. Apply migration 620_pos_session_policy_ssot.sql.'
+    );
+    this.name = 'ParticipantsSchemaMissingError';
+  }
+}
+
+function rethrowUndefinedTable(error: unknown): never {
+  if ((error as { code?: string }).code === '42P01') {
+    throw new ParticipantsSchemaMissingError();
+  }
+  throw error;
+}
 
 // =============================================================================
 // INTERFACES
@@ -129,7 +150,36 @@ export interface RecordMovementData {
   paymentMethod?: PaymentMethod; // Track payment method for sales
   metadata?: Record<string, unknown>; // Flexible JSONB for expense_type, receipt_number, etc.
   clientUuid?: string; // Offline deduplication UUID
+  /** Required for CASH_IN_PAYMENT — real customer, not free text. */
+  customerId?: string;
+  /** Required for CASH_IN_PAYMENT — open invoice being collected. */
+  invoiceId?: string;
 }
+
+/** Movement types that increase expected till cash. */
+export const TILL_INFLOW_TYPES: MovementType[] = [
+  'CASH_IN',
+  'CASH_IN_FLOAT',
+  'CASH_IN_PAYMENT',
+  'CASH_IN_OTHER',
+  'SALE',
+  'FLOAT_ADJUSTMENT',
+];
+
+/** Movement types that decrease expected till cash. Petty CASH_OUT_EXPENSE is excluded (1012, not 1010). */
+export const TILL_OUTFLOW_TYPES: MovementType[] = [
+  'CASH_OUT',
+  'CASH_OUT_BANK',
+  'CASH_OUT_OTHER',
+  'REFUND',
+];
+
+/** Till cash-out line on the close dialog (refunds shown separately). */
+export const TILL_CASH_OUT_TYPES: MovementType[] = [
+  'CASH_OUT',
+  'CASH_OUT_BANK',
+  'CASH_OUT_OTHER',
+];
 
 // Enterprise: Reconciliation audit trail
 export interface CashReconciliation {
@@ -246,8 +296,13 @@ export const cashRegisterRepository = {
         u.full_name as "currentSessionUserName",
         s.opened_at as "currentSessionOpenedAt"
       FROM cash_registers r
-      LEFT JOIN cash_register_sessions s 
-        ON s.register_id = r.id AND s.status = 'OPEN'
+      LEFT JOIN LATERAL (
+        SELECT id, session_number, user_id, opened_at
+        FROM cash_register_sessions
+        WHERE register_id = r.id AND status = 'OPEN'
+        ORDER BY opened_at DESC
+        LIMIT 1
+      ) s ON true
       LEFT JOIN users u ON u.id = s.user_id
       WHERE r.is_active = true
       ORDER BY r.name
@@ -364,7 +419,12 @@ export const cashRegisterRepository = {
   /**
    * Check if register has an open session
    */
-  async getOpenSession(pool: Pool | PoolClient, registerId: string): Promise<CashRegisterSession | null> {
+  async getOpenSession(
+    pool: Pool | PoolClient,
+    registerId: string,
+    options?: { forUpdate?: boolean }
+  ): Promise<CashRegisterSession | null> {
+    const lock = options?.forUpdate ? ' FOR UPDATE OF s' : '';
     const result = await pool.query(`
       SELECT 
         s.id,
@@ -389,7 +449,7 @@ export const cashRegisterRepository = {
       LEFT JOIN users u ON u.id = s.user_id
       WHERE s.register_id = $1 AND s.status = 'OPEN'
       ORDER BY s.opened_at DESC
-      LIMIT 1
+      LIMIT 1${lock}
     `, [registerId]);
     return result.rows[0] || null;
   },
@@ -425,6 +485,130 @@ export const cashRegisterRepository = {
       LIMIT 1
     `, [userId]);
     return result.rows[0] || null;
+  },
+
+  /**
+   * Whether this user is on the session (owner is also a participant after open/join).
+   * Missing participants table throws ParticipantsSchemaMissingError (fail closed).
+   */
+  async isSessionParticipant(
+    pool: Pool | PoolClient,
+    sessionId: string,
+    userId: string
+  ): Promise<boolean> {
+    try {
+      const result = await pool.query(
+        `SELECT 1 FROM cash_register_session_participants
+         WHERE session_id = $1 AND user_id = $2 LIMIT 1`,
+        [sessionId, userId]
+      );
+      return result.rows.length > 0;
+    } catch (error: unknown) {
+      rethrowUndefinedTable(error);
+    }
+  },
+
+  async getPosSessionPolicy(pool: Pool | PoolClient): Promise<PosSessionPolicy> {
+    const result = await pool.query<{ pos_session_policy: string | null }>(
+      `SELECT pos_session_policy FROM system_settings LIMIT 1`
+    );
+    return parsePosSessionPolicy(result.rows[0]?.pos_session_policy);
+  },
+
+  async listOpenSessions(pool: Pool | PoolClient): Promise<CashRegisterSession[]> {
+    const result = await pool.query(`
+      SELECT
+        s.id,
+        s.register_id as "registerId",
+        r.name as "registerName",
+        s.user_id as "userId",
+        u.full_name as "userName",
+        s.session_number as "sessionNumber",
+        s.status,
+        s.opening_float as "openingFloat",
+        s.expected_closing as "expectedClosing",
+        s.actual_closing as "actualClosing",
+        s.variance,
+        s.variance_reason as "varianceReason",
+        s.opened_at as "openedAt",
+        s.closed_at as "closedAt",
+        s.reconciled_at as "reconciledAt",
+        s.reconciled_by as "reconciledBy",
+        s.notes
+      FROM cash_register_sessions s
+      JOIN cash_registers r ON r.id = s.register_id
+      LEFT JOIN users u ON u.id = s.user_id
+      WHERE s.status = 'OPEN' AND r.is_active = true
+      ORDER BY s.opened_at DESC
+    `);
+    return result.rows;
+  },
+
+  async getJoinedOpenSession(pool: Pool | PoolClient, userId: string): Promise<CashRegisterSession | null> {
+    try {
+      const result = await pool.query(`
+        SELECT
+          s.id,
+          s.register_id as "registerId",
+          r.name as "registerName",
+          s.user_id as "userId",
+          u.full_name as "userName",
+          s.session_number as "sessionNumber",
+          s.status,
+          s.opening_float as "openingFloat",
+          s.expected_closing as "expectedClosing",
+          s.actual_closing as "actualClosing",
+          s.variance,
+          s.variance_reason as "varianceReason",
+          s.opened_at as "openedAt",
+          s.closed_at as "closedAt",
+          s.reconciled_at as "reconciledAt",
+          s.reconciled_by as "reconciledBy",
+          s.notes
+        FROM cash_register_session_participants p
+        JOIN cash_register_sessions s ON s.id = p.session_id
+        JOIN cash_registers r ON r.id = s.register_id
+        LEFT JOIN users u ON u.id = s.user_id
+        WHERE p.user_id = $1 AND s.status = 'OPEN'
+        ORDER BY p.joined_at DESC
+        LIMIT 1
+      `, [userId]);
+      return result.rows[0] || null;
+    } catch (error: unknown) {
+      rethrowUndefinedTable(error);
+    }
+  },
+
+  async ensureSessionParticipant(
+    pool: Pool | PoolClient,
+    sessionId: string,
+    userId: string
+  ): Promise<void> {
+    try {
+      await pool.query(
+        `DELETE FROM cash_register_session_participants WHERE user_id = $1 AND session_id <> $2`,
+        [userId, sessionId]
+      );
+      await pool.query(
+        `INSERT INTO cash_register_session_participants (session_id, user_id)
+         VALUES ($1, $2)
+         ON CONFLICT (session_id, user_id) DO NOTHING`,
+        [sessionId, userId]
+      );
+    } catch (error: unknown) {
+      rethrowUndefinedTable(error);
+    }
+  },
+
+  async clearSessionParticipants(pool: Pool | PoolClient, sessionId: string): Promise<void> {
+    try {
+      await pool.query(
+        `DELETE FROM cash_register_session_participants WHERE session_id = $1`,
+        [sessionId]
+      );
+    } catch (error: unknown) {
+      rethrowUndefinedTable(error);
+    }
   },
 
   /**
@@ -533,7 +717,7 @@ export const cashRegisterRepository = {
               'SALE', 'FLOAT_ADJUSTMENT'
             ) THEN amount
             WHEN movement_type IN (
-              'CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_EXPENSE', 'CASH_OUT_OTHER',
+              'CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_OTHER',
               'REFUND'
             ) THEN -amount
             ELSE 0
@@ -607,6 +791,8 @@ export const cashRegisterRepository = {
       paymentSummary ? JSON.stringify(paymentSummary) : null
     ]);
 
+    await this.clearSessionParticipants(pool, data.sessionId);
+
     return result.rows[0];
   },
 
@@ -622,7 +808,7 @@ export const cashRegisterRepository = {
             'SALE', 'CASH_IN', 'CASH_IN_FLOAT', 'CASH_IN_PAYMENT', 'CASH_IN_OTHER'
           ) THEN amount
           WHEN movement_type IN (
-            'REFUND', 'CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_EXPENSE', 'CASH_OUT_OTHER'
+            'REFUND', 'CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_OTHER'
           ) THEN -amount
           ELSE 0
         END) as total
@@ -885,8 +1071,7 @@ export const cashRegisterRepository = {
         COALESCE(SUM(CASE WHEN movement_type = 'FLOAT_ADJUSTMENT' THEN amount ELSE 0 END), 0) as opening_float,
         -- Legacy CASH_IN + new specific types
         COALESCE(SUM(CASE WHEN movement_type IN ('CASH_IN', 'CASH_IN_FLOAT', 'CASH_IN_PAYMENT', 'CASH_IN_OTHER') THEN amount ELSE 0 END), 0) as total_cash_in,
-        -- Legacy CASH_OUT + new specific types
-        COALESCE(SUM(CASE WHEN movement_type IN ('CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_EXPENSE', 'CASH_OUT_OTHER') THEN amount ELSE 0 END), 0) as total_cash_out,
+        COALESCE(SUM(CASE WHEN movement_type IN ('CASH_OUT', 'CASH_OUT_BANK', 'CASH_OUT_OTHER') THEN amount ELSE 0 END), 0) as total_cash_out,
         COALESCE(SUM(CASE WHEN movement_type = 'SALE' THEN amount ELSE 0 END), 0) as total_sales,
         COALESCE(SUM(CASE WHEN movement_type = 'REFUND' THEN amount ELSE 0 END), 0) as total_refunds,
         -- Detailed breakdown

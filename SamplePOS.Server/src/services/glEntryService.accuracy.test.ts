@@ -608,6 +608,28 @@ describe('glEntryService — GL Posting Accuracy', () => {
 
             expect(findLine(lines, AccountCodes.UNDEPOSITED_FUNDS)!.debitAmount).toBe(5000);
             expect(findLine(lines, AccountCodes.ACCOUNTS_RECEIVABLE)!.creditAmount).toBe(5000);
+            expect(capturedEntries[0].source).toBe('PAYMENT_RECEIPT');
+            assertBalanced(lines);
+        });
+
+        it('should DR Cash Drawer 1010 / CR AR for till collections (TILL_RECEIPT)', async () => {
+            await recordCustomerPaymentToGL({
+                paymentId: 'pay-till-1',
+                paymentNumber: 'PMT-TILL-001',
+                paymentDate: '2026-03-15',
+                amount: 4000,
+                paymentMethod: 'CASH',
+                customerId: 'cust-1',
+                customerName: 'John',
+                reducesAR: true,
+                fundsAccountCode: '1010',
+            });
+
+            const lines = capturedEntries[0].lines;
+            expect(findLine(lines, AccountCodes.CASH)!.debitAmount).toBe(4000);
+            expect(findLine(lines, AccountCodes.ACCOUNTS_RECEIVABLE)!.creditAmount).toBe(4000);
+            expect(findLine(lines, AccountCodes.UNDEPOSITED_FUNDS)).toBeUndefined();
+            expect(capturedEntries[0].source).toBe('TILL_RECEIPT');
             assertBalanced(lines);
         });
 
@@ -1002,6 +1024,25 @@ describe('glEntryService — GL Posting Accuracy', () => {
             await recordSupplierCreditNoteToGL({ ...base, noteId: 'scn-4', noteNumber: 'SCN-2026-0004', subtotal: 1000, taxAmount: 0, totalAmount: 1000 });
             expect(capturedEntries[0].referenceType).toBe('SUPPLIER_CREDIT_NOTE');
             expect(capturedEntries[0].idempotencyKey).toBe('SUPPLIER_CREDIT_NOTE-scn-4');
+        });
+
+        it('under-bill reverse: DR AP + DR Price Variance / CR clearing (balanced)', async () => {
+            // Parent SI under-billed: AP=88000, GR goods=88004 (CR 5020 on SI).
+            // Full return SCN: clear goods at 88004, reduce AP only 88000, DR PPV 4.
+            await recordSupplierCreditNoteToGL({
+                ...base,
+                noteId: 'scn-5',
+                noteNumber: 'SCN-2026-0005',
+                subtotal: 88004,
+                taxAmount: 0,
+                totalAmount: 88000,
+                clearingAccountCode: AccountCodes.GRIR_CLEARING,
+            });
+            const lines = capturedEntries[0].lines;
+            expect(findLine(lines, AccountCodes.ACCOUNTS_PAYABLE)!.debitAmount).toBe(88000);
+            expect(findLine(lines, AccountCodes.GRIR_CLEARING)!.creditAmount).toBe(88004);
+            expect(findLine(lines, AccountCodes.PRICE_VARIANCE)!.debitAmount).toBe(4);
+            assertBalanced(lines);
         });
     });
 

@@ -792,6 +792,31 @@ describe('PostingGovernanceService', () => {
             expect(() => PostingGovernanceService.validate(req)).toThrow('GOV_RULE_E_RECEIPT_STRUCTURE');
         });
 
+        it('allows TILL_RECEIPT as Dr Cash Drawer 1010 / Cr AR', () => {
+            const req = makeRequest(
+                'TILL_RECEIPT',
+                [
+                    { accountCode: '1010', debitAmount: 100, creditAmount: 0 },
+                    { accountCode: '1200', debitAmount: 0, creditAmount: 100 },
+                ],
+                [cashAccount, arAccount]
+            );
+            expect(() => PostingGovernanceService.validate(req)).not.toThrow();
+        });
+
+        it('rejects TILL_RECEIPT that debits Undeposited Funds', () => {
+            const req = makeRequest(
+                'TILL_RECEIPT',
+                [
+                    { accountCode: '1015', debitAmount: 100, creditAmount: 0 },
+                    { accountCode: '1200', debitAmount: 0, creditAmount: 100 },
+                ],
+                [undepositedFundsAccount, arAccount]
+            );
+            expect(() => PostingGovernanceService.validate(req)).toThrow(PostingGovernanceError);
+            expect(() => PostingGovernanceService.validate(req)).toThrow('GOV_RULE_E_TILL_RECEIPT_STRUCTURE');
+        });
+
         it('rejects PAYMENT_RECEIPT without AR or Customer Deposits credit', () => {
             const req = makeRequest(
                 'PAYMENT_RECEIPT',

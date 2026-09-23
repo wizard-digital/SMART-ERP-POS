@@ -7,11 +7,16 @@
 
 import { useState } from 'react';
 import { useCurrentSession } from '../../hooks/useCashRegister';
+import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { OpenRegisterDialog } from './OpenRegisterDialog';
 import { CloseRegisterDialog } from './CloseRegisterDialog';
 import { CashMovementDialog } from './CashMovementDialog';
+import {
+    getPosSessionPolicyDefinition,
+    parsePosSessionPolicy,
+} from '@shared/pos/posSessionPolicySsot';
 import {
     Loader2,
     AlertCircle,
@@ -37,7 +42,10 @@ export function RegisterStatusIndicator({
     compact = false,
     onSessionChange,
 }: RegisterStatusIndicatorProps) {
-    const { data: session, isLoading, error } = useCurrentSession();
+    const { data: session, posSessionPolicy, isLoading, error } = useCurrentSession();
+    const { user } = useAuth();
+    const policyDef = getPosSessionPolicyDefinition(parsePosSessionPolicy(posSessionPolicy));
+    const isSessionOwner = !!session && session.userId === user?.id;
 
     const [openDialogVisible, setOpenDialogVisible] = useState(false);
     const [closeDialogVisible, setCloseDialogVisible] = useState(false);
@@ -127,25 +135,27 @@ export function RegisterStatusIndicator({
                                         <ArrowUpCircle className="h-3 w-3 mr-1" />
                                         Out
                                     </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 text-xs"
-                                        onClick={() => {
-                                            setCloseDialogVisible(true);
-                                            setPopoverOpen(false);
-                                        }}
-                                    >
-                                        <X className="h-3 w-3 mr-1" />
-                                        Close
-                                    </Button>
+                                    {isSessionOwner && (
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="flex-1 text-xs"
+                                            onClick={() => {
+                                                setCloseDialogVisible(true);
+                                                setPopoverOpen(false);
+                                            }}
+                                        >
+                                            <X className="h-3 w-3 mr-1" />
+                                            Close
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         ) : (
                             <div className="space-y-2">
-                                <div className="text-sm text-yellow-700">No register open</div>
+                                <div className="text-sm text-yellow-700">{policyDef.cashierPromptTitle}</div>
                                 <p className="text-xs text-gray-500">
-                                    Open a register to start processing sales.
+                                    {policyDef.cashierPromptBody}
                                 </p>
                                 <Button
                                     size="sm"
@@ -156,7 +166,7 @@ export function RegisterStatusIndicator({
                                     }}
                                 >
                                     <DollarSign className="h-4 w-4 mr-1" />
-                                    Open Register
+                                    {policyDef.cashierPromptAction}
                                 </Button>
                             </div>
                         )}
@@ -223,13 +233,15 @@ export function RegisterStatusIndicator({
                                 <ArrowUpCircle className="h-4 w-4 mr-1" />
                                 Cash Out
                             </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setCloseDialogVisible(true)}
-                            >
-                                Close Register
-                            </Button>
+                            {isSessionOwner && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setCloseDialogVisible(true)}
+                                >
+                                    Close Register
+                                </Button>
+                            )}
                         </div>
                     </>
                 ) : (
@@ -244,7 +256,7 @@ export function RegisterStatusIndicator({
                             onClick={() => setOpenDialogVisible(true)}
                         >
                             <DollarSign className="h-4 w-4 mr-1" />
-                            Open Register
+                            {policyDef.cashierPromptAction}
                         </Button>
                     </>
                 )}

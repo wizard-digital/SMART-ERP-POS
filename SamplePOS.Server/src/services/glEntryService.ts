@@ -627,20 +627,30 @@ export interface CustomerPaymentData {
   whtEntryId?: string;
   /** GL account for customer WHT receivable leg (defaults to 1250). */
   whtAccountCode?: string;
-  /** @deprecated Receipts always clear through Undeposited Funds (1015). Bank settlement is Deposit Worksheet. */
+  /**
+   * Cash landing account.
+   * - omit / 1015: office receipt → Undeposited Funds (deposit worksheet)
+   * - 1010: POS till collection → Cash Drawer (bank via CASH_OUT_BANK)
+   */
+  fundsAccountCode?: '1010' | '1015';
+  /** @deprecated Use fundsAccountCode. Bank settlement for 1015 is Deposit Worksheet. */
   paymentAccountCode?: string;
 }
 
 /**
  * Record a customer payment in the general ledger (clearing step 1).
  *
- * Journal entry — PAYMENT_RECEIPT:
+ * Office / undeposited (default) — PAYMENT_RECEIPT:
  *   DR Undeposited Funds (1015)       amount − WHT
  *   DR WHT Receivable (1250+)         WHT (when customer withheld)
  *   CR Accounts Receivable (1200)     amount   when reducesAR = true
  *   CR Customer Deposits (2200)       amount   when reducesAR = false (on-account prepayment)
+ * Bank settlement is a separate Deposit Worksheet (TREASURY_DEPOSIT): DR bank / CR 1015.
  *
- * Bank/cash settlement is a separate Deposit Worksheet (TREASURY_DEPOSIT): DR bank / CR 1015.
+ * POS till collection — TILL_RECEIPT (fundsAccountCode = 1010):
+ *   DR Cash Drawer (1010)             amount
+ *   CR Accounts Receivable (1200)     amount
+ * Cash is already in the till; bank via CASH_OUT_BANK (CR 1010). Must not debit 1015.
  */
 export async function recordCustomerPaymentToGL(
   payment: CustomerPaymentData,
@@ -653,7 +663,14 @@ export async function recordCustomerPaymentToGL(
       ? AccountCodes.ACCOUNTS_RECEIVABLE
       : AccountCodes.CUSTOMER_DEPOSITS;
 
-    const debitAccountCode = AccountCodes.UNDEPOSITED_FUNDS;
+    const tillCash = payment.fundsAccountCode === AccountCodes.CASH;
+    if (tillCash && payment.whtAmount && payment.whtAmount > 0.009) {
+      throw new Error('Till AR collections cannot include customer WHT — record WHT on an office receipt');
+    }
+    if (tillCash && payment.reducesAR === false) {
+      throw new Error('Till AR collections must reduce Accounts Receivable (open invoice required)');
+    }
+    const debitAccountCode = tillCash ? AccountCodes.CASH : AccountCodes.UNDEPOSITED_FUNDS;
 
     const creditDescription = reducesAR
       ? `Reduce A/R for ${payment.customerName}${payment.invoiceNumber ? ` - ${payment.invoiceNumber}` : ''}`
@@ -726,7 +743,7 @@ export async function recordCustomerPaymentToGL(
       lines,
       userId: SYSTEM_USER_ID,
       idempotencyKey: `CUSTOMER_PAYMENT-${payment.paymentId}`,
-      source: 'PAYMENT_RECEIPT' as const,
+      source: tillCash ? ('TILL_RECEIPT' as const) : ('PAYMENT_RECEIPT' as const),
     }, txClient ? undefined : pool, txClient);
 
     logger.info('Recorded customer payment to GL', {
@@ -3190,6 +3207,12 @@ export async function recordCustomerDebitNoteToGL(
  * DR  Accounts Payable (2100) — total (we owe less)
  * CR  Purchase Returns & Allowances (5010) — subtotal
  * CR  Tax Payable / Input VAT (2300) — tax
+ *
+ * Under-bill reverse (Return GRN goods > bill AP TotalAmount):
+ *   DR AP (2100)              = totalAmount (billed AP)
+ *   DR Price Variance (5020)  = subtotal+tax − totalAmount  (reverses SI favorable PPV)
+ *   CR clearing / returns     = subtotal
+ *   CR Tax Payable            = tax
  */
 export async function recordSupplierCreditNoteToGL(
   data: CreditNoteGLData,
@@ -3223,6 +3246,18 @@ export async function recordSupplierCreditNoteToGL(
         description: `Supplier credit note ${data.noteNumber} - input VAT reversal`,
         debitAmount: 0,
         creditAmount: data.taxAmount,
+      });
+    }
+
+    // Balance when clearing/returns (goods) ≠ AP credit (under/over-bill on parent SI).
+    const creditsSide = (data.subtotal || 0) + (data.taxAmount || 0);
+    const varianceAmount = creditsSide - (data.totalAmount || 0);
+    if (Math.abs(varianceAmount) > 0.005) {
+      lines.push({
+        accountCode: AccountCodes.PRICE_VARIANCE,
+        description: `Supplier credit note ${data.noteNumber} - reverse invoice under/over-bill variance`,
+        debitAmount: varianceAmount > 0 ? varianceAmount : 0,
+        creditAmount: varianceAmount < 0 ? Math.abs(varianceAmount) : 0,
       });
     }
 

@@ -100,6 +100,16 @@ export async function syncReceiptSettlements(conn: DbConn): Promise<number> {
      FROM ar_customer_payments p
      WHERE p.status IS DISTINCT FROM 'REVERSED'
        AND p.total_amount > 0
+       AND EXISTS (
+         SELECT 1
+         FROM ledger_transactions lt
+         JOIN ledger_entries le ON le."TransactionId" = lt."Id"
+         JOIN accounts a ON a."Id" = le."AccountId"
+         WHERE lt."ReferenceType" = 'CUSTOMER_PAYMENT'
+           AND lt."ReferenceId" = p.id
+           AND a."AccountCode" = '1015'
+           AND le."DebitAmount" > 0
+       )
        AND NOT EXISTS (
          SELECT 1 FROM receipt_settlements rs
          WHERE rs.source_type = 'AR_CUSTOMER_PAYMENT' AND rs.source_id = p.id

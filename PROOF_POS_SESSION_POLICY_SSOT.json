@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "at": "2026-09-23T19:39:16.250Z",
+  "database": "pos_system",
+  "participantsTable": true,
+  "checkConstraint": "CHECK (((pos_session_policy)::text = ANY ((ARRAY['DISABLED'::character varying, 'PER_CASHIER_SESSION'::character varying, 'PER_COUNTER_SHARED_SESSION'::character varying, 'GLOBAL_STORE_SESSION'::character varying])::text[])))",
+  "livePolicy": "PER_CASHIER_SESSION",
+  "uniqueOpenIndex": true,
+  "duplicateOpenRegisters": [],
+  "failClosedUnknownParticipant": true,
+  "perCashierIgnoresForeignOpen": true,
+  "failures": []
+}

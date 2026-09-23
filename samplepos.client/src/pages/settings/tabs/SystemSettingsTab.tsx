@@ -11,6 +11,13 @@ import {
     setMultistoreEnabledOptimistic,
 } from '../../../hooks/useMultistore';
 import ReceiptPrintingSettings from './ReceiptPrintingSettings';
+import {
+    POS_SESSION_POLICY_DEFINITIONS,
+    POS_SESSION_POLICY_STORAGE_KEY,
+    getPosSessionPolicyDefinition,
+    parsePosSessionPolicy,
+    type PosSessionPolicy,
+} from '@shared/pos/posSessionPolicySsot';
 
 interface TaxRate {
     name: string;
@@ -54,7 +61,7 @@ interface SystemSettings {
     invoiceDefaultPaymentTerms?: string;
     lowStockAlertsEnabled: boolean;
     lowStockThreshold: number;
-    posSessionPolicy: 'DISABLED' | 'PER_CASHIER_SESSION' | 'PER_COUNTER_SHARED_SESSION' | 'GLOBAL_STORE_SESSION';
+    posSessionPolicy: PosSessionPolicy;
     posTransactionMode: 'DirectSale' | 'OrderToPayment';
     isMultistoreEnabled?: boolean;
     transferPolicyRequireApprovalAll?: boolean;
@@ -82,11 +89,21 @@ async function fetchSettings(): Promise<SystemSettings> {
 
 async function updateSettings(updates: Partial<SystemSettings>): Promise<{
     settings: SystemSettings;
-    multistoreBootstrap?: { enabled: boolean; storesEnsured: boolean };
+    multistoreBootstrap?: {
+        enabled: boolean;
+        storesEnsured: boolean;
+        warnings?: string[];
+    };
 }> {
     const response = await api.patch<
         ApiResponse<SystemSettings> & {
-            meta?: { multistoreBootstrap?: { enabled: boolean; storesEnsured: boolean } };
+            meta?: {
+                multistoreBootstrap?: {
+                    enabled: boolean;
+                    storesEnsured: boolean;
+                    warnings?: string[];
+                };
+            };
         }
     >('/system-settings', updates);
     if (!response.data.success) throw new Error(response.data.error);
@@ -121,8 +138,11 @@ export default function SystemSettingsTab() {
                 setMultistoreEnabledOptimistic(queryClient, variables.isMultistoreEnabled);
                 invalidateMultistoreModeQueries(queryClient);
                 if (variables.isMultistoreEnabled && result.multistoreBootstrap?.storesEnsured) {
+                    const warn = result.multistoreBootstrap.warnings?.[0];
                     setSaveMessage(
-                        'Multi-store warehouse enabled. MAIN, TRANSIT, and SELLING stores are ready.',
+                        warn
+                            ? `Multi-store enabled (MAIN/TRANSIT/SELLING ready). Inventory heal still needed: ${warn}`
+                            : 'Multi-store warehouse enabled. MAIN, TRANSIT, and SELLING stores are ready.',
                     );
                 } else if (variables.isMultistoreEnabled === false) {
                     setSaveMessage('Multi-store warehouse disabled. Legacy single-store inventory is active.');
@@ -147,6 +167,9 @@ export default function SystemSettingsTab() {
             // 2. Other tabs receive a 'storage' event and invalidate their query
             if (variables.posTransactionMode) {
                 localStorage.setItem('pos_transaction_mode', variables.posTransactionMode);
+            }
+            if (variables.posSessionPolicy) {
+                localStorage.setItem(POS_SESSION_POLICY_STORAGE_KEY, variables.posSessionPolicy);
             }
             // Invalidate cash register session so POS refetches from server immediately
             queryClient.invalidateQueries({ queryKey: ['cash-register-session', 'current'] });
@@ -833,32 +856,15 @@ function POSSessionPolicyInline({
     onSave,
     isSaving,
 }: SettingsComponentProps) {
-    const [policy, setPolicy] = useState<SystemSettings['posSessionPolicy']>(
-        settings.posSessionPolicy || 'DISABLED'
+    const [policy, setPolicy] = useState<PosSessionPolicy>(
+        parsePosSessionPolicy(settings.posSessionPolicy)
     );
 
-    const policies = [
-        {
-            value: 'DISABLED' as const,
-            label: 'Disabled',
-            description: 'No session enforcement. Cashiers can process sales without opening a register session.',
-        },
-        {
-            value: 'PER_CASHIER_SESSION' as const,
-            label: 'Per Cashier',
-            description: 'Each cashier must open their own session on a register. Sales are only allowed under the cashier\'s own session.',
-        },
-        {
-            value: 'PER_COUNTER_SHARED_SESSION' as const,
-            label: 'Per Counter (Shared)',
-            description: 'One session per register, shared by all cashiers. Any cashier can sell on an open register.',
-        },
-        {
-            value: 'GLOBAL_STORE_SESSION' as const,
-            label: 'Global Store',
-            description: 'Any open session in the store works. Minimal enforcement — useful for single-register setups.',
-        },
-    ];
+    useEffect(() => {
+        setPolicy(parsePosSessionPolicy(settings.posSessionPolicy));
+    }, [settings.posSessionPolicy]);
+
+    const selected = getPosSessionPolicyDefinition(policy);
 
     const handleSave = () => {
         onSave({ posSessionPolicy: policy });
@@ -869,13 +875,13 @@ function POSSessionPolicyInline({
             <div>
                 <h3 className="text-lg font-semibold text-gray-900">POS Session Policy</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                    Controls whether cashiers must open a cash register session before processing sales.
-                    When enabled, all sales are linked to a session for end-of-day reconciliation.
+                    One policy for cashiers, registers, and sales. Opening a drawer, joining a counter,
+                    and whether a sale is allowed all follow this setting.
                 </p>
             </div>
 
             <div className="space-y-3">
-                {policies.map((p) => (
+                {POS_SESSION_POLICY_DEFINITIONS.map((p) => (
                     <label
                         key={p.value}
                         className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${policy === p.value
@@ -899,10 +905,19 @@ function POSSessionPolicyInline({
                 ))}
             </div>
 
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                <p className="font-medium">How {selected.label} works with registers</p>
+                <ul className="mt-2 space-y-1 list-disc list-inside text-blue-700">
+                    {selected.howRegistersWork.map((line) => (
+                        <li key={line}>{line}</li>
+                    ))}
+                </ul>
+            </div>
+
             <div className="flex justify-end">
                 <button
                     onClick={handleSave}
-                    disabled={isSaving || policy === settings.posSessionPolicy}
+                    disabled={isSaving || policy === parsePosSessionPolicy(settings.posSessionPolicy)}
                     className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2 px-6 rounded-lg transition-colors"
                 >
                     {isSaving ? 'Saving...' : 'Save Policy'}
@@ -1209,6 +1224,7 @@ function RegisterManagement({ settings, onSave, isSaving }: SettingsComponentPro
     }
 
     const allRegisters = registers || [];
+    const policyDef = getPosSessionPolicyDefinition(parsePosSessionPolicy(settings.posSessionPolicy));
 
     return (
         <div className="space-y-6">
@@ -1216,7 +1232,7 @@ function RegisterManagement({ settings, onSave, isSaving }: SettingsComponentPro
                 <div>
                     <h3 className="text-lg font-semibold text-gray-900">Cash Registers</h3>
                     <p className="text-sm text-gray-600 mt-1">
-                        Each register represents a physical cash drawer. You need one register per cashier working simultaneously.
+                        {policyDef.registerSubtitle}
                     </p>
                 </div>
                 <button
@@ -1396,17 +1412,6 @@ function RegisterManagement({ settings, onSave, isSaving }: SettingsComponentPro
                     </table>
                 </div>
             )}
-
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-                <p className="font-medium">How registers work</p>
-                <ul className="mt-2 space-y-1 list-disc list-inside text-blue-700">
-                    <li>Each register represents a physical cash drawer</li>
-                    <li>Only one cashier can use a register at a time</li>
-                    <li>Each cashier can only have one open session across all registers</li>
-                    <li>If all registers are occupied, new cashiers cannot start until a session is closed</li>
-                    <li>Deactivated registers are hidden from cashiers but their history is preserved</li>
-                </ul>
-            </div>
 
             {/* Session Policy */}
             <POSSessionPolicyInline settings={settings} onSave={onSave} isSaving={isSaving} />

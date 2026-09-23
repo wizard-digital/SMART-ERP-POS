@@ -22,6 +22,7 @@ import { Pool, PoolClient } from 'pg';
 import { salesService, CreateSaleInput } from '../sales/salesService.js';
 import { ordersService } from '../orders/ordersService.js';
 import logger from '../../utils/logger.js';
+import { cashRegisterService } from '../cash-register/index.js';
 
 // ── Typed event inputs (mirror of the client PosOfflineEvent shapes) ─────────
 
@@ -533,14 +534,9 @@ export const posEventReplayer = {
         }
 
         let cashRegisterSessionId: string | null = null;
-        const sessionRes = await (pool as Pool).query(
-            `SELECT id FROM cash_register_sessions
-             WHERE user_id = $1 AND status = 'OPEN'
-             ORDER BY opened_at DESC LIMIT 1`,
-            [userId]
-        );
-        if (sessionRes.rows.length > 0) {
-            cashRegisterSessionId = sessionRes.rows[0].id;
+        const { session } = await cashRegisterService.getCurrentSessionForUser(userId, pool as Pool);
+        if (session) {
+            cashRegisterSessionId = session.id;
         }
 
         let fromOrderId: string | undefined;

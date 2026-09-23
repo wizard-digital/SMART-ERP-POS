@@ -135,6 +135,14 @@ export function CloseRegisterDialog({
                                 <div className="text-right font-medium text-red-600">
                                     - {formatCurrency(summary.summary.totalRefunds)}
                                 </div>
+                                {(summary.summary.breakdown?.cashOutExpense || 0) > 0.009 && (
+                                    <>
+                                        <div className="text-gray-500">Petty spend (not till):</div>
+                                        <div className="text-right font-medium text-gray-500">
+                                            {formatCurrency(summary.summary.breakdown?.cashOutExpense || 0)}
+                                        </div>
+                                    </>
+                                )}
                                 <div className="border-t pt-2 font-semibold">Expected Total:</div>
                                 <div className="border-t pt-2 text-right font-bold text-lg">
                                     {formatCurrency(summary.summary.expectedClosing)}

@@ -66,13 +66,27 @@ const RecordMovementSchema = z.object({
     reason: z.string().max(255).optional(),
     approvedBy: z.string().uuid().optional(),
     paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'CREDIT', 'OTHER']).optional(),
-    // For customer payments - link to invoice
     invoiceId: z.string().uuid().optional(),
     customerId: z.string().uuid().optional(),
-    // Enterprise: flexible metadata (expense_type, receipt_number, etc.)
     metadata: z.record(z.string(), z.unknown()).optional(),
-    // Offline safety: client-generated UUID for deduplication
     clientUuid: z.string().uuid().optional(),
+}).superRefine((val, ctx) => {
+    if (val.movementType === 'CASH_IN_PAYMENT') {
+        if (!val.customerId) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Customer Payment requires customerId',
+                path: ['customerId'],
+            });
+        }
+        if (!val.invoiceId) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Customer Payment requires invoiceId',
+                path: ['invoiceId'],
+            });
+        }
+    }
 });
 
 const SessionQuerySchema = z.object({
@@ -290,13 +304,14 @@ router.get(
     asyncHandler(async (req, res) => {
         const pool = req.tenantPool || globalPool;
         const user = req.user as { id: string };
-        const session = await cashRegisterService.getUserOpenSession(user.id, pool);
-
-        // Include session policy + transaction mode so the POS page needs only one request
-        const settingsRow = await pool.query(
-            `SELECT pos_session_policy, pos_transaction_mode FROM system_settings LIMIT 1`
+        const { session, posSessionPolicy } = await cashRegisterService.getCurrentSessionForUser(
+            user.id,
+            pool
         );
-        const posSessionPolicy = (settingsRow.rows[0]?.pos_session_policy as string) || 'DISABLED';
+
+        const settingsRow = await pool.query(
+            `SELECT pos_transaction_mode FROM system_settings LIMIT 1`
+        );
         const posTransactionMode = (settingsRow.rows[0]?.pos_transaction_mode as string) || 'DirectSale';
 
         res.json({
@@ -577,6 +592,8 @@ router.post(
             {
                 ...data,
                 userId: user.id,
+                customerId: data.customerId,
+                invoiceId: data.invoiceId,
                 metadata: data.metadata as Record<string, unknown> | undefined,
                 clientUuid: data.clientUuid,
             },

@@ -18,6 +18,10 @@ import type {
     RecordMovementInput,
     SessionStatus
 } from '../types/cashRegister';
+import {
+    POS_SESSION_POLICY_STORAGE_KEY,
+    parsePosSessionPolicy,
+} from '@shared/pos/posSessionPolicySsot';
 
 // Query keys
 const QUERY_KEYS = {
@@ -105,7 +109,7 @@ export function useUpdateRegister() {
 
 // Key for caching session in localStorage (offline resilience)
 const SESSION_CACHE_KEY = 'cash_register_session';
-const SESSION_POLICY_KEY = 'pos_session_policy';
+const SESSION_POLICY_KEY = POS_SESSION_POLICY_STORAGE_KEY;
 const TRANSACTION_MODE_KEY = 'pos_transaction_mode';
 
 interface SessionWithPolicy {
@@ -132,7 +136,7 @@ function getCachedTransactionMode(): 'DirectSale' | 'OrderToPayment' {
 function getCachedSessionWithPolicy(): SessionWithPolicy {
     return {
         session: getCachedSession(),
-        posSessionPolicy: localStorage.getItem(SESSION_POLICY_KEY) || 'DISABLED',
+        posSessionPolicy: parsePosSessionPolicy(localStorage.getItem(SESSION_POLICY_KEY)),
         posTransactionMode: getCachedTransactionMode(),
     };
 }
@@ -141,7 +145,7 @@ function getCachedSessionWithPolicy(): SessionWithPolicy {
  * Get current user's open session + POS session policy (single API call).
  *
  * RESILIENCE CONTRACT:
- * - Online: Always fetches fresh from server on mount (staleTime: 0).
+ * - Online: Always fetches fresh from server on mount (refetchOnMount: always).
  * - Online: Re-polls every 15 seconds to catch admin setting changes.
  * - Offline: Returns last server-confirmed value from localStorage.
  * - Cross-tab: Listens for localStorage changes so admin tab → POS tab is instant.
@@ -165,7 +169,7 @@ export function useCurrentSession() {
                 posTransactionMode?: string;
             }>('/cash-registers/sessions/current');
             const session = response.data.data;
-            const posSessionPolicy = response.data.posSessionPolicy || 'DISABLED';
+            const posSessionPolicy = parsePosSessionPolicy(response.data.posSessionPolicy);
             const posTransactionMode = (response.data.posTransactionMode || 'DirectSale') as 'DirectSale' | 'OrderToPayment';
             // Persist for offline use — this is the single source of truth for cache
             if (session) {
