@@ -1,0 +1,92 @@
+{
+  "proof": "SCN_UNDERBILL_RETURN",
+  "passed": true,
+  "asOf": "2026-09-23T06:13:57.989Z",
+  "scenario": {
+    "label": "Henber RGRN full return vs under-billed paid SI",
+    "returnGoods": 88004,
+    "billSubtotal": 88004,
+    "billTotalAmount": 88000,
+    "scnApCap": 88000,
+    "priceVarianceReverse": 4,
+    "priorError": "ERR_SCN_EXCEEDS_BILL — Return credit note would exceed supplier bill total (88000.00)"
+  },
+  "gates": [
+    {
+      "id": "SCENARIO_EXCEED_TOTAL",
+      "ok": true,
+      "detail": "88004 > AP 88000"
+    },
+    {
+      "id": "SCENARIO_WITHIN_SUBTOTAL",
+      "ok": true,
+      "detail": "88004 ≤ Subtotal 88004"
+    },
+    {
+      "id": "SCENARIO_VARIANCE",
+      "ok": true,
+      "detail": "PPV reverse 4"
+    },
+    {
+      "id": "CAP_AT_BILL_TOTAL",
+      "ok": true,
+      "detail": "cap SCN when return ≤ Subtotal and > TotalAmount"
+    },
+    {
+      "id": "ERR_EXCEEDS_BILL_KEPT",
+      "ok": true,
+      "detail": "hard fail when return exceeds Subtotal too"
+    },
+    {
+      "id": "NO_OPEN_BALANCE_GATE",
+      "ok": true,
+      "detail": "paid bills allowed — on-account SCN"
+    },
+    {
+      "id": "HEADER_USES_SCN_AMOUNT",
+      "ok": true,
+      "detail": "SCN document amounts = capped AP"
+    },
+    {
+      "id": "GL_SPLIT_GOODS_VS_AP",
+      "ok": true,
+      "detail": "GL clearing = goods; AP = scnAmount"
+    },
+    {
+      "id": "GL_PPV_LINE",
+      "ok": true,
+      "detail": "SCN GL balances under-bill via 5020"
+    },
+    {
+      "id": "GL_AP_DEBIT",
+      "ok": true,
+      "detail": "AP debit 88000"
+    },
+    {
+      "id": "GL_CLEARING_CREDIT",
+      "ok": true,
+      "detail": "clearing credit 88004"
+    },
+    {
+      "id": "GL_PPV_DEBIT",
+      "ok": true,
+      "detail": "PPV debit 4"
+    },
+    {
+      "id": "GL_BALANCED",
+      "ok": true,
+      "detail": "DR=88004 CR=88004"
+    },
+    {
+      "id": "GL_NO_PURCHASE_RETURNS",
+      "ok": true,
+      "detail": "return path uses clearing not 5010"
+    }
+  ],
+  "claims": [
+    "Return line sum can exceed SI TotalAmount when SI was under-billed (Subtotal=GR, Total=supplier AP)",
+    "Create Credit Note caps SCN AP at bill TotalAmount when return ≤ Subtotal",
+    "Paid bills are allowed — return SCNs post on-account (no ERR_SCN_EXCEEDS_BILL_OPEN)",
+    "GL: DR AP (capped) + DR 5020 (variance) / CR clearing (return goods)"
+  ]
+}

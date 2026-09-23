@@ -772,8 +772,12 @@ export const returnGrnService = {
                 );
             }
 
-            const billRow = await client.query<{ TotalAmount: string; Status: string }>(
-                `SELECT "TotalAmount", "Status"
+            const billRow = await client.query<{
+                TotalAmount: string;
+                Subtotal: string;
+                Status: string;
+            }>(
+                `SELECT "TotalAmount", "Subtotal", "Status"
                  FROM supplier_invoices
                  WHERE "Id" = $1 AND deleted_at IS NULL`,
                 [referenceInvoiceId],
@@ -782,6 +786,7 @@ export const returnGrnService = {
                 throw new Error('Reference supplier bill not found');
             }
             const billTotal = Money.toNumber(Money.parseDb(billRow.rows[0].TotalAmount));
+            const billSubtotal = Money.toNumber(Money.parseDb(billRow.rows[0].Subtotal));
             const billStatus = String(billRow.rows[0].Status || '').toUpperCase();
             if (['CANCELLED', 'VOIDED', 'VOID', 'DELETED'].includes(billStatus)) {
                 throw new BusinessError(
@@ -789,6 +794,28 @@ export const returnGrnService = {
                     'ERR_SCN_BILL_CANCELLED',
                     { referenceInvoiceId, returnGrnId: rgrnId },
                 );
+            }
+
+            // AP ceiling = bill TotalAmount. Return line sum is inventory cost and can
+            // exceed AP when the SI was under-billed (Subtotal=GR, TotalAmount=supplier AP).
+            // Cap SCN at bill total in that case — never credit more than was billed.
+            let scnAmount = returnTotalNum;
+            if (scnAmount > billTotal + 0.009) {
+                if (billSubtotal + 0.009 >= returnTotalNum) {
+                    scnAmount = billTotal;
+                } else {
+                    throw new BusinessError(
+                        `Return credit note would exceed supplier bill total (${billTotal.toFixed(2)})`,
+                        'ERR_SCN_EXCEEDS_BILL',
+                        {
+                            referenceInvoiceId,
+                            returnGrnId: rgrnId,
+                            billTotal,
+                            billSubtotal,
+                            returnTotal: returnTotalNum,
+                        },
+                    );
+                }
             }
 
             const existingNotes = await supplierCreditDebitNoteRepository.getNotesForSupplierInvoice(
@@ -800,7 +827,7 @@ export const returnGrnService = {
                 (sum, note) => sum.plus(note.totalAmount),
                 new Decimal(0),
             );
-            if (Money.toNumber(cumulativeCredits.plus(returnTotalNum)) > billTotal + 0.009) {
+            if (Money.toNumber(cumulativeCredits.plus(scnAmount)) > billTotal + 0.009) {
                 throw new BusinessError(
                     `Return credit note would exceed supplier bill total (${billTotal.toFixed(2)})`,
                     'ERR_SCN_EXCEEDS_BILL',
@@ -809,30 +836,18 @@ export const returnGrnService = {
                         returnGrnId: rgrnId,
                         billTotal,
                         returnTotal: returnTotalNum,
+                        scnAmount,
                         existingCredits: Money.toNumber(cumulativeCredits),
                     },
                 );
             }
 
+            // Return SCNs post on-account (supplier credit). Paid bills have Outstanding=0;
+            // do not require open AP — lock only for concurrency.
             const { lockAndComputeInvoiceOutstanding } = await import(
                 '../supplier-payments/supplierPaymentRepository.js'
             );
-            const ledger = await lockAndComputeInvoiceOutstanding(client, referenceInvoiceId);
-            if (
-                ledger
-                && returnTotalNum > Money.toNumber(ledger.outstandingBalance) + 0.009
-            ) {
-                throw new BusinessError(
-                    `Return credit (${returnTotalNum.toFixed(2)}) exceeds bill open balance (${Money.toNumber(ledger.outstandingBalance).toFixed(2)})`,
-                    'ERR_SCN_EXCEEDS_BILL_OPEN',
-                    {
-                        referenceInvoiceId,
-                        returnGrnId: rgrnId,
-                        returnTotal: returnTotalNum,
-                        billOpenBalance: Money.toNumber(ledger.outstandingBalance),
-                    },
-                );
-            }
+            await lockAndComputeInvoiceOutstanding(client, referenceInvoiceId);
 
             // 6. Generate SCN number and create header
             const scnNumber = await supplierCreditDebitNoteRepository.generateSupplierCreditNoteNumber(client);
@@ -843,11 +858,14 @@ export const returnGrnService = {
                 referenceInvoiceId: referenceInvoiceId,
                 supplierId,
                 issueDate: getBusinessDate(),
-                subtotal: returnTotalNum,
+                subtotal: scnAmount,
                 taxAmount: 0,
-                totalAmount: returnTotalNum,
+                totalAmount: scnAmount,
                 reason: `Credit Note for ${rgrn.returnGrnNumber}: ${rgrn.reason}`,
-                notes: `Linked to Return GRN ${rgrn.returnGrnNumber}`,
+                notes:
+                    scnAmount + 0.009 < returnTotalNum
+                        ? `Linked to Return GRN ${rgrn.returnGrnNumber} (SCN capped at bill AP ${billTotal.toFixed(2)}; return goods ${returnTotalNum.toFixed(2)})`
+                        : `Linked to Return GRN ${rgrn.returnGrnNumber}`,
                 returnGrnId: rgrnId,
             });
 
@@ -881,13 +899,15 @@ export const returnGrnService = {
             // Look up the debit leg of the RGRN journal to find which account was used.
             const rgrnClearingCode = await resolveRgrnClearingAccountCode(client, rgrnId);
 
+            // GL: AP debit = billed ceiling (scnAmount); clearing credit = return goods
+            // (returnTotalNum). Gap posts to Price Variance — reverses SI under-bill PPV.
             await recordSupplierCreditNoteToGL({
                 noteId: postedScn.id,
                 noteNumber: postedScn.invoiceNumber,
                 noteDate: getBusinessDate(),
                 subtotal: returnTotalNum,
                 taxAmount: 0,
-                totalAmount: returnTotalNum,
+                totalAmount: scnAmount,
                 supplierId,
                 supplierName,
                 clearingAccountCode: rgrnClearingCode,
@@ -912,7 +932,8 @@ export const returnGrnService = {
                 scnNumber: postedScn.invoiceNumber,
                 rgrnId,
                 rgrnNumber: rgrn.returnGrnNumber,
-                amount: returnTotalNum,
+                amount: scnAmount,
+                returnGoods: returnTotalNum,
             });
 
             return { creditNoteId: postedScn.id, creditNoteNumber: postedScn.invoiceNumber };

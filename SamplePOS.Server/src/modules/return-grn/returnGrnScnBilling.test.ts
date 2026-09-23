@@ -167,7 +167,7 @@ describe('returnGrnService — SCN requires supplier bill', () => {
                 return { rows: [{ Id: 'bill-uuid' }] };
             }
             if (s.includes('FROM supplier_invoices') && s.includes('"TotalAmount"')) {
-                return { rows: [{ TotalAmount: '2000.00', Status: 'Pending' }] };
+                return { rows: [{ TotalAmount: '2000.00', Subtotal: '2000.00', Status: 'Pending' }] };
             }
             return { rows: [] };
         });
@@ -245,5 +245,22 @@ describe('returnGrnService — active SCN SQL SSOT (cancel re-create)', () => {
         );
         expect(gateBlock).toContain('CANCELLED');
         expect(gateBlock).toContain('return_grn_id');
+    });
+});
+
+describe('returnGrnService — under-bill SCN ceiling (Henber 88004 vs 88000)', () => {
+    it('caps SCN at bill TotalAmount when return ≤ Subtotal; skips open-balance gate', () => {
+        const dir = path.dirname(fileURLToPath(import.meta.url));
+        const serviceSrc = readFileSync(path.join(dir, 'returnGrnService.ts'), 'utf8');
+        const createBlock = serviceSrc.slice(
+            serviceSrc.indexOf('async createCreditNoteFromReturn'),
+            serviceSrc.indexOf('return { creditNoteId: postedScn.id'),
+        );
+        expect(createBlock).toContain('billSubtotal');
+        expect(createBlock).toContain('scnAmount = billTotal');
+        expect(createBlock).toContain('ERR_SCN_EXCEEDS_BILL');
+        expect(createBlock).not.toContain('ERR_SCN_EXCEEDS_BILL_OPEN');
+        expect(createBlock).toMatch(/totalAmount:\s*scnAmount/);
+        expect(createBlock).toMatch(/subtotal:\s*returnTotalNum/);
     });
 });
