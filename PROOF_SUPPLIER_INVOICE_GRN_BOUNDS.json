@@ -1,12 +1,12 @@
 {
   "feature": "SUPPLIER_INVOICE_GRN_BOUNDS",
-  "provenAt": "2026-08-30T20:40:20.476Z",
+  "provenAt": "2026-09-23T06:13:56.041Z",
   "contract": "GR-linked supplier invoices cannot exceed PricingEngine billable total; one SSOT path for validation, billing, GL, and UI preview; linked GRs must be COMPLETED with billable qty",
   "gates": [
     {
       "id": "OVER_NO_PV",
       "ok": true,
-      "detail": "over-GRN rejects even with PRICE_VARIANCE"
+      "detail": "over-GRN rejects even with obsolete PRICE_VARIANCE reason"
     },
     {
       "id": "OVER_NO_DISCOUNT",
@@ -16,12 +16,27 @@
     {
       "id": "UNDER_NO_PV",
       "ok": true,
-      "detail": "under-GRN rejects PRICE_VARIANCE"
+      "detail": "under-GRN rejects obsolete PRICE_VARIANCE reason"
+    },
+    {
+      "id": "DIGIT_SHIFT_10X",
+      "ok": true,
+      "detail": "≈10× paper rejected as digit typo (Touren-class)"
+    },
+    {
+      "id": "DIGIT_SHIFT_01X",
+      "ok": true,
+      "detail": "≈0.1× paper rejected as digit typo"
+    },
+    {
+      "id": "ORDINARY_DISCOUNT_OK",
+      "ok": true,
+      "detail": "ordinary under-bill discount still allowed"
     },
     {
       "id": "MODULE",
       "ok": true,
-      "detail": "validation module enforces GR ready + PricingEngine SSOT + no over-billing AP"
+      "detail": "validation module enforces GR ready + PricingEngine SSOT + no over-billing AP + digit-shift guard"
     },
     {
       "id": "CREATE_WIRE",
@@ -76,12 +91,12 @@
     {
       "id": "UI_FROM_GRN",
       "ok": true,
-      "detail": "GR billing UI uses server billable total + blocks bill > received value"
+      "detail": "GR billing UI uses server billable total + blocks over-bill + digit-shift typos"
     }
   ],
   "summary": {
-    "total": 15,
-    "passed": 15,
+    "total": 18,
+    "passed": 18,
     "failed": 0,
     "verdict": "PASS"
   }

@@ -7,6 +7,8 @@ import Decimal from 'decimal.js';
 import {
   GRN_BILL_ROUNDING_MAX,
   isGrnBillRoundingReasonAllowed,
+  isLikelyGrnBillDigitShiftTypo,
+  resolveGrnBillDigitShiftGuidance,
 } from '../../../../shared/domain/grnBillPromptSsot.js';
 import { ValidationError } from '../../middleware/errorHandler.js';
 import { PricingEngine } from '../../utils/pricingEngine.js';
@@ -14,7 +16,6 @@ import { PricingEngine } from '../../utils/pricingEngine.js';
 export type SupplierInvoiceVarianceReason =
   | 'SUPPLIER_DISCOUNT'
   | 'ROUNDING_DIFFERENCE'
-  | 'PRICE_VARIANCE'
   | 'EDIT_LINE_PRICES';
 
 type DbConn = Pool | PoolClient;
@@ -88,7 +89,7 @@ export async function computeGrnBillableTotal(
 
 /**
  * Ensure every linked GRN exists, is COMPLETED, and (when supplierId given) belongs
- * to that supplier. Prevents fake/wrong grnIds from yielding a 0 total + PRICE_VARIANCE bypass.
+ * to that supplier. Prevents fake/wrong grnIds from yielding a 0 total + variance bypass.
  */
 export async function assertLinkedGrnsReadyForBilling(
   conn: DbConn,
@@ -160,6 +161,7 @@ export async function assertLinkedGrnsReadyForBilling(
 /**
  * Enforce 3-way match bounds:
  * - Within tolerance → no variance metadata required
+ * - ≈10× / ≈0.1× paper vs GR → reject as digit/zero typo (not discount/rounding)
  * - Bill MUST NOT exceed goods received value (no over-billing AP — fix GR costs first)
  * - Under GRN → SUPPLIER_DISCOUNT or ROUNDING_DIFFERENCE only
  * - ROUNDING_DIFFERENCE only when |diff| ≤ GRN_BILL_ROUNDING_MAX (1)
@@ -180,13 +182,21 @@ export function validateSupplierInvoiceGrnVariance(
   const varianceAmount = PricingEngine.calculateVariance(grnTotal, invoiceTotal).toNumber();
   const absVar = Math.abs(varianceAmount);
 
+  // Extra/missing-zero typo (≈10× or ≈0.1×) — never allow as discount/rounding/price variance.
+  if (isLikelyGrnBillDigitShiftTypo(grnTotal.toNumber(), invoiceTotal.toNumber())) {
+    throw new ValidationError(
+      `${resolveGrnBillDigitShiftGuidance(grnTotal.toNumber(), invoiceTotal.toNumber())}${label}`,
+    );
+  }
+
   // Hard enterprise rule: supplier AP cannot exceed received stock value.
-  // If the supplier's invoice shows more, correct GR unit costs first — never inflate AP.
+  // Do not tell operators to edit costs on a finalized GR (DRAFT-only).
   if (invoiceTotal.greaterThan(grnTotal)) {
     throw new ValidationError(
       `Supplier bill (${invoiceTotal.toFixed(2)}) cannot exceed goods received value (${grnTotal.toFixed(2)})${label}. ` +
         `You received UGX ${grnTotal.toFixed(2)} of stock — outstanding payable cannot be UGX ${invoiceTotal.toFixed(2)}. ` +
-        `Update unit costs on the Goods Receipt to match the supplier invoice, then create the bill again.`,
+        `Bill at the GR amount (or correct the paper total). ` +
+        `If stock value is wrong, fix unit costs on the draft goods receipt before finalize.`,
     );
   }
 

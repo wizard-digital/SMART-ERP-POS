@@ -11,6 +11,19 @@ export const GRN_BILL_VARIANCE_EPS = 0.005;
 /** ROUNDING_DIFFERENCE only when |GR − paper| is at most this (currency units). */
 export const GRN_BILL_ROUNDING_MAX = 1;
 
+/**
+ * Relative tolerance when detecting one-digit (×10 / ÷10) typos.
+ * e.g. 1,360,000 vs 136,000.04 → ratio ≈ 10 within 2%.
+ */
+export const GRN_BILL_DIGIT_SHIFT_RATIO_TOL = 0.02;
+
+/** Variance reasons accepted by UI + API (PRICE_VARIANCE removed — over-bill never allowed). */
+export const GRN_BILL_VARIANCE_REASON_CODES = [
+  'SUPPLIER_DISCOUNT',
+  'ROUNDING_DIFFERENCE',
+  'EDIT_LINE_PRICES',
+] as const;
+
 /** Money input prefill — 2 dp, matches UI currency rounding used for variance checks. */
 export function formatGrnBillableTotalForInput(computedTotal: number): string {
   const n = Number(computedTotal);
@@ -95,6 +108,42 @@ export function clampPaperTotalToGrCeiling(
 export function isGrnBillRoundingReasonAllowed(absVariance: number): boolean {
   const abs = Math.abs(Number(absVariance) || 0);
   return abs > GRN_BILL_VARIANCE_EPS && abs <= GRN_BILL_ROUNDING_MAX + GRN_BILL_VARIANCE_EPS;
+}
+
+/**
+ * Detect classic extra/missing-zero typos: paper ≈ 10× GR or paper ≈ GR/10.
+ * Only |log10(ratio)| ≈ 1 (one digit shift) within 2% — real discounts like 5–50% stay allowed.
+ * Matches SBILL-style mistakes (e.g. 1,360,000 vs 136,000.04).
+ */
+export function isLikelyGrnBillDigitShiftTypo(
+  computedTotal: number,
+  paperTotal: number,
+): boolean {
+  const computed = roundGrnBillMoney(computedTotal);
+  const paper = roundGrnBillMoney(paperTotal);
+  if (!(computed > 0) || !(paper > 0)) return false;
+  const ratio = paper / computed;
+  if (!(ratio > 0) || !Number.isFinite(ratio)) return false;
+  const log10 = Math.log10(ratio);
+  if (!Number.isFinite(log10)) return false;
+  const nearest = Math.round(log10);
+  if (Math.abs(nearest) !== 1) return false;
+  const reconstructed = 10 ** nearest;
+  return Math.abs(ratio / reconstructed - 1) <= GRN_BILL_DIGIT_SHIFT_RATIO_TOL;
+}
+
+/** Operator guidance when paper looks like a digit/zero typo vs GR. */
+export function resolveGrnBillDigitShiftGuidance(
+  computedTotal: number,
+  paperTotal: number,
+): string {
+  const computed = roundGrnBillMoney(computedTotal);
+  const paper = roundGrnBillMoney(paperTotal);
+  const direction = paper > computed ? 'extra zero' : 'missing digit';
+  return (
+    `Paper total ${paper.toFixed(2)} looks like a ${direction} typo vs GR ${computed.toFixed(2)}. ` +
+    `Correct the paper amount (use Bill at GR amount) — do not post a 10× / 0.1× bill.`
+  );
 }
 
 /** Reasons allowed for under-bill, filtered by variance size (rounding only ≤ 1). */

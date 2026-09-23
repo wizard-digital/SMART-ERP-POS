@@ -4,7 +4,7 @@
  *
  * Run: npx vitest run src/modules/supplier-payments/supplierInvoiceGrnIntegrity.evidence.test.ts
  */
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from '@jest/globals';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,10 +37,10 @@ describe('EVIDENCE — Supplier invoice ≤ GRN integrity', () => {
       validateSupplierInvoiceGrnVariance({
         grnComputedTotal: 50_000,
         invoiceTotal: 60_000,
-        varianceReason: 'PRICE_VARIANCE',
+        varianceReason: 'PRICE_VARIANCE' as unknown as 'EDIT_LINE_PRICES',
       }),
     ).toThrow(/cannot exceed goods received/i);
-    gate('OVER_NO_PV', true, 'over-GRN rejects even with PRICE_VARIANCE');
+    gate('OVER_NO_PV', true, 'over-GRN rejects even with obsolete PRICE_VARIANCE reason');
 
     expect(() =>
       validateSupplierInvoiceGrnVariance({
@@ -55,10 +55,39 @@ describe('EVIDENCE — Supplier invoice ≤ GRN integrity', () => {
       validateSupplierInvoiceGrnVariance({
         grnComputedTotal: 50_000,
         invoiceTotal: 40_000,
-        varianceReason: 'PRICE_VARIANCE',
+        varianceReason: 'PRICE_VARIANCE' as unknown as 'EDIT_LINE_PRICES',
       }),
     ).toThrow(/Unrecognized variance reason/i);
-    gate('UNDER_NO_PV', true, 'under-GRN rejects PRICE_VARIANCE');
+    gate('UNDER_NO_PV', true, 'under-GRN rejects obsolete PRICE_VARIANCE reason');
+
+    expect(() =>
+      validateSupplierInvoiceGrnVariance({
+        grnComputedTotal: 136_000.04,
+        invoiceTotal: 1_360_000,
+        varianceReason: 'ROUNDING_DIFFERENCE',
+      }),
+    ).toThrow(/digit|zero typo|10×/i);
+    gate('DIGIT_SHIFT_10X', true, '≈10× paper rejected as digit typo (Touren-class)');
+
+    expect(() =>
+      validateSupplierInvoiceGrnVariance({
+        grnComputedTotal: 136_000.04,
+        invoiceTotal: 13_600,
+        varianceReason: 'SUPPLIER_DISCOUNT',
+      }),
+    ).toThrow(/digit|zero typo|0\.1×/i);
+    gate('DIGIT_SHIFT_01X', true, '≈0.1× paper rejected as digit typo');
+
+    const okDiscount = validateSupplierInvoiceGrnVariance({
+      grnComputedTotal: 100_000,
+      invoiceTotal: 92_000,
+      varianceReason: 'SUPPLIER_DISCOUNT',
+    });
+    gate(
+      'ORDINARY_DISCOUNT_OK',
+      okDiscount.hasVariance === true && Math.abs(okDiscount.varianceAmount - 8_000) < 0.01,
+      'ordinary under-bill discount still allowed',
+    );
   });
 
   it('Wiring: create / from-grn / post / routes / UI use validator', () => {
@@ -75,8 +104,9 @@ describe('EVIDENCE — Supplier invoice ≤ GRN integrity', () => {
       validation.includes('assertLinkedGrnsReadyForBilling') &&
         validation.includes('validateSupplierInvoiceGrnVariance') &&
         validation.includes('computeGrnBillableTotalFromLines') &&
-        validation.includes('cannot exceed goods received value'),
-      'validation module enforces GR ready + PricingEngine SSOT + no over-billing AP',
+        validation.includes('cannot exceed goods received value') &&
+        validation.includes('isLikelyGrnBillDigitShiftTypo'),
+      'validation module enforces GR ready + PricingEngine SSOT + no over-billing AP + digit-shift guard',
     );
     gate(
       'CREATE_WIRE',
@@ -161,8 +191,10 @@ describe('EVIDENCE — Supplier invoice ≤ GRN integrity', () => {
         grUi.includes('/supplier-payments/grns/') &&
         grUi.includes('billable-total') &&
         grUi.includes('supplierReportedTotal') &&
-        grUi.includes('billExceedsReceived'),
-      'GR billing UI uses server billable total + blocks bill > received value',
+        grUi.includes('billExceedsReceived') &&
+        grUi.includes('digitShiftTypo') &&
+        grUi.includes('isLikelyGrnBillDigitShiftTypo'),
+      'GR billing UI uses server billable total + blocks over-bill + digit-shift typos',
     );
   });
 
@@ -202,8 +234,8 @@ describe('EVIDENCE — Supplier invoice ≤ GRN integrity', () => {
         '## Reproduce',
         '',
         '```bash',
-        'cd SamplePOS.Server && npx vitest run src/modules/supplier-payments/supplierInvoiceGrnValidation.test.ts src/modules/supplier-payments/supplierInvoiceGrnIntegrity.evidence.test.ts',
-        'npm run proof:supplier-invoice-grn-bounds',
+        'cd SamplePOS.Server && npm run proof:supplier-invoice-grn-bounds',
+        'cd SamplePOS.Server && npx tsx scripts/proof-digit-shift-bill-guard.ts',
         '```',
         '',
       ].join('\n'),

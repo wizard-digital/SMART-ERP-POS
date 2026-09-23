@@ -1,10 +1,10 @@
 {
-  "at": "2026-08-29T17:44:59.364Z",
+  "at": "2026-09-23T06:14:26.153Z",
   "feature": "GRN_BILL_PROMPT_DEFAULTS",
   "summary": {
-    "pass": 23,
+    "pass": 25,
     "fail": 0,
-    "total": 23,
+    "total": 25,
     "verdict": "PASS"
   },
   "scope": "Proven: draft + bill prompt show paper vs GR + variance; paper may exceed GR for visibility; AP posts only at ≤ GR via Bill at GR; rounding reason ≤1 under only",
@@ -69,6 +69,11 @@
       "detail": "rounding reason only when |diff| ≤ 1; auto-suggest then"
     },
     {
+      "id": "DIGIT_SHIFT_TYPO",
+      "ok": true,
+      "detail": "≈10× / ≈0.1× paper vs GR flagged as digit typo; ordinary discounts not"
+    },
+    {
       "id": "UI_IMPORTS_SSOT",
       "ok": true,
       "detail": "GoodsReceiptsPage imports bill prompt SSOT"
@@ -122,6 +127,11 @@
       "id": "SVC_ROUNDING_MAX",
       "ok": true,
       "detail": "server rejects ROUNDING when |diff| > 1"
+    },
+    {
+      "id": "SVC_DIGIT_SHIFT",
+      "ok": true,
+      "detail": "server rejects ≈10× / ≈0.1× paper vs GR as digit typo"
     },
     {
       "id": "SSOT_FILE",

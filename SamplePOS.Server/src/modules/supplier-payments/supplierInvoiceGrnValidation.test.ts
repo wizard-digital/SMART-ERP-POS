@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '@jest/globals';
 import {
   computeGrnBillableTotalFromLines,
   validateSupplierInvoiceGrnVariance,
@@ -40,12 +40,12 @@ describe('validateSupplierInvoiceGrnVariance', () => {
     expect(r.hasVariance).toBe(false);
   });
 
-  it('hard-rejects over-GRN bill even with PRICE_VARIANCE (AP cannot exceed received value)', () => {
+  it('hard-rejects over-GRN bill even with obsolete PRICE_VARIANCE reason', () => {
     expect(() =>
       validateSupplierInvoiceGrnVariance({
         grnComputedTotal: 100_000,
         invoiceTotal: 120_000,
-        varianceReason: 'PRICE_VARIANCE',
+        varianceReason: 'PRICE_VARIANCE' as unknown as 'EDIT_LINE_PRICES',
       }),
     ).toThrow(/cannot exceed goods received value/i);
   });
@@ -126,5 +126,35 @@ describe('validateSupplierInvoiceGrnVariance', () => {
         invoiceTotal: 90_000,
       }),
     ).toThrow(/differs from goods received value/i);
+  });
+
+  it('rejects ~10× paper total as digit-shift typo (even with SUPPLIER_DISCOUNT)', () => {
+    expect(() =>
+      validateSupplierInvoiceGrnVariance({
+        grnComputedTotal: 136_000.04,
+        invoiceTotal: 1_360_000,
+        varianceReason: 'SUPPLIER_DISCOUNT',
+      }),
+    ).toThrow(/digit|zero typo|10×/i);
+  });
+
+  it('rejects ~0.1× paper total as digit-shift typo (even with SUPPLIER_DISCOUNT)', () => {
+    expect(() =>
+      validateSupplierInvoiceGrnVariance({
+        grnComputedTotal: 136_000.04,
+        invoiceTotal: 13_600,
+        varianceReason: 'SUPPLIER_DISCOUNT',
+      }),
+    ).toThrow(/digit|zero typo|0\.1×/i);
+  });
+
+  it('still allows ordinary supplier discounts (not near 10× / 0.1×)', () => {
+    const r = validateSupplierInvoiceGrnVariance({
+      grnComputedTotal: 100_000,
+      invoiceTotal: 85_000,
+      varianceReason: 'SUPPLIER_DISCOUNT',
+    });
+    expect(r.hasVariance).toBe(true);
+    expect(r.varianceAmount).toBe(15_000);
   });
 });

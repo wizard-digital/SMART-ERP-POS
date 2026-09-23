@@ -19,8 +19,10 @@ import {
   formatGrnBillableTotalForInput,
   GRN_BILL_PROMPT_COPY,
   isGrnBillRoundingReasonAllowed,
+  isLikelyGrnBillDigitShiftTypo,
   isSupplierReportedTotalMatchingComputed,
   listGrnBillUnderVarianceReasons,
+  resolveGrnBillDigitShiftGuidance,
   resolveGrnBillOverGuidance,
   resolveGrnBillPromptSupplierLabel,
   resolveGrnBillPromptVariance,
@@ -156,6 +158,15 @@ describe('PROOF: GRN bill prompt defaults SSOT', () => {
         suggestGrnBillVarianceReason('under', 20) === '',
       'rounding reason only when |diff| ≤ 1; auto-suggest then',
     );
+    gate(
+      'DIGIT_SHIFT_TYPO',
+      isLikelyGrnBillDigitShiftTypo(136_000.04, 1_360_000) &&
+        isLikelyGrnBillDigitShiftTypo(136_000.04, 13_600) &&
+        !isLikelyGrnBillDigitShiftTypo(100_000, 85_000) &&
+        !isLikelyGrnBillDigitShiftTypo(100_000, 100_000) &&
+        resolveGrnBillDigitShiftGuidance(136_000.04, 1_360_000).includes('extra zero'),
+      '≈10× / ≈0.1× paper vs GR flagged as digit typo; ordinary discounts not',
+    );
   });
 
   it('client wiring: GoodsReceiptsPage uses SSOT for compact prompt', () => {
@@ -168,6 +179,8 @@ describe('PROOF: GRN bill prompt defaults SSOT', () => {
         page.includes('resolveGrnBillPromptVariance') &&
         page.includes('alignPaperTotalToGrAmount') &&
         page.includes('resolveGrnBillOverGuidance') &&
+        page.includes('isLikelyGrnBillDigitShiftTypo') &&
+        page.includes('resolveGrnBillDigitShiftGuidance') &&
         page.includes('listGrnBillUnderVarianceReasons') &&
         page.includes('GRN_BILL_PROMPT_COPY'),
       'GoodsReceiptsPage imports bill prompt SSOT',
@@ -256,8 +269,15 @@ describe('PROOF: GRN bill prompt defaults SSOT', () => {
       'server rejects ROUNDING when |diff| > 1',
     );
     gate(
+      'SVC_DIGIT_SHIFT',
+      validation.includes('isLikelyGrnBillDigitShiftTypo') &&
+        validation.includes('resolveGrnBillDigitShiftGuidance'),
+      'server rejects ≈10× / ≈0.1× paper vs GR as digit typo',
+    );
+    gate(
       'SSOT_FILE',
-      fileHas('shared/domain/grnBillPromptSsot.ts', 'listGrnBillUnderVarianceReasons'),
+      fileHas('shared/domain/grnBillPromptSsot.ts', 'listGrnBillUnderVarianceReasons') &&
+        fileHas('shared/domain/grnBillPromptSsot.ts', 'isLikelyGrnBillDigitShiftTypo'),
       'shared/domain/grnBillPromptSsot.ts present',
     );
   });

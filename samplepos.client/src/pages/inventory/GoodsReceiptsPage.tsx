@@ -17,7 +17,9 @@ import {
   alignPaperTotalToGrAmount,
   buildGrnBillPromptDefaults,
   GRN_BILL_PROMPT_COPY,
+  isLikelyGrnBillDigitShiftTypo,
   listGrnBillUnderVarianceReasons,
+  resolveGrnBillDigitShiftGuidance,
   resolveGrnBillOverGuidance,
   resolveGrnBillPromptSupplierLabel,
   resolveGrnBillPromptVariance,
@@ -487,7 +489,7 @@ export default function GoodsReceiptsPage() {
     supplierInvoiceNumber: string;
     invoiceDate: string;
     supplierReportedTotal: string; // empty string = not provided
-    varianceReason: '' | 'SUPPLIER_DISCOUNT' | 'ROUNDING_DIFFERENCE' | 'PRICE_VARIANCE' | 'EDIT_LINE_PRICES';
+    varianceReason: '' | 'SUPPLIER_DISCOUNT' | 'ROUNDING_DIFFERENCE' | 'EDIT_LINE_PRICES';
   } | null>(null);
   const [billPromptLoading, setBillPromptLoading] = useState(false);
   /** Optional paper invoice total on draft GR — carry into bill prompt (visibility only). */
@@ -3077,6 +3079,9 @@ export default function GoodsReceiptsPage() {
         const supplierTotalNum = variance.paperTotal;
         const hasSupplierTotal = variance.hasPaperTotal;
         const billExceedsReceived = variance.direction === 'over';
+        const digitShiftTypo =
+          variance.hasPaperTotal &&
+          isLikelyGrnBillDigitShiftTypo(variance.computedTotal, variance.paperTotal);
         const underReasons =
           variance.direction === 'under'
             ? listGrnBillUnderVarianceReasons(variance.absVariance)
@@ -3094,6 +3099,7 @@ export default function GoodsReceiptsPage() {
         const canSubmit =
           hasSupplierTotal &&
           !billExceedsReceived &&
+          !digitShiftTypo &&
           !needsVarianceReason &&
           !isEditLinePrices;
 
@@ -3238,7 +3244,26 @@ export default function GoodsReceiptsPage() {
                       </span>
                     </div>
 
-                    {variance.direction === 'over' && (
+                    {digitShiftTypo && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-amber-950">
+                          {resolveGrnBillDigitShiftGuidance(
+                            variance.computedTotal,
+                            variance.paperTotal,
+                          )}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={billAtGrAmount}
+                          className="w-full px-3 py-1.5 text-sm font-semibold text-emerald-800 bg-white border border-emerald-300 rounded-lg hover:bg-emerald-50"
+                        >
+                          {GRN_BILL_PROMPT_COPY.billAtGrLabel} (
+                          {formatCurrency(variance.computedTotal)})
+                        </button>
+                      </div>
+                    )}
+
+                    {variance.direction === 'over' && !digitShiftTypo && (
                       <div className="space-y-2">
                         <p className="text-xs text-amber-950">
                           {resolveGrnBillOverGuidance(variance.absVariance)}
@@ -3254,7 +3279,7 @@ export default function GoodsReceiptsPage() {
                       </div>
                     )}
 
-                    {variance.direction === 'under' && (
+                    {variance.direction === 'under' && !digitShiftTypo && (
                       <>
                         <div>
                           <label className="block text-xs font-medium text-amber-900 mb-1">
