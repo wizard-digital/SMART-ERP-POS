@@ -1,0 +1,60 @@
+{
+  "proof": "MANUAL_GR_E2E_INTEGRITY",
+  "verdict": "PASS",
+  "generatedAt": "2026-09-23T06:13:52.793Z",
+  "passed": 10,
+  "total": 10,
+  "gates": [
+    {
+      "id": "BEH_CREATE_STATUSES",
+      "ok": true,
+      "detail": "Create: PO PENDING + GR DRAFT; post: PO COMPLETED"
+    },
+    {
+      "id": "BEH_LINE_PARITY",
+      "ok": true,
+      "detail": "Manual lines: ordered must equal received"
+    },
+    {
+      "id": "BEH_FINALIZE_MATRIX",
+      "ok": true,
+      "detail": "Finalize open for PENDING and legacy COMPLETED+manual; blocked for normal COMPLETED"
+    },
+    {
+      "id": "BEH_PO_ALLOW_SSOT",
+      "ok": true,
+      "detail": "poAllowsGoodsReceiptFinalize matches Manual GR matrix"
+    },
+    {
+      "id": "WIRE_MANUAL_PO_PENDING",
+      "ok": true,
+      "detail": "createManualPO inserts PENDING + manual_receipt — never COMPLETED before GR post"
+    },
+    {
+      "id": "WIRE_ORDERED_EQ_RECEIVED",
+      "ok": true,
+      "detail": "Manual create path forces ordered = received (UI + server)"
+    },
+    {
+      "id": "WIRE_SAVE_AS_DRAFT",
+      "ok": true,
+      "detail": "ManualGRModal: Save as Draft + MANUAL source + supplier XOR PO"
+    },
+    {
+      "id": "WIRE_PO_MANUAL_FLAG_API",
+      "ok": true,
+      "detail": "GR get/list exposes poManualReceipt; detail Finalize uses it"
+    },
+    {
+      "id": "WIRE_SERVER_RECEIVE_MANUAL",
+      "ok": true,
+      "detail": "assertPOAllowsReceiving allows manual PENDING/COMPLETED; finalize syncs PO"
+    },
+    {
+      "id": "WIRE_FINALIZE_CTA",
+      "ok": true,
+      "detail": "Detail shows Finalize when receivable; clarifying banner for manual shells"
+    }
+  ],
+  "integrity": "Manual GR E2E: PO PENDING+manual_receipt on create, GR DRAFT until Finalize, ordered=received, legacy COMPLETED+manual still receivable, sync sole COMPLETED writer — no false “already received” mismatch."
+}

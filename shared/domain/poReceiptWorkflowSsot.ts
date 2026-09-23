@@ -15,7 +15,9 @@
  * Server: syncPOStatusWithReceipts is the sole auto-writer for 3–4 (event path).
  *         healFullyReversedPurchaseOrdersToDraft only heals stuck COMPLETED → DRAFT.
  *         Both cancel leftover DRAFT GRs so Finalize cannot run until Submit → Send.
- * 7. Finalize goods receipt only when PO is PENDING (`poAllowsGoodsReceiptFinalize`).
+ * 7. Finalize goods receipt when PO is PENDING (`poAllowsGoodsReceiptFinalize`).
+ *    Manual GR: createManualPO inserts PENDING + manual_receipt; Finalize posts GR
+ *    then sync → COMPLETED. Legacy COMPLETED+manual_receipt shells remain receivable.
  */
 
 export const PO_RECEIPT_QTY_EPS = 0.0001;
@@ -188,11 +190,23 @@ export function shouldShowPOReceiptProgressLine(progress: POReceiptProgress): bo
 }
 
 /**
- * Finalize GR only when PO is PENDING (submitted / sent cycle).
+ * Finalize GR when PO is PENDING (submitted / sent cycle).
  * After full reverse PO is DRAFT — Submit → Send creates a fresh draft GR.
+ *
+ * Manual GR: createManualPO inserts PENDING + manual_receipt (open until GR posts).
+ * Legacy rows may still be COMPLETED+manual_receipt before GR finalize — still allow.
  */
+export type GoodsReceiptFinalizeContext = {
+  /** purchase_orders.manual_receipt — auto PO from Manual GR */
+  manualReceipt?: boolean | null;
+};
+
 export function poAllowsGoodsReceiptFinalize(
   poStatus: string | null | undefined,
+  ctx?: GoodsReceiptFinalizeContext,
 ): boolean {
-  return String(poStatus || '').toUpperCase() === 'PENDING';
+  const st = String(poStatus || '').toUpperCase();
+  if (st === 'PENDING') return true;
+  if (ctx?.manualReceipt === true && st === 'COMPLETED') return true;
+  return false;
 }

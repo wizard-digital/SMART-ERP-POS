@@ -41,12 +41,15 @@ describe('purchaseOrderRepository.listPOs', () => {
     expect(countSql).not.toContain('goods_receipts gr');
   });
 
-  test('search matches PO number and supplier name', async () => {
+  test('search matches PO number, supplier name, and supplier code', async () => {
     await purchaseOrderRepository.listPOs(mockPool, 1, 50, { search: 'ACE' });
 
     const countSql = String((mockPool.query as jest.Mock).mock.calls[0][0]);
+    expect(countSql).toContain('JOIN suppliers s');
     expect(countSql).toContain('po.order_number ILIKE');
     expect(countSql).toContain('CompanyName');
+    expect(countSql).toContain('SupplierCode');
+    expect(countSql).not.toContain('s_search');
     const params = (mockPool.query as jest.Mock).mock.calls[0][1] as unknown[];
     expect(params).toContain('%ACE%');
   });

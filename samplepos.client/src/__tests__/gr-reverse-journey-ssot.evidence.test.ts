@@ -138,8 +138,10 @@ describe('PROOF: GR reverse journey SSOT (cross-surface)', () => {
       poAllowsGoodsReceiptFinalize('PENDING') &&
         !poAllowsGoodsReceiptFinalize('DRAFT') &&
         !poAllowsGoodsReceiptFinalize('COMPLETED') &&
-        !poAllowsGoodsReceiptFinalize('CANCELLED'),
-      'Finalize GR only when PO is PENDING — Draft after reverse is blocked',
+        !poAllowsGoodsReceiptFinalize('CANCELLED') &&
+        poAllowsGoodsReceiptFinalize('COMPLETED', { manualReceipt: true }) &&
+        !poAllowsGoodsReceiptFinalize('DRAFT', { manualReceipt: true }),
+      'Finalize GR when PO is PENDING; Manual GR COMPLETED+manual_receipt also allowed',
     );
 
     gate(
@@ -242,10 +244,16 @@ describe('PROOF: GR reverse journey SSOT (cross-surface)', () => {
       'WIRE_FINALIZE_REQUIRES_PENDING_PO',
       grPage.includes('poAllowsGoodsReceiptFinalize') &&
         grPage.includes('submit and send') &&
+        grPage.includes('poManualReceipt') &&
+        grPage.includes('manualReceipt: linkedPoManualReceipt') &&
+        poWorkflow.includes('manualReceipt') &&
         read('SamplePOS.Server/src/modules/goods-receipts/goodsReceiptService.ts').includes(
-          'must be pending (sent to supplier) before receiving',
+          'manualReceipt',
+        ) &&
+        read('SamplePOS.Server/src/modules/goods-receipts/goodsReceiptRepository.ts').includes(
+          'poManualReceipt',
         ),
-      'UI + server: Finalize blocked unless PO PENDING (Draft after reverse is not receivable)',
+      'UI + server: Finalize needs PENDING PO, except Manual GR COMPLETED+manual_receipt shell',
     );
 
     gate(

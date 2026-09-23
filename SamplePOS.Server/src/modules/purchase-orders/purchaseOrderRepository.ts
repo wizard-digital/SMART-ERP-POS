@@ -39,6 +39,8 @@ export interface PurchaseOrder {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  /** Auto-generated tracking PO from Manual GR (may be COMPLETED before GR finalize). */
+  manualReceipt?: boolean;
   /** Receipt progress (list/detail aggregates). */
   orderedQtyTotal?: number;
   netReceivedQtyTotal?: number;
@@ -101,6 +103,7 @@ function mapPurchaseOrderRow(row: DbRow): PurchaseOrder {
     createdBy: (row.createdBy ?? row.created_by_id) as string,
     createdAt: String(row.createdAt ?? row.created_at ?? ''),
     updatedAt: String(row.updatedAt ?? row.updated_at ?? ''),
+    manualReceipt: Boolean(row.manualReceipt ?? row.manual_receipt ?? false),
     orderedQtyTotal:
       row.orderedQtyTotal != null
         ? Number(row.orderedQtyTotal)
@@ -206,8 +209,9 @@ export const purchaseOrderRepository = {
   },
 
   /**
-   * Create manual PO (auto-generated from manual goods receipt)
-   * Creates PO in COMPLETED status with manual_receipt flag set to true
+   * Create manual PO (auto-generated from manual goods receipt).
+   * PO is PENDING + manual_receipt until the GR is finalized (then sync → COMPLETED).
+   * Never pretends goods are posted before Finalize.
    */
   async createManualPO(
     pool: Pool | PoolClient,
@@ -220,7 +224,7 @@ export const purchaseOrderRepository = {
       data.items.map((item) => ({ quantity: item.quantity, unitCost: item.unitCost })),
     ).toNumber();
 
-    // Create PO with COMPLETED status and manual_receipt flag
+    // PENDING: open for Finalize; COMPLETED only after GR posts (syncPOStatusWithReceipts)
     const poResult = await pool.query(
       `INSERT INTO purchase_orders (
         order_number, supplier_id, order_date, expected_delivery_date, 
@@ -246,7 +250,7 @@ export const purchaseOrderRepository = {
         data.expectedDate,
         data.notes || `Auto-generated PO for manual goods receipt`,
         data.createdBy,
-        'COMPLETED', // Manual POs are immediately completed
+        'PENDING',
         totalAmount,
         true, // Flag as manual receipt
       ]
@@ -425,11 +429,9 @@ export const purchaseOrderRepository = {
     if (search) {
       const searchParam = `%${search}%`;
       whereClauses.push(
-        `(po.order_number ILIKE $${paramIndex} OR EXISTS (
-          SELECT 1 FROM suppliers s_search
-          WHERE s_search."Id" = po.supplier_id
-            AND s_search."CompanyName" ILIKE $${paramIndex}
-        ))`
+        `(po.order_number ILIKE $${paramIndex}
+          OR s."CompanyName" ILIKE $${paramIndex}
+          OR COALESCE(s."SupplierCode", '') ILIKE $${paramIndex})`,
       );
       values.push(searchParam);
       paramIndex++;
@@ -441,10 +443,12 @@ export const purchaseOrderRepository = {
     }
 
     const whereClause = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const fromSql = `FROM purchase_orders po
+       JOIN suppliers s ON po.supplier_id = s."Id"`;
 
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM purchase_orders po ${whereClause}`,
-      values
+      `SELECT COUNT(*) ${fromSql} ${whereClause}`,
+      values,
     );
 
     const orderCol = pickSortColumn(filters?.sortBy, PO_SORT_COLUMNS, 'orderDate');
@@ -456,12 +460,11 @@ export const purchaseOrderRepository = {
               ROUND((${poNetReceivedQtyTotalSql('po')})::numeric, 4) AS net_received_qty_total,
               ROUND((${poOpenQtyTotalSql('po')})::numeric, 4) AS open_qty_total,
               ${poCompletedGrCountSql('po')} AS completed_gr_count
-       FROM purchase_orders po
-       JOIN suppliers s ON po.supplier_id = s."Id"
+       ${fromSql}
        ${whereClause} 
        ORDER BY ${orderCol} ${orderDir}, po.created_at DESC 
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
-      [...values, limit, offset]
+      [...values, limit, offset],
     );
 
     return {

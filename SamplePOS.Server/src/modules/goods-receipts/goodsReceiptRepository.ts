@@ -117,6 +117,8 @@ export interface GoodsReceipt {
   // Join fields — present when fetched via getGRById / listGRs
   poNumber?: string | null;
   poStatus?: string | null;
+  /** True when linked PO was auto-created by Manual GR (COMPLETED shell). */
+  poManualReceipt?: boolean | null;
   supplierId?: string | null;
   supplierName?: string | null;
   /** Latest supplier bill (SBILL) linked to this GRN, if any. */
@@ -382,6 +384,7 @@ export const goodsReceiptRepository = {
          gr.version,
          po.order_number AS "poNumber",
          po.status AS "poStatus",
+         COALESCE(po.manual_receipt, false) AS "poManualReceipt",
          po.supplier_id as "supplierId",
          s."CompanyName" as "supplierName",
          ${reversalSql},
@@ -603,6 +606,7 @@ export const goodsReceiptRepository = {
          gri.cost_price as "unitCost",
          ${isBonusExpr} as "isBonus",
          COALESCE(poi.ordered_quantity, gri.received_quantity) as "orderedQuantity",
+         ROUND(poi.unit_price::numeric, 2) as "poUnitPrice",
          ROUND(COALESCE(poi.received_quantity, 0)::numeric, 2) as "poGrossReceived",
          ROUND((${returnedSql})::numeric, 2) as "poReturnedQuantity",
          ROUND((${netSql})::numeric, 2) as "poAlreadyReceived"
@@ -861,6 +865,7 @@ export const goodsReceiptRepository = {
          gr.version,
          po.order_number AS "poNumber",
          po.status AS "poStatus",
+         COALESCE(po.manual_receipt, false) AS "poManualReceipt",
          po.supplier_id as "supplierId",
          s."CompanyName" as "supplierName",
          ${reversalSql},

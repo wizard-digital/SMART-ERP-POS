@@ -210,7 +210,7 @@ describe('goodsReceiptService', () => {
                     id: 'po-manual-1',
                     poNumber: 'PO-2025-0001',
                     supplierId: 'sup-1',
-                    status: 'COMPLETED',
+                    status: 'PENDING',
                     totalAmount: 120,
                 },
                 items: [{ id: 'poi-1' }],

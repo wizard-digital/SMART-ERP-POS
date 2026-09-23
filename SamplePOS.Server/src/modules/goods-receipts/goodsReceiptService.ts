@@ -45,6 +45,7 @@ import { returnGrnPurchaseQuantityFromBase } from '../return-grn/returnGrnQuanti
 import type { CorrectionEligibilityResult } from '../corrections/correctionEligibilityTypes.js';
 import { BusinessError, ValidationError } from '../../middleware/errorHandler.js';
 import { lotService, receiveOpeningLot } from '../inventory-lot/lotService.js';
+import { isLikelyGrnBillDigitShiftTypo } from '../../../../shared/domain/grnBillPromptSsot.js';
 
 // Alert shape consumed by controller for finalize response
 export interface CostPriceChangeAlert {
@@ -90,7 +91,9 @@ export interface ListGRsResult {
   total: number;
 }
 
-/** Odoo/SAP guard: only receive against an open (PENDING) purchase order. */
+/** Odoo/SAP guard: only receive against an open (PENDING) purchase order.
+ * Manual-receipt tracking POs are COMPLETED on insert — still allow finalize.
+ */
 async function assertPOAllowsReceiving(
   pool: Pool | PoolClient,
   purchaseOrderId: string
@@ -100,10 +103,14 @@ async function assertPOAllowsReceiving(
     throw new Error(`Purchase order ${purchaseOrderId} not found`);
   }
   const status = poResult.po.status;
+  const manualReceipt = Boolean(poResult.po.manualReceipt);
   if (status === 'CANCELLED') {
     throw new Error(
       'Cannot receive goods against a cancelled purchase order. Cancelled orders cannot be received.'
     );
+  }
+  if (manualReceipt && (status === 'COMPLETED' || status === 'PENDING')) {
+    return;
   }
   if (status === 'COMPLETED') {
     const hasOpen = await purchaseOrderRepository.hasOpenReceiptQuantity(pool, purchaseOrderId);
@@ -549,6 +556,8 @@ export const goodsReceiptService = {
         const unitCost: number = Money.parseDb(item.unitCost).toNumber();
         const expiryDate: string | null = item.expiryDate || null;
         const trackExpiry = !!(finProductsMap.get(item.productId)?.track_expiry);
+        const poUnitPrice = Money.parseDb(item.poUnitPrice ?? 0).toNumber();
+        const isBonusLine = !!item.isBonus;
 
         if (receivedQty <= 0)
           preValidationErrors.push(`${productName}: received quantity must be greater than 0`);
@@ -558,6 +567,17 @@ export const goodsReceiptService = {
           preValidationErrors.push(`${productName}: expiry date cannot be in the past`);
         if (trackExpiry && receivedQty > 0 && (!expiryDate || String(expiryDate).trim() === '')) {
           preValidationErrors.push(`${productName}: Expiry date is required`);
+        }
+        // Extra/missing-zero typo vs PO unit price (billable lines only)
+        if (
+          !isBonusLine &&
+          poUnitPrice > 0 &&
+          unitCost > 0 &&
+          isLikelyGrnBillDigitShiftTypo(poUnitPrice, unitCost)
+        ) {
+          preValidationErrors.push(
+            `${productName}: unit cost ${unitCost} looks like a digit/zero typo vs PO price ${poUnitPrice} — correct before finalize`,
+          );
         }
       }
 
@@ -1113,9 +1133,21 @@ export const goodsReceiptService = {
         }
       }
 
-      // Validate unitCost 
+      // Validate unitCost
       if (data.unitCost !== undefined) {
         PurchaseOrderBusinessRules.validateUnitCost(data.unitCost);
+        const poUnitPrice = Money.parseDb(item.poUnitPrice ?? 0).toNumber();
+        const nextBonus = data.isBonus !== undefined ? !!data.isBonus : !!item.isBonus;
+        if (
+          !nextBonus &&
+          poUnitPrice > 0 &&
+          data.unitCost > 0 &&
+          isLikelyGrnBillDigitShiftTypo(poUnitPrice, data.unitCost)
+        ) {
+          throw new ValidationError(
+            `${item.productName ?? 'Item'}: unit cost ${data.unitCost} looks like a digit/zero typo vs PO price ${poUnitPrice}`,
+          );
+        }
       }
 
       if (data.expiryDate) {
@@ -1220,6 +1252,18 @@ export const goodsReceiptService = {
         // Cost validation
         if (update.unitCost !== undefined) {
           PurchaseOrderBusinessRules.validateUnitCost(update.unitCost);
+          const poUnitPrice = Money.parseDb(existing.poUnitPrice ?? 0).toNumber();
+          const nextBonus = update.isBonus !== undefined ? !!update.isBonus : !!existing.isBonus;
+          if (
+            !nextBonus &&
+            poUnitPrice > 0 &&
+            update.unitCost > 0 &&
+            isLikelyGrnBillDigitShiftTypo(poUnitPrice, update.unitCost)
+          ) {
+            throw new ValidationError(
+              `${existing.productName ?? 'Item'}: unit cost ${update.unitCost} looks like a digit/zero typo vs PO price ${poUnitPrice}`,
+            );
+          }
         }
 
         if (update.expiryDate) {
