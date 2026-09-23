@@ -1,0 +1,108 @@
+{
+  "at": "2026-09-23T06:13:43.875Z",
+  "feature": "PO_PDF_CAMELCASE_MAPPING",
+  "summary": {
+    "pass": 19,
+    "fail": 0,
+    "total": 19,
+    "verdict": "PASS"
+  },
+  "rootCause": "renderPurchaseOrder expected snake_case (order_number, unit_price) but getPOById returns camelCase (poNumber, unitCost).",
+  "gates": [
+    {
+      "id": "PICK_HELPER",
+      "ok": true,
+      "detail": "pickField helper"
+    },
+    {
+      "id": "CAMEL_PO_NUMBER",
+      "ok": true,
+      "detail": "reads poNumber"
+    },
+    {
+      "id": "CAMEL_ORDER_DATE",
+      "ok": true,
+      "detail": "reads orderDate"
+    },
+    {
+      "id": "CAMEL_EXPECTED",
+      "ok": true,
+      "detail": "reads expectedDate"
+    },
+    {
+      "id": "CAMEL_TOTAL",
+      "ok": true,
+      "detail": "reads totalAmount"
+    },
+    {
+      "id": "CAMEL_SUPPLIER_ID",
+      "ok": true,
+      "detail": "reads supplierId"
+    },
+    {
+      "id": "CAMEL_PRODUCT",
+      "ok": true,
+      "detail": "reads productName"
+    },
+    {
+      "id": "CAMEL_UNIT_COST",
+      "ok": true,
+      "detail": "reads unitCost"
+    },
+    {
+      "id": "CAMEL_LINE_TOTAL",
+      "ok": true,
+      "detail": "reads lineTotal"
+    },
+    {
+      "id": "SNAKE_FALLBACK",
+      "ok": true,
+      "detail": "snake_case still accepted"
+    },
+    {
+      "id": "MAP_SUPPLIER_NAME",
+      "ok": true,
+      "detail": "map includes supplierName"
+    },
+    {
+      "id": "MAP_UNIT_COST",
+      "ok": true,
+      "detail": "map unitCost"
+    },
+    {
+      "id": "MAP_PRODUCT",
+      "ok": true,
+      "detail": "map productName"
+    },
+    {
+      "id": "SERVICE_RETURNS_MAPPED",
+      "ok": true,
+      "detail": "getPOById returns mapped rows"
+    },
+    {
+      "id": "SIM_PO_NUMBER",
+      "ok": true,
+      "detail": "PO-2026-0090"
+    },
+    {
+      "id": "SIM_TOTAL",
+      "ok": true,
+      "detail": "1500000"
+    },
+    {
+      "id": "SIM_PRODUCT",
+      "ok": true,
+      "detail": "Paracetamol 500mg"
+    },
+    {
+      "id": "SIM_UNIT",
+      "ok": true,
+      "detail": "1000"
+    },
+    {
+      "id": "OLD_SNAKE_FAILS",
+      "ok": true,
+      "detail": "snake-only would be 0 on camel object"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "at": "2026-08-10T06:41:54.695Z",
+  "feature": "PO_PDF_CAMELCASE_MAPPING",
+  "summary": {
+    "pass": 5,
+    "fail": 0,
+    "total": 5,
+    "verdict": "PASS"
+  },
+  "rootCause": "renderPurchaseOrder expected snake_case (order_number, unit_price) but getPOById returns camelCase (poNumber, unitCost).",
+  "gates": [
+    {
+      "id": "SIM_PO_NUMBER",
+      "ok": true,
+      "detail": "PO-2026-0090"
+    },
+    {
+      "id": "SIM_TOTAL",
+      "ok": true,
+      "detail": "1500000"
+    },
+    {
+      "id": "SIM_PRODUCT",
+      "ok": true,
+      "detail": "Paracetamol 500mg"
+    },
+    {
+      "id": "SIM_UNIT",
+      "ok": true,
+      "detail": "1000"
+    },
+    {
+      "id": "OLD_SNAKE_FAILS",
+      "ok": true,
+      "detail": "snake-only would be 0 on camel object"
+    }
+  ]
+}

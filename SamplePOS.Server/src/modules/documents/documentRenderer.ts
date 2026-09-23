@@ -22,6 +22,7 @@ import { invoiceService } from '../invoices/invoiceService.js';
 import { salesService } from '../sales/salesService.js';
 import { quotationService } from '../quotations/quotationService.js';
 import { purchaseOrderService } from '../purchase-orders/purchaseOrderService.js';
+import { PricingEngine } from '../../utils/pricingEngine.js';
 import { goodsReceiptService } from '../goods-receipts/goodsReceiptService.js';
 import { deliveryNoteRepository } from '../delivery-notes/deliveryNoteRepository.js';
 import {
@@ -536,6 +537,17 @@ async function renderQuotation(
 // PURCHASE ORDER
 // =============================================================================
 
+/**
+ * PO service returns camelCase via mapPurchaseOrderRow / mapPurchaseOrderItemRow.
+ * Accept both camelCase and DB snake_case so the PDF never renders blank meta.
+ */
+function pickField(row: Record<string, unknown>, ...keys: string[]): unknown {
+    for (const k of keys) {
+        if (row[k] !== undefined && row[k] !== null && row[k] !== '') return row[k];
+    }
+    return undefined;
+}
+
 async function renderPurchaseOrder(
     pool: Pool,
     req: RenderRequest,
@@ -543,13 +555,12 @@ async function renderPurchaseOrder(
     output: Writable,
 ): Promise<RenderResult> {
     const result = await purchaseOrderService.getPOById(pool, req.id);
-    // PO row is snake_case from `SELECT po.*`
     const po = result.po as unknown as Record<string, unknown>;
     const items = result.items as unknown as Record<string, unknown>[];
 
-    const supplierId = po.supplier_id as string | undefined;
+    const supplierId = pickField(po, 'supplierId', 'supplier_id') as string | undefined;
     let supplier = {
-        name: (po.supplier_name as string) ?? '—',
+        name: String(pickField(po, 'supplierName', 'supplier_name') ?? '—'),
         email: null as string | null,
         phone: null as string | null,
         address: null as string | null,
@@ -573,8 +584,8 @@ async function renderPurchaseOrder(
         }
     }
 
-    const poNumber = (po.order_number as string) ?? '';
-    const status = String(po.status ?? 'DRAFT').toUpperCase();
+    const poNumber = String(pickField(po, 'poNumber', 'order_number') ?? '');
+    const status = String(pickField(po, 'status') ?? 'DRAFT').toUpperCase();
 
     const meta: DocumentMeta = {
         title: 'PURCHASE ORDER',
@@ -589,21 +600,44 @@ async function renderPurchaseOrder(
         po: {
             poNumber,
             status,
-            orderDate: isoDate(po.order_date),
-            expectedDate: isoDate(po.expected_date),
-            totalAmount: num(po.total_amount),
-            notes: (po.notes as string) ?? null,
+            orderDate: isoDate(pickField(po, 'orderDate', 'order_date')),
+            expectedDate: isoDate(pickField(po, 'expectedDate', 'expected_date', 'expected_delivery_date')),
+            totalAmount: num(pickField(po, 'totalAmount', 'total_amount')),
+            notes: (pickField(po, 'notes') as string) ?? null,
         },
         supplier,
-        items: items.map(it => ({
-            productName: (it.product_name as string) ?? '—',
-            quantity: num(it.quantity),
-            uomName: (it.uom_name as string) ?? null,
-            unitCost: num(it.unit_price),
-            lineTotal: num(it.line_total ?? it.total_price),
-            receivedQuantity: num(it.received_quantity),
-        })),
+        items: items.map((it) => {
+            const qty = num(pickField(it, 'quantity', 'ordered_quantity'));
+            const unitCost = num(pickField(it, 'unitCost', 'unit_price'));
+            // SSOT: always qty × unit via PricingEngine (ignore stale total_price)
+            const lineTotal = PricingEngine.calculateLineTotal(qty, unitCost)
+                .toDecimalPlaces(2)
+                .toNumber();
+            return {
+                productName: String(
+                    pickField(it, 'productName', 'product_name') ?? '—',
+                ),
+                quantity: qty,
+                uomName: (pickField(it, 'uomName', 'uom_name') as string) ?? null,
+                unitCost,
+                lineTotal,
+                receivedQuantity: num(
+                    pickField(
+                        it,
+                        'netReceivedQuantity',
+                        'receivedQuantity',
+                        'net_received_quantity',
+                        'received_quantity',
+                        'gross_received_quantity',
+                    ),
+                ),
+            };
+        }),
     };
+
+    body.po.totalAmount = PricingEngine.calculateDocumentTotal(
+        body.items.map((it) => ({ quantity: it.quantity, unitCost: it.unitCost })),
+    ).toNumber();
 
     renderPurchaseOrderBody(ctx, body);
     finalizeDocument(ctx, meta);
