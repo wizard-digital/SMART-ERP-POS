@@ -19,7 +19,7 @@ describe('Banking Add Transaction — quiet owner capital', () => {
     expect(sql).toContain('Owner Capital');
     expect(sql).toContain('Owner Drawings');
     expect(sql).toContain('SELECT 624');
-    expect(read('src/constants/schemaVersion.ts')).toMatch(/CURRENT_SCHEMA_VERSION = 624/);
+    expect(read('src/constants/schemaVersion.ts')).toMatch(/CURRENT_SCHEMA_VERSION = 627/);
   });
 
   it('manual BANK_TXN refuses sales, AR, and cash↔cash', () => {

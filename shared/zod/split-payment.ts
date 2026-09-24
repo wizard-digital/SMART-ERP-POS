@@ -6,7 +6,9 @@ export const PaymentMethodEnum = z.enum([
   'CASH',
   'CARD',
   'MOBILE_MONEY',
+  'AIRTEL_MONEY',
   'CUSTOMER_CREDIT',
+  'CREDIT',
   'BANK_TRANSFER',
   'CHEQUE'
 ]);

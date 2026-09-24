@@ -22,6 +22,10 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '613_lot_write_down_journal_coupling.sql',
     '618_product_category_name_unique_ssot.sql',
     '620_pos_session_policy_ssot.sql',
+    '571_airtel_money_payment_method.sql',
+    '625_momo_airtel_payment_ssot.sql',
+    '626_bank_mirror_no_duplicate_ssot.sql',
+    '627_tenant_banking_momo_column_ssot.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -258,6 +262,128 @@ export async function verifyMigrationPostcondition(
                 ),
             ]);
             return participants && policyCol.rows[0]?.ok === true && policyChk.rows[0]?.ok === true;
+        }
+        case '571_airtel_money_payment_method.sql': {
+            const { rows: enumOk } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM pg_enum e
+                    JOIN pg_type t ON t.oid = e.enumtypid
+                    WHERE t.typname = 'payment_method' AND e.enumlabel = 'AIRTEL_MONEY'
+                ) AS ok`,
+            );
+            const { rows: rowOk } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM payment_methods WHERE code = 'AIRTEL_MONEY'
+                ) AS ok`,
+            );
+            return enumOk[0]?.ok === true && rowOk[0]?.ok === true;
+        }
+        case '625_momo_airtel_payment_ssot.sql': {
+            const [enumOk, rowOk, acctOk, srcOk, bookOk] = await Promise.all([
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM pg_enum e
+                        JOIN pg_type t ON t.oid = e.enumtypid
+                        WHERE t.typname = 'payment_method' AND e.enumlabel = 'AIRTEL_MONEY'
+                    ) AS ok`,
+                ),
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM payment_methods WHERE code = 'AIRTEL_MONEY'
+                    ) AS ok`,
+                ),
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM accounts
+                        WHERE "AccountCode" = '1040' AND "IsActive" = TRUE
+                    ) AS ok`,
+                ),
+                accountAllowsSource(pool, '1040', 'SALES_INVOICE'),
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1
+                        FROM bank_accounts ba
+                        JOIN accounts a ON a."Id" = ba.gl_account_id
+                        WHERE a."AccountCode" = '1040' AND ba.is_active = TRUE
+                    ) AS ok`,
+                ),
+            ]);
+            return (
+                enumOk.rows[0]?.ok === true &&
+                rowOk.rows[0]?.ok === true &&
+                acctOk.rows[0]?.ok === true &&
+                srcOk === true &&
+                bookOk.rows[0]?.ok === true
+            );
+        }
+        case '626_bank_mirror_no_duplicate_ssot.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT (
+                    EXISTS (
+                      SELECT 1 FROM pg_indexes
+                      WHERE schemaname = 'public'
+                        AND indexname = 'uq_bank_txn_expense_source_live'
+                    )
+                    AND EXISTS (
+                      SELECT 1 FROM pg_indexes
+                      WHERE schemaname = 'public'
+                        AND indexname = 'uq_bank_txn_sale_source_desc_live'
+                    )
+                 ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '627_tenant_banking_momo_column_ssot.sql': {
+            const required: Array<[string, string]> = [
+                ['payment_methods', 'requires_reference'],
+                ['bank_accounts', 'gl_account_id'],
+                ['bank_accounts', 'account_code'],
+                ['bank_accounts', 'is_main_cash'],
+                ['bank_accounts', 'is_main_bank'],
+                ['bank_transactions', 'gl_transaction_id'],
+                ['bank_transactions', 'source_type'],
+                ['bank_transactions', 'source_id'],
+                ['bank_transactions', 'is_reversed'],
+                ['accounts', 'AllowedSources'],
+                ['accounts', 'SystemAccountTag'],
+            ];
+            for (const [table, column] of required) {
+                const { rows } = await pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = $1
+                          AND column_name = $2
+                    ) AS ok`,
+                    [table, column],
+                );
+                if (!rows[0]?.ok) return false;
+            }
+            const [enumOk, momoOk, idxOk] = await Promise.all([
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM pg_enum e
+                        JOIN pg_type t ON t.oid = e.enumtypid
+                        WHERE t.typname = 'payment_method' AND e.enumlabel = 'AIRTEL_MONEY'
+                    ) AS ok`,
+                ),
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM accounts WHERE "AccountCode" = '1040' AND "IsActive" = TRUE
+                    ) AS ok`,
+                ),
+                pool.query<{ ok: boolean }>(
+                    `SELECT (
+                        EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'uq_bank_txn_expense_source_live')
+                        AND EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'uq_bank_txn_sale_source_desc_live')
+                     ) AS ok`,
+                ),
+            ]);
+            return (
+                enumOk.rows[0]?.ok === true &&
+                momoOk.rows[0]?.ok === true &&
+                idxOk.rows[0]?.ok === true
+            );
         }
         default:
             return true;

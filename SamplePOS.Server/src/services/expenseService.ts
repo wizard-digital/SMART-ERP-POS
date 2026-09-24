@@ -529,25 +529,43 @@ export const markExpensePaid = async (
         client
       );
 
-      // ── BANKING INTEGRATION ────────────────────────────────────
-      // Create bank transaction for non-cash payments
-      if (updated && existingExpense.paymentMethod !== 'CASH') {
-        const bankTxn = await BankingService.createFromExpense(
-          id,
-          existingExpense.expenseNumber,
-          existingExpense.amount,
-          existingExpense.paymentMethod || 'BANK_TRANSFER',
-          updateData.paid_at?.split('T')[0] || getBusinessDate(),
-          existingExpense.categoryId || undefined,
-          dbPool
+      // Banking register mirror — link to EXPENSE_PAYMENT GL (no second journal).
+      // Never pass categoryId as contraAccountId (that UUID is not accounts."Id").
+      if (updated && paymentAccountCode) {
+        const payGl = await client.query<{ Id: string }>(
+          `SELECT "Id" FROM ledger_transactions
+           WHERE "ReferenceType" = 'EXPENSE_PAYMENT'
+             AND "ReferenceId" = $1
+             AND "ReversesTransactionId" IS NULL
+             AND COALESCE("IsReversed", FALSE) = FALSE
+             AND "Status" = 'POSTED'
+           ORDER BY "CreatedAt" DESC
+           LIMIT 1`,
+          [id]
         );
-        if (bankTxn) {
-          logger.info('Bank transaction created for expense', {
-            expenseId: id,
-            expenseNumber: existingExpense.expenseNumber,
-            bankTxnNumber: bankTxn.transactionNumber,
-            amount: existingExpense.amount,
-          });
+        const existingGlTransactionId = payGl.rows[0]?.Id;
+        if (existingGlTransactionId) {
+          const bankTxn = await BankingService.createFromExpense(
+            id,
+            existingExpense.expenseNumber,
+            existingExpense.amount,
+            existingExpense.paymentMethod || 'BANK_TRANSFER',
+            updateData.paid_at?.split('T')[0] || getBusinessDate(),
+            {
+              paymentAccountCode,
+              existingGlTransactionId,
+            },
+            client
+          );
+          if (bankTxn) {
+            logger.info('Bank transaction created for expense', {
+              expenseId: id,
+              expenseNumber: existingExpense.expenseNumber,
+              bankTxnNumber: bankTxn.transactionNumber,
+              amount: existingExpense.amount,
+              paymentAccountCode,
+            });
+          }
         }
       }
 

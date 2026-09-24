@@ -23,8 +23,9 @@ export const POSSaleLineItemSchema = z.object({
 }).strict();
 
 // Payment Line Schema (for split payments)
+// MTN MoMo = MOBILE_MONEY; Airtel Money = AIRTEL_MONEY (must match POS UI + salesRoutes).
 export const PaymentLineSchema = z.object({
-  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'CREDIT', 'DEPOSIT']),
+  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'DEPOSIT']),
   amount: z.number().nonnegative().finite(), // Allow 0 for full CREDIT sales
   reference: z.string().optional(),
 }).strict();
@@ -40,7 +41,7 @@ export const POSSaleSchema = z.object({
   discountAmount: z.number().nonnegative().finite().optional(), // Cart-level discount
   taxAmount: z.number().nonnegative().finite(),
   totalAmount: z.number().nonnegative().finite(),
-  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'CREDIT']).optional(), // Legacy single payment
+  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT']).optional(), // Legacy single payment
   paymentLines: z.array(PaymentLineSchema).optional(), // New split payment support
   amountTendered: z.number().nonnegative().finite().optional(),
   changeGiven: z.number().nonnegative().finite().optional(),

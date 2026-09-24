@@ -24,6 +24,7 @@ import { UnitOfWork } from '../db/unitOfWork.js';
 import { SYSTEM_USER_ID } from '../utils/constants.js';
 import { ensureBankGlLiquidityTag, assertBankBookGlEligible, isEligibleBankBookLiquidity } from '../modules/banking/ensureBankGlLiquidityTag.js';
 import { LEDGER_NET_ACTIVE_SQL } from '../utils/ledgerNetActive.js';
+import { ensureDepositLiquidityBook } from '../modules/treasury/ensureDepositLiquidityBook.js';
 
 /** GL book balance for a bank_accounts.gl_account_id — net-active reverse pairs. */
 const BANK_GL_BALANCE_SQL = `
@@ -2667,8 +2668,9 @@ export class BankingService {
     // ---------------------------------------------------------------------------
 
     /**
-     * Create bank transaction from a sale
-     * Called by saleService when payment method is not CASH
+     * Mirror a sale payment onto the Banking register.
+     * GL is already posted by recordSaleToGL — do NOT post a second journal.
+     * Bank book AccountCode must match the payment method liquidity GL (no mismatch).
      */
     static async createFromSale(
         saleId: string,
@@ -2676,15 +2678,13 @@ export class BankingService {
         amount: number,
         paymentMethod: string,
         saleDate: string,
-        dbPool?: pg.Pool
+        dbPool?: pg.Pool | PoolClient
     ): Promise<BankTransaction | null> {
         const pool = dbPool || globalPool;
-        // Only create bank transaction for non-cash payments
-        if (paymentMethod === 'CASH') {
+        if (paymentMethod === 'CASH' || paymentMethod === 'CREDIT' || paymentMethod === 'DEPOSIT') {
             return null;
         }
 
-        // Idempotency guard: skip if a bank transaction already exists for this sale + payment method
         const txnDescription = `Sale ${saleNumber} [${paymentMethod}]`;
         const existing = await pool.query(
             `SELECT id FROM bank_transactions
@@ -2702,65 +2702,144 @@ export class BankingService {
             return null;
         }
 
-        // Find appropriate bank account based on payment method
-        // CARD → Credit Card Receipts (1020)
-        // MOBILE_MONEY → Could be a mobile money account or checking
-        // BANK_TRANSFER → Checking Account (1030)
-
         const glCodeMap: Record<string, string> = {
             CARD: '1020',
             MOBILE_MONEY: '1040',
             AIRTEL_MONEY: '1040',
             BANK_TRANSFER: '1030',
-            CREDIT: '1200', // AR account for credit sales
         };
+        const targetGlCode = glCodeMap[paymentMethod];
+        if (!targetGlCode) {
+            logger.warn('No liquidity GL mapping for sale payment method — skipping bank mirror', {
+                saleId,
+                paymentMethod,
+            });
+            return null;
+        }
 
-        const targetGlCode = glCodeMap[paymentMethod] || '1030';
+        if (paymentMethod === 'MOBILE_MONEY' || paymentMethod === 'AIRTEL_MONEY') {
+            await ensureDepositLiquidityBook(pool, 'MOBILE_MONEY');
+        }
 
-        // Find bank account linked to this GL code
-        const bankAccountResult = await pool.query(
+        const saleGl = await pool.query<{ Id: string }>(
+            `SELECT "Id" FROM ledger_transactions
+             WHERE "ReferenceType" = 'SALE'
+               AND "ReferenceId" = $1
+               AND "ReversesTransactionId" IS NULL
+               AND COALESCE("IsReversed", FALSE) = FALSE
+               AND "Status" = 'POSTED'
+             ORDER BY "CreatedAt" DESC
+             LIMIT 1`,
+            [saleId]
+        );
+        const existingGlTransactionId = saleGl.rows[0]?.Id;
+        if (!existingGlTransactionId) {
+            throw new Error(
+                `Sale ${saleNumber} has no posted SALE journal — cannot mirror bank without mismatch`
+            );
+        }
+
+        // Fail closed: SALE journal must touch the liquidity account we will mirror
+        const glTouch = await pool.query<{ ok: boolean }>(
+            `SELECT EXISTS (
+                SELECT 1
+                FROM ledger_entries le
+                JOIN accounts a ON a."Id" = le."AccountId"
+                WHERE le."TransactionId" = $1
+                  AND a."AccountCode" = $2
+                  AND le."DebitAmount" > 0
+             ) AS ok`,
+            [existingGlTransactionId, targetGlCode]
+        );
+        if (!glTouch.rows[0]?.ok) {
+            // Split tenders may not each appear on the SALE journal (header method drives GL).
+            // Never invent a second journal — skip mirror rather than create a mismatch.
+            logger.warn(
+                'Sale GL does not debit payment liquidity — skipping bank mirror (no duplicate GL)',
+                { saleId, saleNumber, paymentMethod, targetGlCode, existingGlTransactionId }
+            );
+            return null;
+        }
+
+        const bankAccountResult = await pool.query<{ id: string; gl_code: string }>(
             `
-      SELECT ba.id
+      SELECT ba.id, a."AccountCode" AS gl_code
       FROM bank_accounts ba
       JOIN accounts a ON a."Id" = ba.gl_account_id
       WHERE a."AccountCode" = $1 AND ba.is_active = TRUE
+      ORDER BY ba.is_default DESC, ba.created_at ASC NULLS LAST
       LIMIT 1
     `,
             [targetGlCode]
         );
 
         if (bankAccountResult.rows.length === 0) {
-            logger.warn('No bank account configured for payment method', { paymentMethod, targetGlCode });
+            logger.warn('No bank account configured for payment method', {
+                paymentMethod,
+                targetGlCode,
+            });
             return null;
         }
 
         const bankAccountId = bankAccountResult.rows[0].id;
+        if (bankAccountResult.rows[0].gl_code !== targetGlCode) {
+            throw new Error(
+                `Bank book GL ${bankAccountResult.rows[0].gl_code} !== payment ${targetGlCode}`
+            );
+        }
 
-        // Get sales deposit category
         const categoryResult = await pool.query(`
       SELECT id FROM bank_categories WHERE code = 'SALES_DEPOSIT'
     `);
-        const categoryId = categoryResult.rows[0]?.id;
+        const categoryId = categoryResult.rows[0]?.id || null;
 
-        return this.createTransaction(
-            {
+        const transactionId = uuidv4();
+        const transactionNumber = await BankingService.generateBankTxnNumber(pool);
+        await pool.query(
+            `
+        INSERT INTO bank_transactions (
+          id, transaction_number, bank_account_id, transaction_date,
+          type, category_id, description, reference, amount,
+          contra_account_id, gl_transaction_id, source_type, source_id,
+          is_reconciled, is_reversed, created_by
+        )
+        VALUES ($1, $2, $3, $4, 'DEPOSIT', $5, $6, $7, $8,
+                NULL, $9, 'SALE', $10, FALSE, FALSE, $11)
+      `,
+            [
+                transactionId,
+                transactionNumber,
                 bankAccountId,
-                transactionDate: saleDate,
-                type: 'DEPOSIT',
+                saleDate,
                 categoryId,
-                description: txnDescription,
-                reference: saleNumber,
+                txnDescription,
+                saleNumber,
                 amount,
-                sourceType: 'SALE',
-                sourceId: saleId,
-            },
-            SYSTEM_USER_ID,
-            dbPool
+                existingGlTransactionId,
+                saleId,
+                SYSTEM_USER_ID,
+            ]
         );
+
+        logger.info('Bank transaction mirrored for sale payment (linked GL — no second journal)', {
+            saleId,
+            saleNumber,
+            paymentMethod,
+            targetGlCode,
+            glTransactionId: existingGlTransactionId,
+            amount,
+        });
+
+        return BankingService.getTransactionById(transactionId, pool as pg.Pool);
     }
 
     /**
-     * Create bank transaction from an expense
+     * Mirror an expense payment onto the Banking register.
+     *
+     * GL is already posted by recordExpensePaymentToGL (DR AP / CR pay-from).
+     * Do NOT post a second journal — link bank_transactions to that EXPENSE_PAYMENT GL.
+     *
+     * Never pass expense categoryId as contraAccountId (category UUID ≠ accounts."Id").
      */
     static async createFromExpense(
         expenseId: string,
@@ -2768,49 +2847,147 @@ export class BankingService {
         amount: number,
         paymentMethod: string,
         expenseDate: string,
-        expenseAccountId?: string,
-        dbPool?: pg.Pool
+        options?: {
+            paymentAccountCode?: string;
+            existingGlTransactionId?: string;
+        },
+        dbPool?: pg.Pool | PoolClient
     ): Promise<BankTransaction | null> {
         const pool = dbPool || globalPool;
-        if (paymentMethod === 'CASH') {
+
+        const paymentAccountCode =
+            options?.paymentAccountCode ||
+            (paymentMethod === 'CASH' || paymentMethod === 'PETTY_CASH'
+                ? '1010'
+                : paymentMethod === 'MOBILE_MONEY' || paymentMethod === 'AIRTEL_MONEY'
+                  ? '1040'
+                  : paymentMethod === 'CARD'
+                    ? '1020'
+                    : '1030');
+
+        if (paymentAccountCode === '1010' && paymentMethod === 'CASH' && !options?.existingGlTransactionId) {
             return null;
         }
 
-        // Find default bank account
-        const bankAccountResult = await pool.query(`
-      SELECT id FROM bank_accounts WHERE is_default = TRUE AND is_active = TRUE
+        const existing = await pool.query(
+            `SELECT id FROM bank_transactions
+             WHERE source_type = 'EXPENSE' AND source_id = $1
+               AND COALESCE(is_reversed, FALSE) = FALSE
+             LIMIT 1`,
+            [expenseId]
+        );
+        if (existing.rows.length > 0) {
+            logger.info('Bank transaction already exists for expense — skipping duplicate', {
+                expenseId,
+                expenseNumber,
+            });
+            return null;
+        }
+
+        if (!options?.existingGlTransactionId) {
+            logger.warn('createFromExpense called without existingGlTransactionId — skipping to avoid double GL', {
+                expenseId,
+                expenseNumber,
+                paymentAccountCode,
+            });
+            return null;
+        }
+
+        const existingGlTransactionId = options.existingGlTransactionId;
+
+        // Fail closed: EXPENSE_PAYMENT journal must credit the pay-from liquidity account
+        const glTouch = await pool.query<{ ok: boolean }>(
+            `SELECT EXISTS (
+                SELECT 1
+                FROM ledger_entries le
+                JOIN accounts a ON a."Id" = le."AccountId"
+                WHERE le."TransactionId" = $1
+                  AND a."AccountCode" = $2
+                  AND le."CreditAmount" > 0
+             ) AS ok`,
+            [existingGlTransactionId, paymentAccountCode]
+        );
+        if (!glTouch.rows[0]?.ok) {
+            throw new Error(
+                `Expense ${expenseNumber} GL does not credit ${paymentAccountCode} — refusing bank mirror (no mismatch)`
+            );
+        }
+
+        if (paymentAccountCode === '1040') {
+            await ensureDepositLiquidityBook(pool, 'MOBILE_MONEY');
+        } else if (paymentAccountCode === '1010' || paymentAccountCode === '1012') {
+            await ensureDepositLiquidityBook(pool, 'CASH');
+        }
+
+        const bankAccountResult = await pool.query<{ id: string; gl_code: string }>(
+            `
+      SELECT ba.id, a."AccountCode" AS gl_code
+      FROM bank_accounts ba
+      JOIN accounts a ON a."Id" = ba.gl_account_id
+      WHERE a."AccountCode" = $1 AND ba.is_active = TRUE
+      ORDER BY ba.is_default DESC, ba.created_at ASC NULLS LAST
       LIMIT 1
-    `);
+    `,
+            [paymentAccountCode]
+        );
 
         if (bankAccountResult.rows.length === 0) {
-            logger.warn('No default bank account configured');
+            logger.warn('No bank account configured for expense payment GL', {
+                expenseId,
+                paymentAccountCode,
+                paymentMethod,
+            });
             return null;
+        }
+
+        if (bankAccountResult.rows[0].gl_code !== paymentAccountCode) {
+            throw new Error(
+                `Bank book GL ${bankAccountResult.rows[0].gl_code} !== pay-from ${paymentAccountCode}`
+            );
         }
 
         const bankAccountId = bankAccountResult.rows[0].id;
 
-        // Get expense payment category
         const categoryResult = await pool.query(`
       SELECT id FROM bank_categories WHERE code = 'EXPENSE_PAYMENT'
     `);
-        const categoryId = categoryResult.rows[0]?.id;
+        const categoryId = categoryResult.rows[0]?.id || null;
 
-        return this.createTransaction(
-            {
+        const transactionId = uuidv4();
+        const transactionNumber = await BankingService.generateBankTxnNumber(pool);
+        await pool.query(
+            `
+        INSERT INTO bank_transactions (
+          id, transaction_number, bank_account_id, transaction_date,
+          type, category_id, description, reference, amount,
+          contra_account_id, gl_transaction_id, source_type, source_id,
+          is_reconciled, is_reversed, created_by
+        )
+        VALUES ($1, $2, $3, $4, 'WITHDRAWAL', $5, $6, $7, $8,
+                NULL, $9, 'EXPENSE', $10, FALSE, FALSE, $11)
+      `,
+            [
+                transactionId,
+                transactionNumber,
                 bankAccountId,
-                transactionDate: expenseDate,
-                type: 'WITHDRAWAL',
+                expenseDate,
                 categoryId,
-                description: `Expense ${expenseNumber}`,
-                reference: expenseNumber,
+                `Expense ${expenseNumber}`,
+                expenseNumber,
                 amount,
-                contraAccountId: expenseAccountId,
-                sourceType: 'EXPENSE',
-                sourceId: expenseId,
-            },
-            SYSTEM_USER_ID,
-            dbPool
+                existingGlTransactionId,
+                expenseId,
+                SYSTEM_USER_ID,
+            ]
         );
+        logger.info('Bank transaction mirrored for expense payment (linked GL — no second journal)', {
+            expenseId,
+            expenseNumber,
+            bankAccountId,
+            paymentAccountCode,
+            glTransactionId: existingGlTransactionId,
+        });
+        return BankingService.getTransactionById(transactionId, pool as pg.Pool);
     }
 
     // ---------------------------------------------------------------------------

@@ -3386,18 +3386,25 @@ export default function POSPage() {
     const validation = POSSaleSchema.safeParse(saleData);
     if (!validation.success) {
       console.error('❌ Sale validation failed:', validation.error);
-      console.error('Validation errors:', JSON.stringify(validation.error.errors, null, 2));
+      const zodIssues =
+        validation.error && 'issues' in validation.error
+          ? (validation.error as { issues: Array<{ path: (string | number)[]; message: string }> }).issues
+          : 'errors' in validation.error
+            ? (validation.error as { errors: Array<{ path: (string | number)[]; message: string }> }).errors
+            : [];
+      console.error('Validation errors:', JSON.stringify(zodIssues, null, 2));
       console.error('Sale data:', saleData);
 
       // Extract error messages safely
       let errorMessages = 'Validation failed';
-      if (validation.error && 'errors' in validation.error) {
-        errorMessages = validation.error.errors
+      if (zodIssues.length > 0) {
+        errorMessages = zodIssues
           .map((e) => {
             const field = e.path.join('.');
             const msg = e.message;
             // Add helpful context for common errors
-            if (field.includes('paymentLines')) return `💳 Payment issue: ${msg}`;
+            if (field.includes('paymentLines') || field.includes('paymentMethod'))
+              return `💳 Payment issue: ${msg}`;
             if (field.includes('lineItems')) return `📦 Product issue: ${msg}`;
             if (field.includes('totalAmount')) return `💰 Amount issue: ${msg}`;
             return `${field}: ${msg}`;

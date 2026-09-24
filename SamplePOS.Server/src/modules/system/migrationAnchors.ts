@@ -215,6 +215,48 @@ export const MIGRATION_COLUMN_ANCHORS: Readonly<
     '622_expense_reversal_ssot.sql': {
         expenses: ['reversed_by', 'reversed_at', 'reversal_reason'],
     },
+    '625_momo_airtel_payment_ssot.sql': {
+        payment_methods: ['code', 'name', 'requires_reference'],
+        accounts: ['AccountCode', 'AllowedSources', 'SystemAccountTag'],
+        bank_accounts: ['gl_account_id', 'is_active', 'account_code', 'is_main_cash', 'is_main_bank'],
+    },
+    '626_bank_mirror_no_duplicate_ssot.sql': {
+        bank_transactions: ['source_type', 'source_id', 'is_reversed', 'description', 'gl_transaction_id'],
+    },
+    '627_tenant_banking_momo_column_ssot.sql': {
+        payment_methods: ['code', 'name', 'description', 'requires_reference', 'is_active'],
+        bank_accounts: [
+            'gl_account_id',
+            'is_active',
+            'is_default',
+            'account_code',
+            'account_name',
+            'account_type',
+            'currency_code',
+            'opening_balance',
+            'is_main_cash',
+            'is_main_bank',
+        ],
+        bank_transactions: [
+            'transaction_number',
+            'bank_account_id',
+            'transaction_date',
+            'type',
+            'category_id',
+            'description',
+            'reference',
+            'amount',
+            'contra_account_id',
+            'gl_transaction_id',
+            'source_type',
+            'source_id',
+            'is_reconciled',
+            'is_reversed',
+            'created_by',
+        ],
+        bank_categories: ['code', 'name', 'direction'],
+        accounts: ['AccountCode', 'AllowedSources', 'SystemAccountTag', 'IsPostingAccount', 'IsActive'],
+    },
 };
 
 export type TableColumnMap = ReadonlyMap<string, ReadonlySet<string>>;
@@ -338,6 +380,10 @@ export const TENANT_REQUIRED_TABLES: readonly string[] = [
     'cash_registers',
     'cash_register_sessions',
     'cash_register_session_participants',
+    'bank_accounts',
+    'bank_transactions',
+    'bank_categories',
+    'payment_methods',
 ] as const;
 
 /** Clear cached anchors (tests). */

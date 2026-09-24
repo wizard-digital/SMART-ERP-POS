@@ -1,0 +1,77 @@
+{
+  "ok": true,
+  "generatedAt": "2026-09-24T23:15:11.055Z",
+  "title": "PROOF_MOMO_AIRTEL_TENANT_SSOT_EVIDENCE",
+  "schemaVersion": 627,
+  "gates": {
+    "jestServer": {
+      "ok": true,
+      "passed": 27,
+      "failed": 0,
+      "suites": 5
+    },
+    "vitestClient": {
+      "ok": true,
+      "passed": 7,
+      "failed": 0
+    },
+    "executedScript": {
+      "ok": true,
+      "checks": 10,
+      "passed": 10
+    }
+  },
+  "checks": [
+    {
+      "id": "schema_version_627",
+      "ok": true,
+      "detail": "CURRENT_SCHEMA_VERSION=627"
+    },
+    {
+      "id": "safeParse_MOBILE_MONEY",
+      "ok": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "safeParse_AIRTEL_MONEY",
+      "ok": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "safeParse_rejects_unknown_method",
+      "ok": true,
+      "detail": "rejected as expected"
+    },
+    {
+      "id": "sql_625_heal",
+      "ok": true,
+      "detail": "625_momo_airtel_payment_ssot.sql present"
+    },
+    {
+      "id": "sql_626_no_dup",
+      "ok": true,
+      "detail": "626 unique live bank mirrors"
+    },
+    {
+      "id": "sql_627_column_ssot",
+      "ok": true,
+      "detail": "627 heals missing banking/MoMo columns"
+    },
+    {
+      "id": "postconditions_571_625_554_626_627",
+      "ok": true,
+      "detail": "554_sales_liquidity_allowed_sources.sql, 571_airtel_money_payment_method.sql, 625_momo_airtel_payment_ssot.sql, 626_bank_mirror_no_duplicate_ssot.sql, 627_tenant_banking_momo_column_ssot.sql"
+    },
+    {
+      "id": "zod_ssot_lists_airtel",
+      "ok": true,
+      "detail": "shared/zod/pos-sale.ts"
+    },
+    {
+      "id": "pos_ui_emits_both",
+      "ok": true,
+      "detail": "POSPage buttons"
+    }
+  ],
+  "preCommitGate": "PASS"
+}

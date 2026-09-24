@@ -1,0 +1,305 @@
+{
+  "ok": true,
+  "generatedAt": "2026-09-24T23:10:50.967Z",
+  "title": "PROOF_MOMO_AIRTEL_TENANT_GAPS",
+  "host": "209.38.203.138",
+  "expectedSchemaVersion": 627,
+  "tenants": [
+    {
+      "db": "pos_tenant_acme_store",
+      "slug": "acme_store",
+      "ok": false,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ],
+      "flags": {
+        "schemaVersion": 624,
+        "airtelEnum": true,
+        "paymentMethodsTable": true,
+        "airtelPaymentMethodRow": true,
+        "momoPaymentMethodRow": true,
+        "has1040": true,
+        "acct1040Active": true,
+        "acct1040Sources": [
+          "PAYROLL",
+          "TREASURY_PETTY_CASH",
+          "EXPENSE_PAYMENT",
+          "SYSTEM_CORRECTION",
+          "PAYMENT_DEPOSIT",
+          "SALES_REFUND",
+          "TREASURY_REVERSAL",
+          "SALES_INVOICE",
+          "TREASURY_TRANSFER",
+          "TREASURY_DEPOSIT",
+          "SUPPLIER_PAYMENT",
+          "PAYMENT_RECEIPT"
+        ],
+        "hasSalesInvoiceOn1040": true,
+        "hasExpensePaymentOn1040": true,
+        "momoBankBook": false,
+        "missingColumns": [],
+        "uqExpenseMirror": false,
+        "uqSaleMirror": false,
+        "pendingMomoMigrations": 3
+      },
+      "error": null
+    },
+    {
+      "db": "pos_tenant_blis",
+      "slug": "blis",
+      "ok": false,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ],
+      "flags": {
+        "schemaVersion": 624,
+        "airtelEnum": true,
+        "paymentMethodsTable": true,
+        "airtelPaymentMethodRow": true,
+        "momoPaymentMethodRow": true,
+        "has1040": true,
+        "acct1040Active": true,
+        "acct1040Sources": [
+          "PAYMENT_DEPOSIT",
+          "PAYROLL",
+          "SALES_REFUND",
+          "TREASURY_PETTY_CASH",
+          "EXPENSE_PAYMENT",
+          "TREASURY_REVERSAL",
+          "SALES_INVOICE",
+          "TREASURY_TRANSFER",
+          "SYSTEM_CORRECTION",
+          "TREASURY_DEPOSIT",
+          "PAYMENT_RECEIPT",
+          "SUPPLIER_PAYMENT"
+        ],
+        "hasSalesInvoiceOn1040": true,
+        "hasExpensePaymentOn1040": true,
+        "momoBankBook": false,
+        "missingColumns": [],
+        "uqExpenseMirror": false,
+        "uqSaleMirror": false,
+        "pendingMomoMigrations": 3
+      },
+      "error": null
+    },
+    {
+      "db": "pos_tenant_bliss_interior_ltd",
+      "slug": "bliss_interior_ltd",
+      "ok": false,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ],
+      "flags": {
+        "schemaVersion": 624,
+        "airtelEnum": true,
+        "paymentMethodsTable": true,
+        "airtelPaymentMethodRow": true,
+        "momoPaymentMethodRow": true,
+        "has1040": true,
+        "acct1040Active": true,
+        "acct1040Sources": [
+          "PAYMENT_DEPOSIT",
+          "SALES_REFUND",
+          "TREASURY_PETTY_CASH",
+          "EXPENSE_PAYMENT",
+          "TREASURY_REVERSAL",
+          "SALES_INVOICE",
+          "TREASURY_TRANSFER",
+          "SYSTEM_CORRECTION",
+          "TREASURY_DEPOSIT",
+          "PAYMENT_RECEIPT",
+          "SUPPLIER_PAYMENT",
+          "PAYROLL"
+        ],
+        "hasSalesInvoiceOn1040": true,
+        "hasExpensePaymentOn1040": true,
+        "momoBankBook": false,
+        "missingColumns": [],
+        "uqExpenseMirror": false,
+        "uqSaleMirror": false,
+        "pendingMomoMigrations": 3
+      },
+      "error": null
+    },
+    {
+      "db": "pos_tenant_dynamics",
+      "slug": "dynamics",
+      "ok": false,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ],
+      "flags": {
+        "schemaVersion": 624,
+        "airtelEnum": true,
+        "paymentMethodsTable": true,
+        "airtelPaymentMethodRow": true,
+        "momoPaymentMethodRow": true,
+        "has1040": true,
+        "acct1040Active": true,
+        "acct1040Sources": [
+          "PAYMENT_DEPOSIT",
+          "SALES_REFUND",
+          "TREASURY_PETTY_CASH",
+          "EXPENSE_PAYMENT",
+          "TREASURY_REVERSAL",
+          "SALES_INVOICE",
+          "TREASURY_TRANSFER",
+          "SYSTEM_CORRECTION",
+          "TREASURY_DEPOSIT",
+          "PAYMENT_RECEIPT",
+          "SUPPLIER_PAYMENT",
+          "PAYROLL"
+        ],
+        "hasSalesInvoiceOn1040": true,
+        "hasExpensePaymentOn1040": true,
+        "momoBankBook": false,
+        "missingColumns": [],
+        "uqExpenseMirror": false,
+        "uqSaleMirror": false,
+        "pendingMomoMigrations": 3
+      },
+      "error": null
+    },
+    {
+      "db": "pos_tenant_henber_pharmacy",
+      "slug": "henber_pharmacy",
+      "ok": false,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ],
+      "flags": {
+        "schemaVersion": 624,
+        "airtelEnum": true,
+        "paymentMethodsTable": true,
+        "airtelPaymentMethodRow": true,
+        "momoPaymentMethodRow": true,
+        "has1040": true,
+        "acct1040Active": true,
+        "acct1040Sources": [
+          "PAYMENT_DEPOSIT",
+          "SALES_REFUND",
+          "TREASURY_PETTY_CASH",
+          "EXPENSE_PAYMENT",
+          "TREASURY_REVERSAL",
+          "SALES_INVOICE",
+          "TREASURY_TRANSFER",
+          "SYSTEM_CORRECTION",
+          "TREASURY_DEPOSIT",
+          "PAYMENT_RECEIPT",
+          "SUPPLIER_PAYMENT",
+          "PAYROLL"
+        ],
+        "hasSalesInvoiceOn1040": true,
+        "hasExpensePaymentOn1040": true,
+        "momoBankBook": false,
+        "missingColumns": [],
+        "uqExpenseMirror": false,
+        "uqSaleMirror": false,
+        "pendingMomoMigrations": 3
+      },
+      "error": null
+    }
+  ],
+  "affected": [
+    {
+      "slug": "acme_store",
+      "db": "pos_tenant_acme_store",
+      "schemaVersion": 624,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ]
+    },
+    {
+      "slug": "blis",
+      "db": "pos_tenant_blis",
+      "schemaVersion": 624,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ]
+    },
+    {
+      "slug": "bliss_interior_ltd",
+      "db": "pos_tenant_bliss_interior_ltd",
+      "schemaVersion": 624,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ]
+    },
+    {
+      "slug": "dynamics",
+      "db": "pos_tenant_dynamics",
+      "schemaVersion": 624,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ]
+    },
+    {
+      "slug": "henber_pharmacy",
+      "db": "pos_tenant_henber_pharmacy",
+      "schemaVersion": 624,
+      "issues": [
+        "missing_bank_book:1040",
+        "missing_index:uq_bank_txn_expense_source_live",
+        "missing_index:uq_bank_txn_sale_source_desc_live",
+        "pending_momo_migrations:3"
+      ]
+    }
+  ],
+  "healthy": [],
+  "issueSummary": {
+    "missing_bank_book": [
+      "acme_store",
+      "blis",
+      "bliss_interior_ltd",
+      "dynamics",
+      "henber_pharmacy"
+    ],
+    "missing_index": [
+      "acme_store",
+      "acme_store",
+      "blis",
+      "blis",
+      "bliss_interior_ltd",
+      "bliss_interior_ltd",
+      "dynamics",
+      "dynamics",
+      "henber_pharmacy",
+      "henber_pharmacy"
+    ],
+    "pending_momo_migrations": [
+      "acme_store",
+      "blis",
+      "bliss_interior_ltd",
+      "dynamics",
+      "henber_pharmacy"
+    ]
+  }
+}

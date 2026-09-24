@@ -494,9 +494,9 @@ async function main() {
     'utf8'
   );
   const versionAligned =
-    CURRENT_SCHEMA_VERSION === 622 &&
+    CURRENT_SCHEMA_VERSION === 627 &&
     versionFile.includes('SELECT 621') &&
-    /CURRENT_SCHEMA_VERSION = 622/.test(versionConst);
+    /CURRENT_SCHEMA_VERSION = 627/.test(versionConst);
 
   const ok =
     jestResult.ok &&
@@ -549,7 +549,7 @@ async function main() {
     `| Gate | Result | Detail |`,
     `|------|--------|--------|`,
     `| Jest SSOT tests | ${jestResult.ok ? 'PASS' : 'FAIL'} | ${jestResult.passed} passed, ${jestResult.failed} failed |`,
-    `| Version 622 + 621 stamp | ${versionAligned ? 'PASS' : 'FAIL'} | const 622 and 621 stamp file |`,
+    `| Version 624 + 621 stamp | ${versionAligned ? 'PASS' : 'FAIL'} | const 624 and 621 stamp file |`,
     `| Critical column coverage | ${criticalCoverage ? 'PASS' : 'FAIL'} | customer_group_id, pos_session_policy, cash_register_session_id, employee_id |`,
     `| Poisoned 502 ledger heal | ${poisonedHeal.ok ? 'PASS' : 'FAIL'} | drifted=${poisonedHeal.drifted502} restored=${poisonedHeal.columnRestored} |`,
     `| Complete tenants identical SSOT | ${mismatches.length === 0 && current.length > 0 ? 'PASS' : 'FAIL'} | ${current.map((s) => s.slug).join(', ') || '(none)'} |`,

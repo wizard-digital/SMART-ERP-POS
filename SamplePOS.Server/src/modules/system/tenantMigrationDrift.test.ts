@@ -5,6 +5,7 @@ import {
   findDriftedMigrationFiles,
   MIGRATION_COLUMN_ANCHORS,
   TENANT_REQUIRED_TABLES,
+  migrationHasColumnDrift,
 } from './migrationAnchors.js';
 import { CURRENT_SCHEMA_VERSION } from '../../constants/schemaVersion.js';
 
@@ -87,13 +88,33 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(decision).toBe('copy');
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621 stamp file and 622 expense reverse', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(622);
+  it('CURRENT_SCHEMA_VERSION matches 621–627 MoMo/banking column SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(627);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
     const reverseSql = fs.readFileSync(path.join(sqlDir, '622_expense_reversal_ssot.sql'), 'utf8');
     expect(reverseSql).toContain('REVERSED');
+    const capitalSql = fs.readFileSync(path.join(sqlDir, '624_owner_capital_coa_heal.sql'), 'utf8');
+    expect(capitalSql).toContain('OWNER_CAPITAL');
+    expect(capitalSql).toContain("'3200'");
+    expect(capitalSql).toContain("'3300'");
+    expect(capitalSql).toContain('Owner Capital');
+    const momoSql = fs.readFileSync(path.join(sqlDir, '625_momo_airtel_payment_ssot.sql'), 'utf8');
+    expect(momoSql).toContain('AIRTEL_MONEY');
+    expect(momoSql).toContain("'1040'");
+    expect(momoSql).toContain('SALES_INVOICE');
+    expect(momoSql).toContain('SELECT 625');
+    const dupSql = fs.readFileSync(path.join(sqlDir, '626_bank_mirror_no_duplicate_ssot.sql'), 'utf8');
+    expect(dupSql).toContain('uq_bank_txn_expense_source_live');
+    expect(dupSql).toContain('uq_bank_txn_sale_source_desc_live');
+    expect(dupSql).toContain('SELECT 626');
+    const colSql = fs.readFileSync(path.join(sqlDir, '627_tenant_banking_momo_column_ssot.sql'), 'utf8');
+    expect(colSql).toContain('ADD COLUMN IF NOT EXISTS');
+    expect(colSql).toContain('gl_transaction_id');
+    expect(colSql).toContain('is_main_cash');
+    expect(colSql).toContain('AllowedSources');
+    expect(colSql).toContain('SELECT 627');
     const sessionSql = fs.readFileSync(path.join(sqlDir, '620_pos_session_policy_ssot.sql'), 'utf8');
     expect(sessionSql).toMatch(/pg_constraint WHERE conname = 'chk_pos_session_policy'/);
     expect(sessionSql).not.toMatch(/^ALTER TABLE system_settings\s+ADD CONSTRAINT/m);
@@ -105,13 +126,89 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(catSql).not.toMatch(/^\s*COMMIT\s*;/m);
   });
 
-  it('requires session tables on every tenant', () => {
+  it('requires banking + MoMo tables on every tenant (no missing-table drift)', () => {
     expect(TENANT_REQUIRED_TABLES).toEqual(
       expect.arrayContaining([
         'cash_register_session_participants',
         'accounts',
         'expenses',
+        'bank_accounts',
+        'bank_transactions',
+        'bank_categories',
+        'payment_methods',
       ]),
     );
+  });
+});
+
+describe('tenant schema SSOT — column drift fail-closed', () => {
+  it('flags 627 when bank_transactions.gl_transaction_id is missing', () => {
+    const columnMap = new Map<string, Set<string>>([
+      ['bank_transactions', new Set(['id', 'amount', 'source_type'])],
+      [
+        'bank_accounts',
+        new Set([
+          'id',
+          'gl_account_id',
+          'account_code',
+          'is_main_cash',
+          'is_main_bank',
+          'is_active',
+          'is_default',
+          'account_name',
+          'account_type',
+          'currency_code',
+          'opening_balance',
+        ]),
+      ],
+      ['payment_methods', new Set(['code', 'name', 'description', 'requires_reference', 'is_active'])],
+      ['bank_categories', new Set(['code', 'name', 'direction'])],
+      ['accounts', new Set(['AccountCode', 'AllowedSources', 'SystemAccountTag', 'IsPostingAccount', 'IsActive'])],
+    ]);
+    expect(migrationHasColumnDrift('627_tenant_banking_momo_column_ssot.sql', columnMap)).toBe(true);
+  });
+
+  it('passes 627 when all MoMo/banking columns exist', () => {
+    const columnMap = new Map<string, Set<string>>([
+      [
+        'bank_transactions',
+        new Set([
+          'transaction_number',
+          'bank_account_id',
+          'transaction_date',
+          'type',
+          'category_id',
+          'description',
+          'reference',
+          'amount',
+          'contra_account_id',
+          'gl_transaction_id',
+          'source_type',
+          'source_id',
+          'is_reconciled',
+          'is_reversed',
+          'created_by',
+        ]),
+      ],
+      [
+        'bank_accounts',
+        new Set([
+          'gl_account_id',
+          'is_active',
+          'is_default',
+          'account_code',
+          'account_name',
+          'account_type',
+          'currency_code',
+          'opening_balance',
+          'is_main_cash',
+          'is_main_bank',
+        ]),
+      ],
+      ['payment_methods', new Set(['code', 'name', 'description', 'requires_reference', 'is_active'])],
+      ['bank_categories', new Set(['code', 'name', 'direction'])],
+      ['accounts', new Set(['AccountCode', 'AllowedSources', 'SystemAccountTag', 'IsPostingAccount', 'IsActive'])],
+    ]);
+    expect(migrationHasColumnDrift('627_tenant_banking_momo_column_ssot.sql', columnMap)).toBe(false);
   });
 });
