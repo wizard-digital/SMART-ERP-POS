@@ -20,8 +20,8 @@ function read(rel: string): string {
 }
 
 describe('MoMo / Airtel — no tenant mismatch, no missing columns', () => {
-  it('CURRENT_SCHEMA_VERSION is 627 with column heal + anchors', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(627);
+  it('CURRENT_SCHEMA_VERSION is 628 with column heal + anchors', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(628);
     const sql627 = readFileSync(join(sharedSql, '627_tenant_banking_momo_column_ssot.sql'), 'utf8');
     expect(sql627).toContain('ADD COLUMN IF NOT EXISTS');
     expect(sql627).toContain('gl_transaction_id');
@@ -60,6 +60,7 @@ describe('MoMo / Airtel — no tenant mismatch, no missing columns', () => {
         '625_momo_airtel_payment_ssot.sql',
         '626_bank_mirror_no_duplicate_ssot.sql',
         '627_tenant_banking_momo_column_ssot.sql',
+        '628_drop_ledger_reference_unique_ssot.sql',
       ]),
     );
   });

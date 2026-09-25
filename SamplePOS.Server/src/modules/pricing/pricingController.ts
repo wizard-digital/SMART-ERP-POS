@@ -18,13 +18,14 @@ import {
     GetPriceRequestSchema,
     BulkPriceRequestSchema,
 } from '../../../../shared/zod/priceRules.js';
+import { PRICING_LIST_MAX_LIMIT } from '../../../../shared/pricing/listLimit.js';
 import * as pricingEngine from './pricingEngineService.js';
 
 // ---- Param / Query schemas ----
 const UuidParamSchema = z.object({ id: z.string().uuid() });
 const PaginationQuerySchema = z.object({
     page: z.coerce.number().int().positive().default(1),
-    limit: z.coerce.number().int().positive().max(200).default(50),
+    limit: z.coerce.number().int().positive().max(PRICING_LIST_MAX_LIMIT).default(50),
 });
 
 // ============================================================================

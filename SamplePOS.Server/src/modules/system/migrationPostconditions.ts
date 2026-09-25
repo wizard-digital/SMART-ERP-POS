@@ -26,6 +26,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '625_momo_airtel_payment_ssot.sql',
     '626_bank_mirror_no_duplicate_ssot.sql',
     '627_tenant_banking_momo_column_ssot.sql',
+    '628_drop_ledger_reference_unique_ssot.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -384,6 +385,32 @@ export async function verifyMigrationPostcondition(
                 momoOk.rows[0]?.ok === true &&
                 idxOk.rows[0]?.ok === true
             );
+        }
+        case '628_drop_ledger_reference_unique_ssot.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT (
+                    NOT EXISTS (
+                      SELECT 1 FROM pg_constraint
+                      WHERE conname = 'uq_ledger_transactions_reference'
+                    )
+                    AND NOT EXISTS (
+                      SELECT 1 FROM pg_indexes
+                      WHERE schemaname = 'public'
+                        AND indexname = 'uq_ledger_transactions_reference'
+                    )
+                    AND NOT EXISTS (
+                      SELECT 1 FROM pg_indexes
+                      WHERE schemaname = 'public'
+                        AND indexname = 'idx_ledger_transactions_reference_unique'
+                    )
+                    AND EXISTS (
+                      SELECT 1 FROM pg_indexes
+                      WHERE schemaname = 'public'
+                        AND indexname = 'idx_ledger_transactions_reference'
+                    )
+                 ) AS ok`,
+            );
+            return rows[0]?.ok === true;
         }
         default:
             return true;

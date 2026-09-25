@@ -4,6 +4,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { pricingApi } from '../api/pricing';
+import { fetchAllPages, PRICING_LIST_MAX_LIMIT } from '../../../shared/pricing/listLimit';
 import type {
   CreateProductCategoryInput,
   UpdateProductCategoryInput,
@@ -67,7 +68,20 @@ export function useCategories(filters: CategoryFilters = {}) {
 export function useAllCategories() {
   return useQuery({
     queryKey: [...pricingKeys.categories(), 'all'] as const,
-    queryFn: () => pricingApi.listCategories({ limit: 500 }),
+    queryFn: async () => {
+      const data = await fetchAllPages((page, limit) =>
+        pricingApi.listCategories({ page, limit }),
+      );
+      return {
+        data,
+        pagination: {
+          page: 1,
+          limit: data.length || PRICING_LIST_MAX_LIMIT,
+          total: data.length,
+          totalPages: 1,
+        },
+      };
+    },
     staleTime: 0,
   });
 }

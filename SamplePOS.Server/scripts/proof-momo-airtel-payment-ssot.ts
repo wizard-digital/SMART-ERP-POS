@@ -48,8 +48,8 @@ const posPage = readFileSync(resolve(root, 'samplepos.client/src/pages/pos/POSPa
 
 const checks = [
   {
-    id: 'schema_version_627',
-    ok: CURRENT_SCHEMA_VERSION === 627,
+    id: 'schema_version_628',
+    ok: CURRENT_SCHEMA_VERSION === 628,
     detail: `CURRENT_SCHEMA_VERSION=${CURRENT_SCHEMA_VERSION}`,
   },
   {

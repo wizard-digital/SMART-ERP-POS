@@ -88,8 +88,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(decision).toBe('copy');
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–627 MoMo/banking column SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(627);
+  it('CURRENT_SCHEMA_VERSION matches 621–628 MoMo/banking column SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(628);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -115,6 +115,15 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(colSql).toContain('is_main_cash');
     expect(colSql).toContain('AllowedSources');
     expect(colSql).toContain('SELECT 627');
+    const refSql = fs.readFileSync(path.join(sqlDir, '628_drop_ledger_reference_unique_ssot.sql'), 'utf8');
+    expect(refSql).toContain('DROP CONSTRAINT IF EXISTS uq_ledger_transactions_reference');
+    expect(refSql).toContain('DROP INDEX IF EXISTS uq_ledger_transactions_reference');
+    expect(refSql).toContain('DROP INDEX IF EXISTS idx_ledger_transactions_reference_unique');
+    expect(refSql).toContain('idx_ledger_transactions_reference');
+    const replay = fs.readFileSync(path.join(sqlDir, 'concurrency_idempotency_fixes.sql'), 'utf8');
+    expect(replay).not.toContain('ADD CONSTRAINT uq_ledger_transactions_reference');
+    expect(replay).toContain('DROP CONSTRAINT IF EXISTS uq_ledger_transactions_reference');
+    expect(refSql).toContain('SELECT 628');
     const sessionSql = fs.readFileSync(path.join(sqlDir, '620_pos_session_policy_ssot.sql'), 'utf8');
     expect(sessionSql).toMatch(/pg_constraint WHERE conname = 'chk_pos_session_policy'/);
     expect(sessionSql).not.toMatch(/^ALTER TABLE system_settings\s+ADD CONSTRAINT/m);

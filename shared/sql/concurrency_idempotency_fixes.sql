@@ -18,25 +18,19 @@
 BEGIN;
 
 -- ============================================================================
--- FIX 1: Add UNIQUE constraint on (ReferenceType, ReferenceId)
+-- FIX 1: Do NOT unique (ReferenceType, ReferenceId)
 -- ============================================================================
--- This prevents duplicate GL postings for the same source transaction
+-- Migration 017 dropped this. Split journals (sale + COGS, expense + payment)
+-- and reversals share a document id on purpose. Idempotency is
+-- ledger_transactions_IdempotencyKey_key. Re-adding this constraint is how
+-- Bliss rejected expense reverse with HTTP 409 while other tenants did not.
+-- 628 drops it again; this file must not put it back on a later full replay.
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint 
-        WHERE conname = 'uq_ledger_transactions_reference'
-    ) THEN
-        ALTER TABLE ledger_transactions 
-        ADD CONSTRAINT uq_ledger_transactions_reference 
-        UNIQUE ("ReferenceType", "ReferenceId");
-        
-        RAISE NOTICE 'Added unique constraint on (ReferenceType, ReferenceId)';
-    ELSE
-        RAISE NOTICE 'Unique constraint already exists';
-    END IF;
-END $$;
+ALTER TABLE ledger_transactions
+  DROP CONSTRAINT IF EXISTS uq_ledger_transactions_reference;
+
+DROP INDEX IF EXISTS uq_ledger_transactions_reference;
+DROP INDEX IF EXISTS idx_ledger_transactions_reference_unique;
 
 -- ============================================================================
 -- FIX 2: Remove duplicate invoice payment triggers
