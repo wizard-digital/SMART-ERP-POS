@@ -53,3 +53,16 @@ export function isBrokenMoneyMinStepPair(min: number, step: number): boolean {
 export function moneyStepShouldOmitHtmlMin(step: string | number = MONEY_INPUT_STEP): boolean {
   return String(step) === '1' || Number(step) === 1;
 }
+
+/**
+ * One JSX number tag that pairs step 1 with a min Chromium will not align to
+ * a whole amount. `min={0.01}` is the Receive Payment failure: 200000 is rejected
+ * and the nearest allowed values are *.01.
+ */
+export function jsxMoneyInputRejectsWholeAmount(tag: string): boolean {
+  if (!/\bstep\s*=\s*(?:["']1["']|\{\s*1\s*\})/.test(tag)) return false;
+  const min = tag.match(/\bmin\s*=\s*(?:["']([0-9]*\.?[0-9]+)["']|\{\s*([0-9]*\.?[0-9]+)\s*\})/);
+  if (!min) return false;
+  const n = Number(min[1] ?? min[2]);
+  return Number.isFinite(n) && isBrokenMoneyMinStepPair(n, 1);
+}

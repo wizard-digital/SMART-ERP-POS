@@ -29,6 +29,23 @@ function readClient(rel) {
   return readFileSync(join(clientRoot, rel), 'utf8');
 }
 
+/** Attributes of the shipping Receive Payment amount field. Fail if the field moves. */
+function parseReceivePaymentAmount(src) {
+  const at = src.indexOf('Receive Payment</h3>');
+  if (at < 0) throw new Error('Receive Payment heading missing');
+  const formOpen = src.slice(at, at + 900);
+  const noValidate = /<form\b[^>]*\bnoValidate\b/.test(formOpen);
+  const amountAt = src.indexOf('Amount *</label>', at);
+  const methodAt = src.indexOf('Payment Method', amountAt);
+  if (amountAt < 0 || methodAt < 0) throw new Error('amount field not found');
+  const block = src.slice(amountAt, methodAt);
+  const step = block.match(/\bstep\s*=\s*(?:"([^"]+)"|'([^']+)'|\{\s*([0-9]+)\s*\})/);
+  const stepValue = step ? (step[1] ?? step[2] ?? step[3]) : '';
+  const min = block.match(/\bmin\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*([^}]+)\s*\})/);
+  const minValue = min ? (min[1] ?? min[2] ?? min[3]).trim() : '';
+  return { noValidate, stepValue, minValue, block };
+}
+
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 
@@ -54,6 +71,71 @@ try {
     'CHROMIUM_BUG_MIN_001_BLOCKS_1000',
     brokenValidity.stepMismatch === true && brokenSubmitted === false,
     JSON.stringify({ brokenValidity, brokenSubmitted }),
+  );
+
+  await page.setContent(
+    `<form id="f"><input id="a" type="number" step="1" min="0.01" value="200000" required>
+     <button type="submit">Go</button></form>
+     <script>
+       window.__submitted = false;
+       document.getElementById('f').addEventListener('submit', (e) => {
+         e.preventDefault(); window.__submitted = true;
+       });
+     </script>`,
+  );
+  const wholeBlocked = await page.$eval('#a', (el) => ({
+    stepMismatch: el.validity.stepMismatch,
+    message: el.validationMessage,
+  }));
+  await page.click('button');
+  const wholeSubmitted = await page.evaluate(() => window.__submitted);
+  gate(
+    'CHROMIUM_BUG_MIN_001_BLOCKS_200000',
+    wholeBlocked.stepMismatch === true && wholeSubmitted === false && /199999\.01/.test(wholeBlocked.message),
+    JSON.stringify({ wholeBlocked, wholeSubmitted }),
+  );
+
+  const shipped = parseReceivePaymentAmount(readClient('src/components/customers/CustomerDetailModal.tsx'));
+  gate(
+    'SHIPPED_FIELD_STEP_1_NO_MIN',
+    shipped.noValidate === true && shipped.stepValue === '1' && shipped.minValue === '',
+    JSON.stringify(shipped),
+  );
+  const minAttr = shipped.minValue ? ` min="${shipped.minValue}"` : '';
+  await page.setContent(
+    `<form id="f" ${shipped.noValidate ? 'novalidate' : ''}>
+       <label for="a">Amount *</label>
+       <input id="a" type="number" step="${shipped.stepValue}"${minAttr} max="202499.99" required>
+       <button type="submit">Save Payment</button>
+     </form>
+     <script>
+       window.__saved = null;
+       document.getElementById('f').addEventListener('submit', (e) => {
+         e.preventDefault();
+         const input = document.getElementById('a');
+         window.__saved = { value: input.value, stepMismatch: input.validity.stepMismatch, message: input.validationMessage };
+       });
+     </script>`,
+  );
+  const amount = page.locator('#a');
+  await amount.click();
+  await amount.fill('200000');
+  await page.getByRole('button', { name: 'Save Payment' }).click();
+  const typedWhole = await page.evaluate(() => window.__saved);
+  gate(
+    'TYPED_200000_SAVES',
+    typedWhole?.value === '200000' && typedWhole.stepMismatch === false,
+    JSON.stringify(typedWhole),
+  );
+  await page.evaluate(() => { window.__saved = null; });
+  await amount.click();
+  await amount.fill('202499.99');
+  await page.getByRole('button', { name: 'Save Payment' }).click();
+  const typedOutstanding = await page.evaluate(() => window.__saved);
+  gate(
+    'TYPED_202499_99_SAVES',
+    typedOutstanding?.value === '202499.99',
+    JSON.stringify(typedOutstanding),
   );
 
   // B: min=0 + step=1 snaps decimals (anti-pattern)
@@ -142,6 +224,18 @@ try {
 
   const ssot = readClient('src/utils/numberInputSsot.ts');
   gate('WIRING_SSOT_STEP', ssot.includes("export const MONEY_INPUT_STEP = '1'"), 'MONEY_INPUT_STEP');
+
+  const receive = readClient('src/components/customers/CustomerDetailModal.tsx');
+  const receiveAt = receive.indexOf('Receive Payment</h3>');
+  const receiveForm = receive.slice(receiveAt, receiveAt + 900);
+  const amountAt = receive.indexOf('Amount *</label>', receiveAt);
+  const receiveAmount = receive.slice(amountAt, receive.indexOf('Payment Method', amountAt));
+  gate('WIRING_RECEIVE_NOVALIDATE', /<form\b[^>]*\bnoValidate\b/.test(receiveForm), 'Receive Payment form');
+  gate(
+    'WIRING_RECEIVE_STEP',
+    /step="1"/.test(receiveAmount) && !/\bmin=/.test(receiveAmount),
+    'amount step=1, HTML min omitted',
+  );
 } finally {
   await browser.close();
 }
@@ -159,7 +253,7 @@ const json = {
   moneyInputStep: '1',
   gates,
   integrity:
-    'Chromium E2E: ↑↓ ±1 keeping cents (no HTML min); min=0.01+step=1 must not ship; banking Add Transaction noValidate + step=1 + JS amount>0.',
+    'Chromium types 200000 and 202499.99 into the Receive Payment field parsed from CustomerDetailModal and clicks Save Payment. min=0.01+step=1 still blocks 200000. Banking Add Transaction noValidate + step=1 + JS amount>0.',
   runner: 'npm run proof:money-input-step',
 };
 

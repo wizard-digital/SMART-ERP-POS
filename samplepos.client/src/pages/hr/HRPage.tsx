@@ -1776,7 +1776,6 @@ function PayrollTab() {
                                                                 {payMode === 'PARTIAL' && checked && (
                                                                     <input
                                                                         type="number"
-                                                                        min={0.01}
                                                                         max={rem}
                                                                         step="1"
                                                                         value={payPartialAmounts[e.employeeId] ?? ''}

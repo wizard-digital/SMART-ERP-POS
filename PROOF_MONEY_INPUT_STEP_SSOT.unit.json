@@ -1,9 +1,9 @@
 {
   "proof": "MONEY_INPUT_STEP_SSOT_UNIT",
   "verdict": "PASS",
-  "generatedAt": "2026-09-23T22:08:01.316Z",
-  "passed": 17,
-  "total": 17,
+  "generatedAt": "2026-09-25T17:47:06.798Z",
+  "passed": 23,
+  "total": 23,
   "gates": [
     {
       "id": "SSOT_CONSTANT",
@@ -19,6 +19,16 @@
       "id": "MODEL_BUG_PAIR",
       "ok": true,
       "detail": "1000 stepMismatch under min=0.01"
+    },
+    {
+      "id": "MODEL_200000",
+      "ok": true,
+      "detail": "Receive Payment 200000"
+    },
+    {
+      "id": "MODEL_JSX_MIN_EXPR",
+      "ok": true,
+      "detail": "min={0.01} is the same trap as min=\"0.01\""
     },
     {
       "id": "INPUT_DEFAULT_RESOLVE",
@@ -79,6 +89,26 @@
       "id": "DEPOSIT_NO_MIN_STEP1",
       "ok": true,
       "detail": "deposit worksheet money fields"
+    },
+    {
+      "id": "RECEIVE_PAYMENT_NOVALIDATE",
+      "ok": true,
+      "detail": "payment form noValidate"
+    },
+    {
+      "id": "RECEIVE_PAYMENT_STEP",
+      "ok": true,
+      "detail": "step=1"
+    },
+    {
+      "id": "RECEIVE_PAYMENT_NO_MIN",
+      "ok": true,
+      "detail": "HTML min omitted"
+    },
+    {
+      "id": "RECEIVE_PAYMENT_WHOLE_OK",
+      "ok": true,
+      "detail": "whole shilling is not a step mismatch"
     },
     {
       "id": "NO_FRACTIONAL_MONEY_STEP",

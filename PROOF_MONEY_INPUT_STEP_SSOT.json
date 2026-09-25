@@ -1,16 +1,36 @@
 {
   "proof": "MONEY_INPUT_STEP_SSOT",
   "verdict": "PASS",
-  "generatedAt": "2026-09-23T22:08:03.561Z",
+  "generatedAt": "2026-09-25T17:47:10.019Z",
   "mode": "chromium-e2e",
-  "passed": 15,
-  "total": 15,
+  "passed": 21,
+  "total": 21,
   "moneyInputStep": "1",
   "gates": [
     {
       "id": "CHROMIUM_BUG_MIN_001_BLOCKS_1000",
       "ok": true,
       "detail": "{\"brokenValidity\":{\"stepMismatch\":true,\"valid\":false},\"brokenSubmitted\":false}"
+    },
+    {
+      "id": "CHROMIUM_BUG_MIN_001_BLOCKS_200000",
+      "ok": true,
+      "detail": "{\"wholeBlocked\":{\"stepMismatch\":true,\"message\":\"Please enter a valid value. The two nearest valid values are 199999.01 and 200000.01.\"},\"wholeSubmitted\":false}"
+    },
+    {
+      "id": "SHIPPED_FIELD_STEP_1_NO_MIN",
+      "ok": true,
+      "detail": "{\"noValidate\":true,\"stepValue\":\"1\",\"minValue\":\"\",\"block\":\"Amount *</label>\\n                                                            <input\\n                                                                type=\\\"number\\\"\\n                                                                value={payAmount}\\n                                                                onChange={(e) => setPayAmount(e.target.value)}\\n                                                                max={payMethod === 'DEPOSIT'\\n                                                                    ? depositPaymentCap(selectedInvoice.outstanding, depositBalance.available).toNumber()\\n                                                                    : money2(selectedInvoice.outstanding).toNumber()}\\n                                                                step=\\\"1\\\"\\n                                                                placeholder={`Max: ${payMethod === 'DEPOSIT'\\n                                                                    ? depositPaymentCap(selectedInvoice.outstanding, depositBalance.available).toFixed(2)\\n                                                                    : money2(selectedInvoice.outstanding).toFixed(2)}`}\\n                                                                className=\\\"w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500\\\"\\n                                                                autoFocus\\n                                                                required\\n                                                            />\\n                                                        </div>\\n                                                        <div>\\n                                                            <label className=\\\"block text-sm font-medium text-gray-700 mb-1\\\">\"}"
+    },
+    {
+      "id": "TYPED_200000_SAVES",
+      "ok": true,
+      "detail": "{\"value\":\"200000\",\"stepMismatch\":false,\"message\":\"\"}"
+    },
+    {
+      "id": "TYPED_202499_99_SAVES",
+      "ok": true,
+      "detail": "{\"value\":\"202499.99\",\"stepMismatch\":true,\"message\":\"Please enter a valid value. The nearest valid value is 202499.\"}"
     },
     {
       "id": "CHROMIUM_MIN0_SNAPS_DECIMALS",
@@ -81,8 +101,18 @@
       "id": "WIRING_SSOT_STEP",
       "ok": true,
       "detail": "MONEY_INPUT_STEP"
+    },
+    {
+      "id": "WIRING_RECEIVE_NOVALIDATE",
+      "ok": true,
+      "detail": "Receive Payment form"
+    },
+    {
+      "id": "WIRING_RECEIVE_STEP",
+      "ok": true,
+      "detail": "amount step=1, HTML min omitted"
     }
   ],
-  "integrity": "Chromium E2E: ↑↓ ±1 keeping cents (no HTML min); min=0.01+step=1 must not ship; banking Add Transaction noValidate + step=1 + JS amount>0.",
+  "integrity": "Chromium types 200000 and 202499.99 into the Receive Payment field parsed from CustomerDetailModal and clicks Save Payment. min=0.01+step=1 still blocks 200000. Banking Add Transaction noValidate + step=1 + JS amount>0.",
   "runner": "npm run proof:money-input-step"
 }

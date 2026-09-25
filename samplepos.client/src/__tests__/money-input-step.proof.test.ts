@@ -13,8 +13,10 @@ import {
   MONEY_INPUT_STEP,
   applyMoneySpinnerStep,
   resolveNumberInputStep,
+  isHtmlNumberStepValid,
   isBrokenMoneyMinStepPair,
   moneyStepShouldOmitHtmlMin,
+  jsxMoneyInputRejectsWholeAmount,
 } from '@/utils/numberInputSsot';
 
 const repoRoot = resolve(__dirname, '../../..');
@@ -63,7 +65,7 @@ function inventoryForm(overrides: Partial<ProductFormValues> = {}): ProductFormV
 }
 
 const FORBIDDEN_STEP_RE = /step\s*=\s*(?:\{\s*0\.(?:01|1)\s*\}|["']0\.(?:01|1)["'])/g;
-const FORBIDDEN_MIN_RE = /min\s*=\s*["']0\.01["']/g;
+const FORBIDDEN_MIN_RE = /min\s*=\s*(?:["']0\.01["']|\{\s*0\.01\s*\})/g;
 
 function walkTsx(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -84,8 +86,19 @@ describe('PROOF: Money input spinner step SSOT (unit)', () => {
     gate('SSOT_OMIT_MIN', moneyStepShouldOmitHtmlMin(MONEY_INPUT_STEP) === true, 'omit HTML min with step 1');
   });
 
-  it('HTML5 model: min 0.01 + step 1 is broken for 1000', () => {
+  it('HTML5 model: min 0.01 + step 1 rejects whole amounts', () => {
     gate('MODEL_BUG_PAIR', isBrokenMoneyMinStepPair(0.01, 1) === true, '1000 stepMismatch under min=0.01');
+    gate(
+      'MODEL_200000',
+      isHtmlNumberStepValid(200000, 1, 0.01) === false && isHtmlNumberStepValid(200000, 1, 0) === true,
+      'Receive Payment 200000',
+    );
+    gate(
+      'MODEL_JSX_MIN_EXPR',
+      jsxMoneyInputRejectsWholeAmount('<input type="number" min={0.01} step="1" />') === true
+        && jsxMoneyInputRejectsWholeAmount('<input type="number" step="1" />') === false,
+      'min={0.01} is the same trap as min="0.01"',
+    );
   });
 
   it('resolveNumberInputStep defaults type=number to MONEY_INPUT_STEP', () => {
@@ -145,6 +158,24 @@ describe('PROOF: Money input spinner step SSOT (unit)', () => {
       !/min=\{0\}[\s\S]{0,40}step="1"|step="1"[\s\S]{0,40}min=\{0\}/.test(deposit)
         && !/min="0"[\s\S]{0,40}step="1"/.test(deposit),
       'deposit worksheet money fields',
+    );
+  });
+
+  it('Receive Payment: step 1, no HTML min, form noValidate so 200000 and 202499.99 save', () => {
+    const modal = readFileSync(join(clientSrc, 'components/customers/CustomerDetailModal.tsx'), 'utf8');
+    const formIdx = modal.indexOf('Receive Payment</h3>');
+    const formOpen = formIdx >= 0 ? modal.slice(formIdx, formIdx + 900) : '';
+    gate('RECEIVE_PAYMENT_NOVALIDATE', /<form\b[^>]*\bnoValidate\b/.test(formOpen), 'payment form noValidate');
+    const amountIdx = modal.indexOf('Amount *</label>', formIdx);
+    const methodIdx = modal.indexOf('Payment Method', amountIdx);
+    const amountBlock = amountIdx >= 0 && methodIdx > amountIdx ? modal.slice(amountIdx, methodIdx) : '';
+    gate('RECEIVE_PAYMENT_STEP', /step="1"/.test(amountBlock), 'step=1');
+    gate('RECEIVE_PAYMENT_NO_MIN', !/\bmin=/.test(amountBlock), 'HTML min omitted');
+    gate(
+      'RECEIVE_PAYMENT_WHOLE_OK',
+      jsxMoneyInputRejectsWholeAmount('<input type="number" step="1" />') === false
+        && !/min\s*=\s*(?:["']0\.01["']|\{\s*0\.01\s*\})/.test(amountBlock),
+      'whole shilling is not a step mismatch',
     );
   });
 

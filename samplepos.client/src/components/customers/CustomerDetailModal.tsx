@@ -6,6 +6,7 @@ import {
     assertDepositPaymentAmount,
     depositPaymentCap,
     money2,
+    receivePaymentSaveBlocked,
 } from '@shared/domain/invoiceDepositPayment';
 import { useCustomer, useCustomerSummary, useUpdateCustomer, useToggleCustomerActive, useDeleteCustomer, useCustomerStatement, useInvoices, useRecordInvoicePayment } from '../../hooks/useApi';
 import { formatCurrency } from '../../utils/currency';
@@ -1140,7 +1141,7 @@ export default function CustomerDetailModal({
                                                         {' — Outstanding: '}<span className="font-medium text-red-600">{formatCurrency(selectedInvoice.outstanding)}</span>
                                                     </p>
 
-                                                    <form className="space-y-3" onSubmit={async (e) => {
+                                                    <form className="space-y-3" noValidate onSubmit={async (e) => {
                                                         e.preventDefault();
                                                         try {
                                                             const outstanding = money2(selectedInvoice.outstanding);
@@ -1151,7 +1152,11 @@ export default function CustomerDetailModal({
                                                                     outstanding,
                                                                     depositAvailable: depositBalance.available,
                                                                 });
-                                                            } else if (amt.lte(0) || amt.gt(outstanding)) {
+                                                            } else if (receivePaymentSaveBlocked({
+                                                                amount: payAmount,
+                                                                outstanding,
+                                                                method: payMethod,
+                                                            })) {
                                                                 alert('Invalid amount');
                                                                 return;
                                                             }
@@ -1185,7 +1190,6 @@ export default function CustomerDetailModal({
                                                                 max={payMethod === 'DEPOSIT'
                                                                     ? depositPaymentCap(selectedInvoice.outstanding, depositBalance.available).toNumber()
                                                                     : money2(selectedInvoice.outstanding).toNumber()}
-                                                                min={0.01}
                                                                 step="1"
                                                                 placeholder={`Max: ${payMethod === 'DEPOSIT'
                                                                     ? depositPaymentCap(selectedInvoice.outstanding, depositBalance.available).toFixed(2)
@@ -1287,13 +1291,12 @@ export default function CustomerDetailModal({
                                                                     recordPayment.isPending
                                                                     || depositBalance.status === 'loading'
                                                                     || (payMethod === 'DEPOSIT' && depositBalance.status !== 'ready')
-                                                                    || !payAmount
-                                                                    || money2(payAmount).lte(0)
-                                                                    || money2(payAmount).gt(
-                                                                        payMethod === 'DEPOSIT'
-                                                                            ? depositPaymentCap(selectedInvoice.outstanding, depositBalance.available)
-                                                                            : money2(selectedInvoice.outstanding),
-                                                                    )
+                                                                    || receivePaymentSaveBlocked({
+                                                                        amount: payAmount,
+                                                                        outstanding: selectedInvoice.outstanding,
+                                                                        method: payMethod,
+                                                                        depositAvailable: depositBalance.available,
+                                                                    })
                                                                 }
                                                                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                                                             >

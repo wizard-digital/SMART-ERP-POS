@@ -33,6 +33,33 @@ export function depositPaymentCap(
   return Decimal.min(o, a);
 }
 
+/**
+ * Save Payment stays disabled for a blank, zero, or over-cap amount.
+ * Cash cap is the invoice outstanding. Deposit cap is the smaller of
+ * outstanding and available deposit.
+ */
+export function receivePaymentSaveBlocked(args: {
+  amount: string | number | Decimal | null | undefined;
+  outstanding: string | number | Decimal | null | undefined;
+  method: string;
+  depositAvailable?: string | number | Decimal | null | undefined;
+}): boolean {
+  if (args.amount === null || args.amount === undefined || String(args.amount).trim() === '') {
+    return true;
+  }
+  let pay: Decimal;
+  try {
+    pay = money2(args.amount);
+  } catch {
+    return true;
+  }
+  if (pay.lte(0)) return true;
+  const cap = args.method === 'DEPOSIT'
+    ? depositPaymentCap(args.outstanding, args.depositAvailable ?? 0)
+    : money2(args.outstanding);
+  return pay.gt(cap);
+}
+
 export function assertDepositPaymentAmount(args: {
   amount: string | number | Decimal | null | undefined;
   outstanding: string | number | Decimal | null | undefined;
