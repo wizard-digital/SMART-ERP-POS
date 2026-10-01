@@ -8,6 +8,22 @@ import child_process from 'child_process';
 import { env } from 'process';
 import { resilientApiProxyPlugin } from './vite.resilientApiProxy';
 
+/** Chrome 62 parses the whole bundle. A leftover import() call is a syntax error even when unused. */
+function sunmiStripDynamicImport() {
+    return {
+        name: 'sunmi-strip-dynamic-import',
+        apply: 'build' as const,
+        renderChunk(code: string) {
+            if (!code.includes('import(')) return null;
+            const next = code.replace(/\bimport\(/g, '__sunmiNoImport(');
+            return {
+                code: `function __sunmiNoImport(){return Promise.reject(new Error("dynamic import is not available"));}\n${next}`,
+                map: null,
+            };
+        },
+    };
+}
+
 
 const baseFolder =
     env.APPDATA !== undefined && env.APPDATA !== ''
@@ -44,7 +60,11 @@ const target = env.ASPNETCORE_HTTPS_PORT ? `https://localhost:${env.ASPNETCORE_H
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    plugins: [plugin(), resilientApiProxyPlugin()],
+    plugins: [
+        plugin(),
+        resilientApiProxyPlugin(),
+        ...(env.SMART_ERP_LEGACY === '1' ? [sunmiStripDynamicImport()] : []),
+    ],
     base: '/', // Absolute path so assets resolve from root on all routes
     resolve: {
         alias: {
@@ -54,61 +74,57 @@ export default defineConfig({
             'decimal.js': fileURLToPath(new URL('./node_modules/decimal.js', import.meta.url))
         }
     },
-    build: {
-        // Optimize for code-splitting
-        rollupOptions: {
-            output: {
-                manualChunks: {
-                    // Vendor chunk for React and core libraries
-                    'vendor': ['react', 'react-dom'],
-
-                    // UI components chunk
-                    'ui': [
-                        '@radix-ui/react-dialog',
-                        '@radix-ui/react-select',
-                        '@radix-ui/react-tabs',
-                        '@radix-ui/react-label',
-                        '@radix-ui/react-slot',
-                        '@radix-ui/react-checkbox',
-                        '@radix-ui/react-popover',
-                        '@radix-ui/react-switch',
-                        '@radix-ui/react-tooltip',
-                        '@radix-ui/react-alert-dialog',
-                        '@radix-ui/react-radio-group',
-                        '@radix-ui/react-scroll-area',
-                        '@radix-ui/react-separator',
-                        '@radix-ui/react-toggle',
-                        '@radix-ui/react-navigation-menu',
-                        '@radix-ui/react-visually-hidden',
-                        '@radix-ui/react-aspect-ratio',
-                        'lucide-react'
-                    ],
-
-                    // Router
-                    'router': ['react-router-dom'],
-
-                    // Charts
-                    'charts': ['chart.js', 'react-chartjs-2'],
-
-                    // Forms and validation
-                    'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
-
-                    // PDF generation: removed — all PDFs now go through /api/documents
-                    // via DocumentPreviewModal (server-side pdfkit only).
-
-                    // Data fetching and state
-                    'query': ['@tanstack/react-query', 'axios', 'zustand'],
-
-                    // Animation and utilities
-                    'utils': ['framer-motion', 'date-fns', 'decimal.js', 'clsx', 'tailwind-merge', 'class-variance-authority']
+    build: env.SMART_ERP_LEGACY === '1'
+        ? {
+            rollupOptions: {
+                output: {
+                    // import() arrived in Chrome 63. One file keeps the old WebView script valid.
+                    inlineDynamicImports: true,
                 }
-            }
+            },
+            chunkSizeWarningLimit: 6000,
+            target: 'chrome62',
+            minify: 'esbuild',
+        }
+        : {
+            rollupOptions: {
+                output: {
+                    manualChunks: {
+                        'vendor': ['react', 'react-dom'],
+                        'ui': [
+                            '@radix-ui/react-dialog',
+                            '@radix-ui/react-select',
+                            '@radix-ui/react-tabs',
+                            '@radix-ui/react-label',
+                            '@radix-ui/react-slot',
+                            '@radix-ui/react-checkbox',
+                            '@radix-ui/react-popover',
+                            '@radix-ui/react-switch',
+                            '@radix-ui/react-tooltip',
+                            '@radix-ui/react-alert-dialog',
+                            '@radix-ui/react-radio-group',
+                            '@radix-ui/react-scroll-area',
+                            '@radix-ui/react-separator',
+                            '@radix-ui/react-toggle',
+                            '@radix-ui/react-navigation-menu',
+                            '@radix-ui/react-visually-hidden',
+                            '@radix-ui/react-aspect-ratio',
+                            'lucide-react'
+                        ],
+                        'router': ['react-router-dom'],
+                        'charts': ['chart.js', 'react-chartjs-2'],
+                        'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+                        'query': ['@tanstack/react-query', 'axios', 'zustand'],
+                        'utils': ['framer-motion', 'date-fns', 'decimal.js', 'clsx', 'tailwind-merge', 'class-variance-authority']
+                    }
+                }
+            },
+            // Chrome 80 has optional chaining, nullish, import(), and import.meta.
+            // Newer engines run this script. Older ones receive the Chrome 62 build.
+            chunkSizeWarningLimit: 2000,
+            target: 'chrome80',
+            minify: 'esbuild',
         },
-        // Optimize chunk size
-        chunkSizeWarningLimit: 2000,
-        target: 'esnext',
-        minify: 'esbuild'
-    },
     server: {
         proxy: {
             '^/weatherforecast': {

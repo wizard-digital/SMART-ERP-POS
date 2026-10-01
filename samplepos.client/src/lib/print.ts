@@ -10,6 +10,7 @@ import {
 } from './thermalGuestDocument';
 import { ensureThermalPrintCss } from './thermalPrintCss';
 import { LOCAL_PRINT_BRIDGE_ORIGINS } from './localPrintBridge';
+import { sendReceiptToSunmi } from './sunmiPrinterBridge';
 
 export type PrintFormat = 'detailed' | 'compact';
 
@@ -134,18 +135,20 @@ export async function printReceipt(
     }
   }
 
-  const printFormat = options.format || 'detailed';
-  const builtHtml =
-    printFormat === 'compact'
-      ? generateCompactReceiptHTML(data)
-      : generateDetailedReceiptHTML(data);
-  void builtHtml;
   const doc = receiptToThermalGuestDocument(data);
 
-  // Strategy 0: SUNMI Android WebView bridge (receipt payload)
-  if (typeof (window as unknown as { SunmiPrinter?: unknown }).SunmiPrinter !== 'undefined') {
-    (window as unknown as { SunmiPrinter: { printReceipt: (json: string) => void } })
-      .SunmiPrinter.printReceipt(JSON.stringify(data));
+  // Built-in Sunmi printer only when that shell accepts the job.
+  // A refusal falls through to the named Windows printer and the receipt preview.
+  if (sendReceiptToSunmi(data)) {
+    try {
+      const { openInAppReceiptPreview } = await import('./printRestaurant');
+      openInAppReceiptPreview(buildThermalGuestDocumentHtml(doc), {
+        title: 'Receipt sent to the Sunmi printer. Print sends another copy.',
+        onPrint: () => sendReceiptToSunmi(data),
+      });
+    } catch {
+      /* paper already went out; preview is optional */
+    }
     return { method: 'escpos', printerName: 'SunmiPrinter' };
   }
 
@@ -168,6 +171,7 @@ export async function printReceipt(
     preferInAppPreview: options.preferInAppPreview !== false,
     // Never silent-accept OS default (PDF / dead queue after local-network permission)
     allowUnnamedAgentDefault: false,
+    sunmiReceipt: data,
   });
   if (typeof console !== 'undefined') {
     console.info('[printReceipt]', {

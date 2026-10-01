@@ -29,7 +29,7 @@ ENV VITE_API_BASE_URL=
 # Vite chunking needs ~1GB+; deploy-update.sh builds frontend alone (not parallel with backend)
 # so this stays safe on the 2GB production host.
 ENV NODE_OPTIONS="--max-old-space-size=1536"
-RUN npx vite build
+RUN node scripts/build-engine-bundles.mjs
 
 # Production image — serve with nginx
 FROM nginx:alpine AS runner

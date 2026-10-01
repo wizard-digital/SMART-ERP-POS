@@ -87,11 +87,7 @@ export function getDeviceSessionMode(): DeviceSessionMode {
     // Unreadable storage → SHARED (secure default), never PERSONAL
     return 'SHARED';
   }
-  const envRaw =
-    typeof import.meta !== 'undefined'
-      ? (import.meta as ImportMeta & { env?: Record<string, string> }).env
-          ?.VITE_DEVICE_SESSION_MODE
-      : undefined;
+  const envRaw = import.meta.env.VITE_DEVICE_SESSION_MODE;
   return resolveDeviceSessionMode({ stored, envRaw });
 }
 
@@ -243,10 +239,7 @@ export function assertSessionWiped(): void {
  */
 export function beaconRevokeRefreshToken(refreshToken: string | null | undefined): void {
   if (!refreshToken || typeof navigator === 'undefined') return;
-  const baseUrl =
-    (typeof import.meta !== 'undefined' &&
-      (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL) ||
-    '/api';
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
   const url = `${baseUrl}/auth/token/revoke`;
   const body = JSON.stringify({ refreshToken });
   try {

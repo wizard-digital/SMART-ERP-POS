@@ -1,0 +1,31 @@
+{
+  "provedAt": "2026-10-01T06:34:58.128Z",
+  "distDir": "C:\\Users\\Chase\\source\\repos\\SamplePOS\\samplepos.client\\dist",
+  "parser": "boot ES5; legacy acorn ES2018; modern acorn ES2022 (class fields Chrome 72+)",
+  "fileCount": 285,
+  "modernJs": "/assets/index-yPwG9Kn5.js",
+  "legacyJs": "/assets/legacy-index-jz9OUTMI.js",
+  "executedOnCurrentEngine": {
+    "engine": "modern",
+    "src": "/assets/index-yPwG9Kn5.js"
+  },
+  "executedWhenForcedLegacy": "/assets/legacy-index-jz9OUTMI.js",
+  "entryBytes": {
+    "assets/legacy-index-jz9OUTMI.js": 4887252,
+    "assets/index-yPwG9Kn5.js": 519687
+  },
+  "legacyImport": 0,
+  "legacyImportMeta": 0,
+  "failureCount": 0,
+  "failures": [],
+  "device": {
+    "serial": "VB52217622413",
+    "model": "V2",
+    "android": "7.1.1",
+    "webView": "62.0.3202.84",
+    "liveScript": "https://wizarddigital-inv.com/assets/index-DNNao3Gg.js",
+    "liveConsole": "Uncaught SyntaxError: Unexpected token .",
+    "liveCaptured": "2026-10-01T05:24:14+03:00"
+  },
+  "pass": true
+}

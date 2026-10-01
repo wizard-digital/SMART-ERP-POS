@@ -18,18 +18,20 @@ class PrintBridge {
 
     private val gson = Gson()
 
+    /** @return true when the built-in printer accepted the receipt. */
     @JavascriptInterface
-    fun printReceipt(json: String) {
+    fun printReceipt(json: String): Boolean {
         // SUNMI_TEST — look for this in Logcat to confirm JS reached Android.
         // If you never see this line, window.SunmiPrinter injection failed.
         android.util.Log.e("SUNMI_TEST", "Bridge called — json length=${json.length}")
-        try {
+        return try {
             val data = gson.fromJson(json, ReceiptData::class.java)
             ReceiptPrinter.printReceipt(data)
         } catch (e: Exception) {
             // @JavascriptInterface methods cannot propagate exceptions to JS callers,
             // so we log the full stack trace to logcat instead of letting it crash.
             android.util.Log.e("PrintBridge", "printReceipt failed: ${e.message}", e)
+            false
         }
     }
 

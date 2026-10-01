@@ -17,6 +17,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { printReceipt } from '../lib/print';
 import type { ReceiptData } from '../lib/print';
+import { sendReceiptToSunmi } from '../lib/sunmiPrinterBridge';
 
 // ---------------------------------------------------------------------------
 // Minimal valid receipt fixture
@@ -80,6 +81,34 @@ describe('printReceipt — SUNMI bridge routing', () => {
     });
 
     // ── Strategy 0 present ────────────────────────────────────────────────────
+
+    it('STRATEGY 0: preview Print sends the receipt to the Sunmi bridge, including from the opener', () => {
+        const bridgeFn = vi.fn();
+        const opener = { SunmiPrinter: { printReceipt: bridgeFn } };
+        vi.stubGlobal('window', { opener });
+        expect(sendReceiptToSunmi(RECEIPT)).toBe(true);
+        expect(JSON.parse(bridgeFn.mock.calls[0][0] as string).saleNumber).toBe('SALE-2026-0001');
+        vi.stubGlobal('window', {});
+        expect(sendReceiptToSunmi(RECEIPT)).toBe(false);
+    });
+
+    it('STRATEGY 0: a Sunmi refusal or a bridge throw keeps the Windows receipt path', async () => {
+        const refused = vi.fn(() => false);
+        vi.stubGlobal('window', { SunmiPrinter: { printReceipt: refused } });
+        await expect(
+            printReceipt(RECEIPT, { printerName: 'Till Printer', openBrowserPreviewOnFailure: false }),
+        ).rejects.toThrow();
+        expect(refused).toHaveBeenCalledOnce();
+
+        const exploded = vi.fn(() => {
+            throw new Error('bridge down');
+        });
+        vi.stubGlobal('window', { SunmiPrinter: { printReceipt: exploded } });
+        await expect(
+            printReceipt(RECEIPT, { printerName: 'Till Printer', openBrowserPreviewOnFailure: false }),
+        ).rejects.toThrow(/printer|Till|offline|not found|Print/i);
+        expect(exploded).toHaveBeenCalledOnce();
+    });
 
     it('STRATEGY 0: calls window.SunmiPrinter.printReceipt with JSON when bridge is present', async () => {
         const bridgeFn = vi.fn();

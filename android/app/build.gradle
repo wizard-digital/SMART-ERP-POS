@@ -35,17 +35,17 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
     }
+
+    buildFeatures {
+        buildConfig true
+    }
 }
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // Official SUNMI inner printer library.
-    // Provides woyou.aidlservice.jiuiv5.IWoyouService compiled stubs.
-    // Hosted on JCenter (still read-only accessible via jcenter.bintray.com).
-    // Fallback: download the AAR from https://github.com/shangmisunmi/SunmiPrinterDemo
-    //           and place in android/app/libs/, then use:
-    //           implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+    // Sunmi printerlibrary 1.0.18. The compiled API is
+    // com.sunmi.peripheral.printer.SunmiPrinterService, not woyou.aidlservice.jiuiv5.IWoyouService.
     implementation 'com.sunmi:printerlibrary:1.0.18'
 }

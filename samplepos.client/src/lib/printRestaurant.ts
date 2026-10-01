@@ -28,6 +28,7 @@ import {
 import { buildThermalPrintCss, ensureThermalPrintCss } from './thermalPrintCss';
 import { getCachedRestaurantStations } from './restaurantOfflineCache';
 import { LOCAL_PRINT_BRIDGE_ORIGINS, readCachedBridgePrinters } from './localPrintBridge';
+import { sendReceiptToSunmi, sunmiPrinterBridge } from './sunmiPrinterBridge';
 import {
   isRestaurantBrowserPrintFallbackEnabled,
   silentPrintFailureMessage,
@@ -492,6 +493,8 @@ export async function printGuestThermalDocument(
      * Default false: never silent-accept unnamed default (PDF / ghost).
      */
     allowUnnamedAgentDefault?: boolean;
+    /** Sale receipt JSON. Preview Print sends this to the Sunmi when that bridge is present. */
+    sunmiReceipt?: unknown;
   },
 ): Promise<GuestThermalPrintResult> {
   const tried = new Set<string>();
@@ -527,12 +530,12 @@ export async function printGuestThermalDocument(
       const htmlEmpty = buildThermalGuestDocumentHtml(doc);
       if (opts?.openBrowserPreviewOnFailure !== false) {
         if (opts?.preferInAppPreview !== false) {
-          const inApp = openInAppReceiptPreview(htmlEmpty);
+          const inApp = openInAppReceiptPreview(htmlEmpty, sunmiPreviewArgs(opts?.sunmiReceipt));
           if (inApp) {
             return { method: 'preview', printerName: null, triedPrinters: triedList };
           }
         }
-        const tab = openBrowserReceiptPreview(htmlEmpty);
+        const tab = openBrowserReceiptPreview(htmlEmpty, opts?.sunmiReceipt);
         if (tab) {
           return { method: 'preview', printerName: null, triedPrinters: triedList };
         }
@@ -573,12 +576,12 @@ export async function printGuestThermalDocument(
   // silent iframe "succeeds" with no paper and zero operator feedback.
   if (opts?.openBrowserPreviewOnFailure) {
     if (opts?.preferInAppPreview !== false) {
-      const inApp = openInAppReceiptPreview(html);
+      const inApp = openInAppReceiptPreview(html, sunmiPreviewArgs(opts?.sunmiReceipt));
       if (inApp) {
         return { method: 'preview', printerName: null, triedPrinters: triedList };
       }
     }
-    const tab = openBrowserReceiptPreview(html);
+    const tab = openBrowserReceiptPreview(html, opts?.sunmiReceipt);
     if (tab) {
       return { method: 'preview', printerName: null, triedPrinters: triedList };
     }
@@ -606,7 +609,21 @@ export async function printGuestThermalDocument(
  * In-app receipt preview (not a popup). Survives popup blockers and shows Print under a real click.
  * Returns true when the overlay was mounted.
  */
-export function openInAppReceiptPreview(html: string): boolean {
+function sunmiPreviewArgs(receipt: unknown): { title?: string; onPrint?: () => boolean } | undefined {
+  if (receipt == null) return undefined;
+  const bridgePresent = Boolean(sunmiPrinterBridge());
+  return {
+    title: bridgePresent
+      ? 'Sunmi printer did not accept this receipt. Print tries the built-in printer again.'
+      : undefined,
+    onPrint: () => sendReceiptToSunmi(receipt),
+  };
+}
+
+export function openInAppReceiptPreview(
+  html: string,
+  opts?: { title?: string; onPrint?: () => boolean },
+): boolean {
   if (typeof document === 'undefined' || !document.body) return false;
   const printHtml = ensureThermalPrintCss(html, 80);
 
@@ -668,6 +685,7 @@ export function openInAppReceiptPreview(html: string): boolean {
   const title = document.createElement('span');
   title.style.cssText = 'margin-right:auto;font-size:13px;font-weight:600;line-height:1.3';
   title.textContent =
+    opts?.title ??
     'Printer not confirmed — review receipt, then Print. (Map Settings → Printing → Thermal Printer Name to silence this.)';
   const btnClose = document.createElement('button');
   btnClose.type = 'button';
@@ -702,7 +720,9 @@ export function openInAppReceiptPreview(html: string): boolean {
 
   const dismiss = () => {
     try {
-      window.removeEventListener('keydown', onKey);
+      if (typeof window.removeEventListener === 'function') {
+        window.removeEventListener('keydown', onKey);
+      }
     } catch {
       /* ignore */
     }
@@ -714,7 +734,9 @@ export function openInAppReceiptPreview(html: string): boolean {
       dismiss();
     }
   };
-  window.addEventListener('keydown', onKey);
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('keydown', onKey);
+  }
 
   btnClose.onclick = () => dismiss();
   root.addEventListener('click', (e) => {
@@ -722,6 +744,7 @@ export function openInAppReceiptPreview(html: string): boolean {
   });
   btnPrint.onclick = () => {
     try {
+      if (opts?.onPrint?.()) return;
       frame.contentWindow?.focus();
       frame.contentWindow?.print();
     } catch (e) {
@@ -730,7 +753,9 @@ export function openInAppReceiptPreview(html: string): boolean {
   };
 
   // Focus print so operator can hit Enter after settle
-  setTimeout(() => btnPrint.focus(), 50);
+  setTimeout(() => {
+    if (typeof btnPrint.focus === 'function') btnPrint.focus();
+  }, 50);
   return true;
 }
 
@@ -738,9 +763,10 @@ export function openInAppReceiptPreview(html: string): boolean {
  * Visible browser print fallback — survives lost user-gesture after async pay.
  * Opens a tab with the receipt HTML and an explicit Print button.
  */
-export function openBrowserReceiptPreview(html: string): Window | null {
+export function openBrowserReceiptPreview(html: string, sunmiReceipt?: unknown): Window | null {
   if (typeof window === 'undefined') return null;
   const printHtml = ensureThermalPrintCss(html, 80);
+  const receiptLiteral = JSON.stringify(sunmiReceipt == null ? '' : JSON.stringify(sunmiReceipt));
   const w = window.open('', '_blank');
   if (!w) return null;
   w.document.open();
@@ -773,13 +799,28 @@ export function openBrowserReceiptPreview(html: string): Window | null {
   </div>
   <div class="sheet" id="sheet">${extractBodyInner(printHtml)}</div>
   <script>
+    var receiptJson = ${receiptLiteral};
+    function printSunmi() {
+      if (!receiptJson) return false;
+      var here = window.SunmiPrinter;
+      var parentBridge = window.opener && window.opener.SunmiPrinter;
+      var bridge = (here && here.printReceipt) ? here : ((parentBridge && parentBridge.printReceipt) ? parentBridge : null);
+      if (!bridge) return false;
+      bridge.printReceipt(receiptJson);
+      return true;
+    }
     document.getElementById('btn-print').onclick = function () {
-      window.focus();
-      window.print();
+      if (!printSunmi()) {
+        window.focus();
+        window.print();
+      }
     };
-    // Soft auto-prompt once the tab opens; user can still use the button.
+    // Built-in Sunmi when this tab or the Smart POS window has the printer bridge.
+    // Otherwise the browser print dialog.
     setTimeout(function () {
-      try { window.focus(); window.print(); } catch (e) {}
+      if (!printSunmi()) {
+        try { window.focus(); window.print(); } catch (e) {}
+      }
     }, 350);
   </scr` + `ipt>
 </body></html>`);

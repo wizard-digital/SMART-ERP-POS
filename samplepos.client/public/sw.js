@@ -120,7 +120,7 @@ async function networkFirstApi(request) {
       cache.put(request, cachedResponse);
     }
     return response;
-  } catch {
+  } catch (err) {
     // Network failed — serve from cache
     const cached = await caches.match(request);
     if (cached) {
@@ -146,7 +146,7 @@ async function cacheFirstStatic(request) {
       cache.put(request, response.clone());
     }
     return response;
-  } catch {
+  } catch (err) {
     // Static asset unavailable — return empty response
     return new Response('', { status: 503 });
   }
@@ -161,7 +161,7 @@ async function networkFirstNavigation(request) {
       cache.put(request, response.clone());
     }
     return response;
-  } catch {
+  } catch (err) {
     // Try cached version of any navigated page (SPA — index.html)
     const cached = await caches.match(request);
     if (cached) return cached;
@@ -189,18 +189,18 @@ function isStaticAsset(pathname) {
 
 // ── Message handling ──────────────────────────────────────────
 self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SKIP_WAITING') {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 
   // Allow the app to trigger API cache pre-warming
-  if (event.data?.type === 'CACHE_API_ROUTES') {
+  if (event.data && event.data.type === 'CACHE_API_ROUTES') {
     const routes = event.data.routes || CACHEABLE_API_PATTERNS;
     event.waitUntil(prewarmApiCache(routes));
   }
 
   // Allow clearing API cache
-  if (event.data?.type === 'CLEAR_API_CACHE') {
+  if (event.data && event.data.type === 'CLEAR_API_CACHE') {
     event.waitUntil(caches.delete(API_CACHE));
   }
 });
@@ -213,7 +213,7 @@ async function prewarmApiCache(routes) {
       if (response.ok) {
         cache.put(route, response);
       }
-    } catch {
+    } catch (err) {
       // Silently skip routes that fail
     }
   }
@@ -253,7 +253,8 @@ async function syncPendingOfflineSales() {
 
   // Filter to PENDING/FAILED events only
   const unsyncedEvents = events.filter((e) => {
-    const status = syncState?.[e.key]?.status ?? 'PENDING';
+    const entry = syncState && syncState[e.key];
+    const status = entry && entry.status != null ? entry.status : 'PENDING';
     return status === 'PENDING' || status === 'FAILED';
   });
   if (unsyncedEvents.length === 0) return;
@@ -285,7 +286,7 @@ async function syncPendingOfflineSales() {
       } else if (response.status === 422) {
         reviewKeys.push(event.key);
       }
-    } catch {
+    } catch (err) {
       // Network still flaky — Background Sync will retry
       return;
     }
@@ -323,7 +324,7 @@ self.addEventListener('push', (event) => {
     if (event.data) {
       payload = { ...payload, ...event.data.json() };
     }
-  } catch {
+  } catch (err) {
     // iOS requires a visible notification on every push
   }
   const title = payload.title || 'SMART-ERP-POS';

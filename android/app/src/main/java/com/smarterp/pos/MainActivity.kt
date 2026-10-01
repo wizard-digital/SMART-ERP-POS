@@ -34,7 +34,16 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(PrintBridge(), "SunmiPrinter")
 
         setContentView(webView)
-        webView.loadUrl("https://wizarddigital-inv.com")
+        val requested = if (BuildConfig.DEBUG) intent?.getStringExtra("proofUrl") else null
+        val page = if (
+            requested != null &&
+            (requested.startsWith("http://127.0.0.1:") || requested.startsWith("http://localhost:"))
+        ) {
+            requested
+        } else {
+            "https://wizarddigital-inv.com"
+        }
+        webView.loadUrl(page)
     }
 
     override fun onDestroy() {

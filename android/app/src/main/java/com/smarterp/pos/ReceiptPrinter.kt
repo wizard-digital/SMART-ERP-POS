@@ -1,8 +1,9 @@
 package com.smarterp.pos
 
+import com.sunmi.peripheral.printer.InnerResultCallback
+import com.sunmi.peripheral.printer.SunmiPrinterService
 import java.text.NumberFormat
 import java.util.Locale
-import woyou.aidlservice.jiuiv5.IWoyouService
 
 /**
  * ReceiptPrinter — formats and sends receipt data to the SUNMI built-in
@@ -16,6 +17,13 @@ import woyou.aidlservice.jiuiv5.IWoyouService
  * a SUNMI).  The ESC/POS and browser-print paths are completely unaffected.
  */
 object ReceiptPrinter {
+
+    private val quiet = object : InnerResultCallback() {
+        override fun onRunResult(isSuccess: Boolean) {}
+        override fun onReturnString(result: String?) {}
+        override fun onRaiseException(code: Int, msg: String?) {}
+        override fun onPrintResult(code: Int, msg: String?) {}
+    }
 
     /**
      * Hard test — call this from ADB or a debug button to bypass receipt
@@ -31,60 +39,61 @@ object ReceiptPrinter {
             return
         }
         try {
-            p.printText("SUNMI HARD TEST\n", null)
-            p.lineWrap(3, null)
+            p.printText("SUNMI HARD TEST\n", quiet)
+            p.lineWrap(3, quiet)
             android.util.Log.e("SUNMI_TEST", "hardTest: sent to printer")
         } catch (e: Exception) {
             android.util.Log.e("SUNMI_TEST", "hardTest error: ${e.message}", e)
         }
     }
 
-    fun printReceipt(data: ReceiptData) {
+    /** @return false when the printer service is not bound or the send throws. */
+    fun printReceipt(data: ReceiptData): Boolean {
         val p = SunmiPrinterManager.get() ?: run {
             android.util.Log.e("SUNMI_TEST", "printReceipt: printer not connected — skipping")
-            return
+            return false
         }
 
         try {
             // ── Header ──────────────────────────────────────────────────────────────
-            p.setAlignment(1, null) // centre
+            p.setAlignment(1, quiet) // centre
             if (!data.companyName.isNullOrBlank()) {
-                p.setFontSize(28f, null)
-                p.printText("${data.companyName}\n", null)
+                p.setFontSize(28f, quiet)
+                p.printText("${data.companyName}\n", quiet)
             }
             if (!data.companyAddress.isNullOrBlank()) {
-                p.setFontSize(24f, null)
-                p.printText("${data.companyAddress}\n", null)
+                p.setFontSize(24f, quiet)
+                p.printText("${data.companyAddress}\n", quiet)
             }
             if (!data.companyPhone.isNullOrBlank()) {
-                p.printText("Tel: ${data.companyPhone}\n", null)
+                p.printText("Tel: ${data.companyPhone}\n", quiet)
             }
-            p.lineWrap(1, null)
+            p.lineWrap(1, quiet)
 
             // ── Sale metadata ────────────────────────────────────────────────────────
-            p.setAlignment(0, null) // left
-            p.setFontSize(24f, null)
-            p.printText("Receipt: ${data.saleNumber}\n", null)
-            p.printText("Date:    ${data.saleDate}\n", null)
+            p.setAlignment(0, quiet) // left
+            p.setFontSize(24f, quiet)
+            p.printText("Receipt: ${data.saleNumber}\n", quiet)
+            p.printText("Date:    ${data.saleDate}\n", quiet)
             if (!data.cashierName.isNullOrBlank()) {
-                p.printText("Cashier: ${data.cashierName}\n", null)
+                p.printText("Cashier: ${data.cashierName}\n", quiet)
             }
             if (!data.customerName.isNullOrBlank()) {
-                p.printText("Customer: ${data.customerName}\n", null)
+                p.printText("Customer: ${data.customerName}\n", quiet)
             }
             if (!data.customerPhone.isNullOrBlank()) {
-                p.printText("Tel: ${data.customerPhone}\n", null)
+                p.printText("Tel: ${data.customerPhone}\n", quiet)
             }
             if (!data.customerEmail.isNullOrBlank()) {
-                p.printText("${data.customerEmail}\n", null)
+                p.printText("${data.customerEmail}\n", quiet)
             }
-            p.printText("--------------------------------\n", null)
+            p.printText("--------------------------------\n", quiet)
 
             // ── Line items ───────────────────────────────────────────────────────────
             data.items?.forEach { item ->
                 val label = if (!item.uom.isNullOrBlank()) "${item.name} (${item.uom})" else item.name
                 // Name row
-                p.printText("$label\n", null)
+                p.printText("$label\n", quiet)
                 // Qty × price = subtotal row (right-aligned amounts via columns)
                 val qtyPrice = "  ${formatQty(item.quantity)} x ${fmt(item.unitPrice)}"
                 val sub      = fmt(item.subtotal)
@@ -92,13 +101,13 @@ object ReceiptPrinter {
                     arrayOf(qtyPrice, sub),
                     intArrayOf(24, 8),
                     intArrayOf(0, 2),
-                    null
+                    quiet
                 )
                 if ((item.discountAmount ?: 0.0) > 0.0) {
-                    p.printText("  Discount: -${fmt(item.discountAmount!!)}\n", null)
+                    p.printText("  Discount: -${fmt(item.discountAmount!!)}\n", quiet)
                 }
             }
-            p.printText("--------------------------------\n", null)
+            p.printText("--------------------------------\n", quiet)
 
             // ── Totals ───────────────────────────────────────────────────────────────
             if ((data.subtotal ?: 0.0) > 0.0 && data.subtotal != data.totalAmount) {
@@ -110,12 +119,12 @@ object ReceiptPrinter {
             if ((data.taxAmount ?: 0.0) > 0.0) {
                 printLabelValue(p, "Tax", fmt(data.taxAmount!!))
             }
-            p.setFontSize(28f, null)
+            p.setFontSize(28f, quiet)
             printLabelValue(p, "TOTAL", fmt(data.totalAmount))
-            p.setFontSize(24f, null)
+            p.setFontSize(24f, quiet)
 
             // ── Payment ──────────────────────────────────────────────────────────────
-            p.printText("--------------------------------\n", null)
+            p.printText("--------------------------------\n", quiet)
             if (!data.payments.isNullOrEmpty()) {
                 data.payments.forEach { pay ->
                     printLabelValue(p, pay.method, fmt(pay.amount))
@@ -129,28 +138,29 @@ object ReceiptPrinter {
             }
 
             // ── Footer ───────────────────────────────────────────────────────────────
-            p.lineWrap(1, null)
-            p.setAlignment(1, null)
+            p.lineWrap(1, quiet)
+            p.setAlignment(1, quiet)
             if (!data.customReceiptNote.isNullOrBlank()) {
-                p.printText("${data.customReceiptNote}\n", null)
+                p.printText("${data.customReceiptNote}\n", quiet)
             } else {
-                p.printText("Thank you for your business!\n", null)
+                p.printText("Thank you for your business!\n", quiet)
             }
-            p.lineWrap(3, null)
-
+            p.lineWrap(3, quiet)
+            return true
         } catch (e: Exception) {
             android.util.Log.e("ReceiptPrinter", "printReceipt error: ${e.message}", e)
+            return false
         }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
-    private fun printLabelValue(p: IWoyouService, label: String, value: String) {
+    private fun printLabelValue(p: SunmiPrinterService, label: String, value: String) {
         p.printColumnsText(
             arrayOf(label, value),
             intArrayOf(24, 8),
             intArrayOf(0, 2),
-            null
+            quiet
         )
     }
 
