@@ -25,6 +25,7 @@ export interface ReturnableSaleLine {
     returnableQuantity: number;
     refundedQuantity: number;
     unitPrice: number;
+    taxRate: number;
     uomSymbol: string | null;
     uomName: string | null;
     baseUomSymbol: string | null;

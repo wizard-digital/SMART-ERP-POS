@@ -308,7 +308,7 @@ describe('customerInvoiceAdjustmentService', () => {
                     ]),
                 }),
             );
-            expect(mockCnService.postNote).toHaveBeenCalledWith(mockPool, 'cn-1');
+            expect(mockCnService.postNote).toHaveBeenCalledWith(mockPool, 'cn-1', 'user-1');
         });
     });
 });

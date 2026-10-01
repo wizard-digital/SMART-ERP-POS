@@ -8,7 +8,7 @@ import { PassThrough } from 'stream';
 import { createDocument, finalizeDocument, type DocumentMeta } from './baseDocumentLayout.js';
 import type { DocumentTheme } from './documentTheme.js';
 import { renderQuotationBody, type QuotationBodyData } from './bodies/quotationBody.js';
-import { renderInvoiceBody, type InvoiceBodyData } from './bodies/invoiceBody.js';
+import { displayInvoiceStatus, renderInvoiceBody, type InvoiceBodyData } from './bodies/invoiceBody.js';
 import {
   hasQuotationReferenceDetails,
   quotationReferenceDetailLines,
@@ -290,6 +290,20 @@ describe('Invoice PDF integration proof', () => {
     ],
     payments: [],
   };
+
+  it('labels an unpaid invoice as a credit sale', async () => {
+    expect(displayInvoiceStatus('UNPAID')).toBe('CREDIT SALE');
+    expect(displayInvoiceStatus('PAID')).toBe('PAID');
+
+    const buf = await renderPdf(
+      { title: 'INVOICE', number: invoiceBody.invoice.invoiceNumber, subtitle: invoiceBody.customer.name },
+      null,
+      (ctx) => renderInvoiceBody(ctx, invoiceBody),
+    );
+    const text = extractPdfText(buf);
+    expect(text.includes('CREDIT SALE')).toBe(true);
+    expect(text.includes('UNPAID')).toBe(false);
+  });
 
   it('renders valid invoice PDF with source quotation snapshot data', async () => {
     expect(invoiceBody.sourceQuotation?.reference).toBe('TENDER-REF-2026-PROOF');

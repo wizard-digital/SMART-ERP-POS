@@ -20,6 +20,7 @@ import { BusinessRuleException } from '../../errors/BusinessRuleException.js';
 import { NotFoundError } from '../../middleware/errorHandler.js';
 import logger from '../../utils/logger.js';
 import { Money } from '../../utils/money.js';
+import { saleLineReturnTaxRate } from '../invoices/invoiceSettlement.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +47,7 @@ export interface ReturnableSaleLine {
     returnableQuantity: number;
     refundedQuantity: number;
     unitPrice: number;
+    taxRate: number;
     uomSymbol: string | null;
     uomName: string | null;
     baseUomSymbol: string | null;
@@ -207,6 +209,13 @@ export const customerInvoiceAdjustmentService = {
                     Money.parseDb(raw.refunded_qty ?? raw.refundedQty ?? 0),
                 );
                 const returnableQty = Math.max(0, item.quantity - refundedQty);
+                const lineNet = Money.toNumber(Money.parseDb(raw.total_price ?? raw.totalPrice ?? item.unitPrice * item.quantity));
+                const lineTax = Money.toNumber(Money.parseDb(raw.tax_amount ?? raw.taxAmount ?? 0));
+                const taxRate = saleLineReturnTaxRate({
+                    lineNet,
+                    lineTax,
+                    storedRate: Money.toNumber(Money.parseDb(raw.tax_rate ?? raw.taxRate ?? 0)),
+                });
                 if (returnableQty > 0.0001) {
                     returnableLines.push({
                         saleItemId: item.id,
@@ -216,6 +225,7 @@ export const customerInvoiceAdjustmentService = {
                         returnableQuantity: returnableQty,
                         refundedQuantity: refundedQty,
                         unitPrice: item.unitPrice,
+                        taxRate,
                         uomSymbol: item.uomSymbol,
                         uomName: item.uomName,
                         baseUomSymbol: item.baseUomSymbol,
@@ -485,7 +495,7 @@ export const customerInvoiceAdjustmentService = {
             lines: cnLines,
         });
 
-        const posted = await creditDebitNoteService.postNote(pool, note.id);
+        const posted = await creditDebitNoteService.postNote(pool, note.id, userId);
 
         return {
             intent: 'PRICE_CORRECTION',
@@ -511,6 +521,19 @@ export const customerInvoiceAdjustmentService = {
             taxRate: number;
         }> = [];
 
+        const freshQty = await pool.query<{ id: string; quantity: string; refunded_qty: string }>(
+            `SELECT id, quantity::text, COALESCE(refunded_qty, 0)::text AS refunded_qty
+             FROM sale_items
+             WHERE id = ANY($1::uuid[])`,
+            [input.lines.map((l) => l.saleItemId)],
+        );
+        const remainingByItem = new Map(
+            freshQty.rows.map((row) => [
+                row.id,
+                Math.max(0, Number(row.quantity) - Number(row.refunded_qty)),
+            ]),
+        );
+
         for (const sel of input.lines) {
             const line = bySaleItem.get(sel.saleItemId);
             if (!line) {
@@ -520,11 +543,12 @@ export const customerInvoiceAdjustmentService = {
                     { saleItemId: sel.saleItemId },
                 );
             }
-            if (sel.quantity > line.returnableQuantity + 0.0001) {
+            const remaining = remainingByItem.get(sel.saleItemId) ?? line.returnableQuantity;
+            if (sel.quantity > remaining + 0.0001) {
                 throw new BusinessRuleException(
                     `Return quantity exceeds sale quantity for ${line.productName}`,
                     'ADJUST_RETURN_QTY_EXCEEDED',
-                    { saleItemId: sel.saleItemId, max: line.returnableQuantity },
+                    { saleItemId: sel.saleItemId, max: remaining },
                 );
             }
             cnLines.push({
@@ -533,7 +557,7 @@ export const customerInvoiceAdjustmentService = {
                 description: `sale_item:${line.saleItemId}|return`,
                 quantity: sel.quantity,
                 unitPrice: line.unitPrice,
-                taxRate: 0,
+                taxRate: line.taxRate,
             });
         }
 
@@ -558,7 +582,7 @@ export const customerInvoiceAdjustmentService = {
             lines: cnLines,
         });
 
-        const posted = await creditDebitNoteService.postNote(pool, note.id);
+        const posted = await creditDebitNoteService.postNote(pool, note.id, userId);
 
         const saleId = context.invoice.saleId;
         if (saleId) {
@@ -587,7 +611,7 @@ export const customerInvoiceAdjustmentService = {
             intent: 'RETURN_GOODS',
             creditNoteId: posted.id,
             creditNoteNumber: posted.invoiceNumber,
-            totalCredit,
+            totalCredit: posted.totalAmount,
         };
     },
 };

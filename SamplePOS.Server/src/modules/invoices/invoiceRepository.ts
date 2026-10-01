@@ -4,6 +4,7 @@ import logger from '../../utils/logger.js';
 import { checkAccountingPeriodOpen } from '../../utils/periodGuard.js';
 import { getBusinessYear, getBusinessDate, formatDateBusiness } from '../../utils/dateRange.js';
 import { snapshotQuotationReferenceDetails } from '@shared/utils/quotationReferenceDetails.js';
+import { computeInvoiceSettlement } from './invoiceSettlement.js';
 
 // Normalize snake_case database columns to InvoiceRecord
 function normalizeInvoiceRow(row: Record<string, unknown>): InvoiceRecord {
@@ -361,8 +362,18 @@ export const invoiceRepository = {
       [...values, limit, offset]
     );
 
+    let invoices = res.rows.map(normalizeInvoiceRow);
+    if (filters?.customerId) {
+      const healed: InvoiceRecord[] = [];
+      for (const invoice of invoices) {
+        const fresh = await this.healSettlementDrift(pool, invoice.id);
+        healed.push(fresh ?? invoice);
+      }
+      invoices = healed;
+    }
+
     return {
-      invoices: res.rows.map(normalizeInvoiceRow),
+      invoices,
       total: parseInt(countRes.rows[0].count)
     };
   },
@@ -416,8 +427,11 @@ export const invoiceRepository = {
   },
 
   /**
-   * Settlement on an invoice: cash payments + posted credit/debit notes + posted AR write-offs.
-   */
+   * Settlement on an invoice: cash, posted credit/debit notes, write-offs,
+ * and completed returns on the linked sale.
+ * The sale header can be rewritten from CREDIT to CASH once the invoice reaches
+ * zero, so the return is tied to the sale, not to the current payment method.
+ */
   async getInvoiceSettlement(
     pool: Pool | PoolClient,
     invoiceId: string,
@@ -428,7 +442,8 @@ export const invoiceRepository = {
          COALESCE(pay.cash_paid, 0) AS cash_paid,
          COALESCE(cn.cn_amount, 0) AS cn_amount,
          COALESCE(dn.dn_amount, 0) AS dn_amount,
-         COALESCE(wo.writeoff_amount, 0) AS writeoff_amount
+         COALESCE(wo.writeoff_amount, 0) AS writeoff_amount,
+         COALESCE(rf.refund_amount, 0) AS sale_refund_amount
        FROM invoices i
        LEFT JOIN (
          SELECT ip.invoice_id, SUM(ip.amount) AS cash_paid
@@ -473,24 +488,48 @@ export const invoiceRepository = {
            AND d.reverses_document_id IS NULL
          GROUP BY l.invoice_id
        ) wo ON wo.invoice_id = i.id
+       LEFT JOIN (
+         SELECT r.sale_id, SUM(r.total_amount) AS refund_amount
+         FROM sale_refunds r
+         WHERE r.status = 'COMPLETED'
+         GROUP BY r.sale_id
+       ) rf ON rf.sale_id = i.sale_id
        WHERE i.id = $1`,
       [invoiceId],
     );
     if (!res.rows[0]) return null;
 
-    const total = Money.parseDb(res.rows[0].total_amount);
-    const settled = Money.parseDb(res.rows[0].cash_paid)
-      .plus(Money.parseDb(res.rows[0].cn_amount))
-      .minus(Money.parseDb(res.rows[0].dn_amount))
-      .plus(Money.parseDb(res.rows[0].writeoff_amount));
-    const amountPaid = Money.min(total, Money.max(settled, Money.zero()));
-    const amountDue = Money.max(Money.zero(), Money.subtract(total, amountPaid));
+    return computeInvoiceSettlement({
+      totalAmount: res.rows[0].total_amount,
+      cashPaid: res.rows[0].cash_paid,
+      creditNoteAmount: res.rows[0].cn_amount,
+      debitNoteAmount: res.rows[0].dn_amount,
+      writeoffAmount: res.rows[0].writeoff_amount,
+      creditSaleRefundAmount: res.rows[0].sale_refund_amount,
+    });
+  },
 
-    return {
-      totalAmount: Money.toNumber(total),
-      amountPaid: Money.toNumber(amountPaid),
-      amountDue: Money.toNumber(amountDue),
-    };
+  /**
+   * Rewrite amount_due when stored settlement has drifted from the formula.
+   * Returns the fresh invoice when a write happened.
+   */
+  async healSettlementDrift(
+    pool: Pool | PoolClient,
+    invoiceId: string,
+  ): Promise<InvoiceRecord | null> {
+    const current = await this.getInvoiceById(pool, invoiceId);
+    if (!current) return null;
+    const settlement = await this.getInvoiceSettlement(pool, invoiceId);
+    if (!settlement) return current;
+    const paidDrift = Math.abs(Number(current.amount_paid || 0) - settlement.amountPaid);
+    const dueDrift = Math.abs(Number(current.balance || 0) - settlement.amountDue);
+    if (paidDrift <= 0.009 && dueDrift <= 0.009) return current;
+    const fresh = await this.recalcInvoice(pool, invoiceId);
+    if (fresh?.customer_id) {
+      const { syncCustomerBalanceFromInvoices } = await import('../../utils/customerBalanceSync.js');
+      await syncCustomerBalanceFromInvoices(pool, fresh.customer_id, 'INVOICE_SETTLEMENT_HEAL');
+    }
+    return fresh;
   },
 
   /**

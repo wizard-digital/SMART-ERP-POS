@@ -3948,28 +3948,21 @@ export const salesService = {
         const currentDue = parseFloat(dueResult.rows[0]?.amount_due ?? '0');
         arCreditAmount = Math.min(refundTotalAmount.toNumber(), Math.max(currentDue, 0));
 
-        // Step 6a: Reduce the invoice's amount_due by the refund amount FIRST.
-        // syncCustomerBalanceFromInvoices (Wave 3 open-item SSOT) reads open invoice
-        // due minus unallocated AR receipts — invoice amount_due must be updated here
-        // or customer.balance will not reflect the refund.
-        //
-        // NOTE: We reduce amount_due directly (not via amount_paid) because a refund
-        // is a forgiveness of debt, not a cash receipt. Incrementing amount_paid would
-        // violate the CHECK constraint (amount_paid <= total_amount) when the refund
-        // exceeds the unpaid portion.
-        await client.query(
-          `UPDATE invoices
-           SET amount_due = GREATEST(amount_due - $2, 0),
-               status = CASE
-                 WHEN GREATEST(amount_due - $2, 0) = 0 THEN 'PAID'
-                 WHEN $2 < amount_due THEN 'PARTIALLY_PAID'
-                 ELSE status
-               END,
-               updated_at = NOW()
+        // The refund row is already inserted. Invoice amount due is owned by
+        // getInvoiceSettlement (cash + notes + write-offs + this credit-sale return).
+        // A direct amount_due write is wiped the next time the invoice is recalculated.
+        const { invoiceRepository } = await import('../invoices/invoiceRepository.js');
+        const linkedInvoices = await client.query<{ id: string }>(
+          `SELECT id
+           FROM invoices
            WHERE sale_id = $1
+             AND COALESCE(document_type, 'INVOICE') = 'INVOICE'
              AND status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')`,
-          [saleId, refundTotalAmount.toFixed(2)]
+          [saleId],
         );
+        for (const linked of linkedInvoices.rows) {
+          await invoiceRepository.recalcInvoice(client, linked.id);
+        }
 
         // Step 6b: Recalculate customer balance from invoices (SSOT).
         // Now that amount_due is updated, this will return the correct lower balance.

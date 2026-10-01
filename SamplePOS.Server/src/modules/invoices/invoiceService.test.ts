@@ -11,6 +11,7 @@ type MockFn = (...args: unknown[]) => Promise<unknown>;
 const mockInvoiceRepo = {
     createInvoice: jest.fn<MockFn>(),
     getInvoiceById: jest.fn<MockFn>(),
+    healSettlementDrift: jest.fn<MockFn>(),
     listInvoices: jest.fn<MockFn>(),
     countInvoices: jest.fn<MockFn>(),
     addPayment: jest.fn<MockFn>(),
@@ -70,7 +71,7 @@ describe('invoiceService', () => {
 
     describe('getInvoiceById', () => {
         it('should return invoice with line items', async () => {
-            mockInvoiceRepo.getInvoiceById.mockResolvedValue({
+            mockInvoiceRepo.healSettlementDrift.mockResolvedValue({
                 id: 'inv1',
                 invoice_number: 'INV-00001',
                 total_amount: 5000,
@@ -83,10 +84,11 @@ describe('invoiceService', () => {
             const result = await invoiceService.getInvoiceById(mockPool, 'inv1');
 
             expect(result).toBeDefined();
-            expect(mockInvoiceRepo.getInvoiceById).toHaveBeenCalledWith(mockPool, 'inv1');
+            expect(mockInvoiceRepo.healSettlementDrift).toHaveBeenCalledWith(mockPool, 'inv1');
         });
 
         it('should throw for non-existent invoice', async () => {
+            mockInvoiceRepo.healSettlementDrift.mockResolvedValue(null);
             mockInvoiceRepo.getInvoiceById.mockResolvedValue(null);
 
             await expect(invoiceService.getInvoiceById(mockPool, 'ghost')).rejects.toThrow();

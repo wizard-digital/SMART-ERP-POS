@@ -10,6 +10,13 @@ function displayReference(reference: string | null | undefined): string | null {
     return trimmed || null;
 }
 
+/** Customer invoices are credit sales. "UNPAID" on the document reads as a collection failure. */
+export function displayInvoiceStatus(status: string): string {
+    const normalized = status.trim().toUpperCase().replace(/[\s-]+/g, '_');
+    if (normalized === 'UNPAID') return 'CREDIT SALE';
+    return status;
+}
+
 export interface InvoiceBodyData {
     invoice: {
         invoiceNumber: string;
@@ -77,7 +84,7 @@ export function renderInvoiceBody(ctx: LayoutContext, data: InvoiceBodyData): vo
             : []),
         ['Issue Date', fmtDate(data.invoice.issueDate)],
         ['Due Date', fmtDate(data.invoice.dueDate)],
-        ['Status', data.invoice.status],
+        ['Status', displayInvoiceStatus(data.invoice.status)],
         ['Amount Due', fmt(data.invoice.amountDue)],
     ];
 

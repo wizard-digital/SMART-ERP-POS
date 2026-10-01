@@ -159,10 +159,12 @@ export function AdjustCustomerInvoiceModal({
     );
 
     const returnTotal = useMemo(
-        () => selectedReturnLines.reduce(
-            (sum, l) => sum + parseFloat(l.quantity || '0') * l.line.unitPrice,
-            0,
-        ),
+        () => selectedReturnLines.reduce((sum, l) => {
+            const qty = parseFloat(l.quantity || '0');
+            const net = qty * l.line.unitPrice;
+            const rate = Number(l.line.taxRate || 0);
+            return sum + net * (1 + rate / 100);
+        }, 0),
         [selectedReturnLines],
     );
 

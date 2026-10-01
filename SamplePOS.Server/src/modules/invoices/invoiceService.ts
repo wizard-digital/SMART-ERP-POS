@@ -182,7 +182,7 @@ async function addLegacyInvoicePayment(
       throw new Error(
         `OVERPAYMENT PREVENTION: Payment of ${paymentDec.toFixed(2)} exceeds outstanding balance. ` +
           `Invoice ${inv.invoice_number} total: ${Money.parseDb(settlement.totalAmount).toFixed(2)}, ` +
-          `Settled (payments + credit notes): ${Money.parseDb(settlement.amountPaid).toFixed(2)}, ` +
+          `Settled (payments, credit notes, and credit-sale returns): ${Money.parseDb(settlement.amountPaid).toFixed(2)}, ` +
           `Outstanding: ${amountDueDec.toFixed(2)}`,
       );
     }
@@ -767,7 +767,8 @@ export const invoiceService = {
    * - Customer account statement
    */
   async getInvoiceById(pool: Pool, id: string) {
-    const inv = await invoiceRepository.getInvoiceById(pool, id);
+    const healed = await invoiceRepository.healSettlementDrift(pool, id);
+    const inv = healed ?? await invoiceRepository.getInvoiceById(pool, id);
     if (!inv) throw new Error(`Invoice ${id} not found`);
     const payments = await invoiceRepository.listPayments(pool, id);
     // Include sale items for visibility in UI
