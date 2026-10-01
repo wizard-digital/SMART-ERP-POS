@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useColumnSort } from './useColumnSort';
+import { serverListParamsForState } from '../lib/customerCenterOverview';
 
 interface UseServerTableSortOptions<T extends string> {
   defaultField: T;
@@ -45,13 +46,20 @@ export function useServerTableSort<T extends string>({
     onQueryChange?.();
   }, [onQueryChange, resetSort]);
 
-  const serverListParams = {
-    sortBy: sortField,
-    sortOrder,
-    ...(columnFilterActive && filterParam === 'outstandingOnly' ? { outstandingOnly: true } : {}),
-    ...(columnFilterActive && filterParam === 'balanceGt' ? { balanceGt: 0.01 } : {}),
-    ...(columnFilterActive && filterParam === 'stockGt' ? { stockGt: true } : {}),
-  };
+  const applyListPreset = useCallback(
+    (preset: { field: T; order: 'asc' | 'desc'; filter: boolean }) => {
+      setSortField(preset.field);
+      setSortOrder(preset.order);
+      setColumnFilterActive(preset.filter);
+      onQueryChange?.();
+    },
+    [onQueryChange, setSortField, setSortOrder],
+  );
+
+  const serverListParams = serverListParamsForState(
+    { sortField, sortOrder, columnFilterActive },
+    filterParam,
+  );
 
   return {
     sortField,
@@ -61,6 +69,7 @@ export function useServerTableSort<T extends string>({
     handleColumnSort,
     columnFilterActive,
     clearColumnFilter,
+    applyListPreset,
     serverListParams,
   };
 }

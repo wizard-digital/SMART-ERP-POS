@@ -34,5 +34,14 @@ describe('Customer Center AR overview SSOT', () => {
     expect(page).toContain('totalArBalance');
     expect(page).toContain('customersWithDebt');
     expect(page).not.toMatch(/customers\.reduce\(\(sum.*c\.balance/);
+    expect(page).not.toContain('Go-live cutover (legacy AR)');
+    expect(page).toContain('RECENT_ACTIVITY_PATH');
+    expect(page).toContain('customerListPreset');
+    expect(page).toContain('CUSTOMER_MONEY_CELL');
+    expect(page).not.toContain('align="right"');
+    const cards = read('samplepos.client/src/components/customers/CustomerCenterOverviewCards.tsx');
+    expect(cards).toContain('Open all customers');
+    expect(cards).toContain('Open customers with an outstanding balance');
+    expect(cards).not.toContain('Go-live cutover');
   });
 });

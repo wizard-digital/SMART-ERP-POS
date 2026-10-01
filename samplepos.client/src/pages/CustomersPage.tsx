@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useCustomers, useCustomerStatement, useCustomerCenterStats } from '../hooks/useApi';
 import { formatCurrency } from '../utils/currency';
@@ -16,6 +16,14 @@ import { SortableTableHeader } from '../components/ui/SortableTableHeader';
 import { MobileSortSelect } from '../components/ui/MobileSortSelect';
 import { useServerTableSort } from '../hooks/useServerTableSort';
 import { PartnerWhtLiableBadge } from '../components/partners/PartnerWhtLiableBadge';
+import { CustomerCenterOverviewCards } from '../components/customers/CustomerCenterOverviewCards';
+import {
+  CUSTOMER_CELL,
+  CUSTOMER_CONTACT_CLASS,
+  CUSTOMER_MONEY_CELL,
+  RECENT_ACTIVITY_PATH,
+  customerListPreset,
+} from '../lib/customerCenterOverview';
 
 interface StatementResponse {
   openingBalance: number | string;
@@ -61,6 +69,7 @@ type CustomerModalTab = 'overview' | 'invoices' | 'transactions' | 'deposits' | 
 type CustomerSortField = 'name' | 'contact' | 'balance' | 'deposits' | 'creditLimit' | 'status';
 
 export default function CustomersPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -73,6 +82,7 @@ export default function CustomersPage() {
     handleColumnSort,
     columnFilterActive: filterBalanceOnly,
     clearColumnFilter,
+    applyListPreset,
     serverListParams,
     setSortOrder,
   } = useServerTableSort<CustomerSortField>({
@@ -94,7 +104,6 @@ export default function CustomersPage() {
 
   // Permission gating
   const canCreateCustomer = useCanAccess([], ['customers.create']);
-  const canManageOpeningBalance = useCanAccess([], ['accounting.opening_balance']);
 
   // Customer detail modal state
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -149,6 +158,14 @@ export default function CustomersPage() {
   const totalBalance = centerStats?.totalArBalance ?? 0;
   const customersWithDebt = centerStats?.customersWithDebt ?? 0;
   const recentActivityCount = centerStats?.recentActivityCount;
+
+  const openCustomerList = (preset: 'all' | 'owing') => {
+    const next = customerListPreset(preset);
+    setSearchTerm(next.search);
+    applyListPreset({ field: next.field, order: next.order, filter: next.filter });
+    setActiveTab(next.tab);
+  };
+
   return (
     <Layout>
       <div className="p-4 sm:p-6">
@@ -204,81 +221,17 @@ export default function CustomersPage() {
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <div>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
-              <div className="bg-white rounded-lg shadow p-4 sm:p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Total Customers</p>
-                    <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{totalCustomers}</p>
-                  </div>
-                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-base sm:text-2xl">👥</span>
-                  </div>
-                </div>
-                <p className="text-xs text-green-600 mt-2 sm:mt-3">↑ {activeCustomers} active</p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-4 sm:p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Total AR Balance</p>
-                    <p className={`text-xl sm:text-3xl font-bold mt-1 sm:mt-2 truncate ${totalBalance > 0 ? 'text-red-600' : totalBalance < 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                      {formatCurrency(Math.abs(totalBalance))}
-                      {totalBalance < 0 && <span className="text-xs sm:text-sm ml-1">(CR)</span>}
-                    </p>
-                  </div>
-                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-base sm:text-2xl">💰</span>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2 sm:mt-3">Total receivables</p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-4 sm:p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">With Debt</p>
-                    <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">{customersWithDebt}</p>
-                  </div>
-                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-base sm:text-2xl">⚠️</span>
-                  </div>
-                </div>
-                <p className="text-xs text-yellow-600 mt-2 sm:mt-3">Require attention</p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow p-4 sm:p-6 border border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs sm:text-sm font-medium text-gray-600">Recent Activity</p>
-                    <p className="text-xl sm:text-3xl font-bold text-gray-900 mt-1 sm:mt-2">
-                      {recentActivityCount === undefined ? '—' : recentActivityCount}
-                    </p>
-                  </div>
-                  <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-base sm:text-2xl">📊</span>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-2 sm:mt-3">Last 7 days</p>
-              </div>
-            </div>
-
-            {canManageOpeningBalance && (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 sm:p-6 mb-6">
-                <h2 className="text-lg font-semibold text-indigo-900 mb-1">Go-live cutover (legacy AR)</h2>
-                <p className="text-sm text-indigo-800 mb-3">
-                  Post or increase cutover debt from the old system. Today’s balance is calculated — do not
-                  type it as cutover. Use Customer Payments → Go-live cutover.
-                </p>
-                <Link
-                  to="/accounting/customer-payments"
-                  className="inline-flex text-sm font-medium text-indigo-700 hover:text-indigo-900 underline"
-                >
-                  Go to Customer Payments
-                </Link>
-              </div>
-            )}
+            <CustomerCenterOverviewCards
+              totalCustomers={totalCustomers}
+              activeCustomers={activeCustomers}
+              totalArText={`${formatCurrency(Math.abs(totalBalance))}${totalBalance < 0 ? ' (CR)' : ''}`}
+              totalArTone={totalBalance > 0 ? 'due' : totalBalance < 0 ? 'credit' : 'zero'}
+              customersWithDebt={customersWithDebt}
+              recentActivityText={recentActivityCount === undefined ? '—' : String(recentActivityCount)}
+              onOpenAll={() => openCustomerList('all')}
+              onOpenOwing={() => openCustomerList('owing')}
+              onOpenRecent={() => navigate(RECENT_ACTIVITY_PATH)}
+            />
 
             {/* Recent Customers */}
             <div className="bg-white rounded-lg shadow border border-gray-200 p-4 sm:p-6">
@@ -340,15 +293,15 @@ export default function CustomersPage() {
 
                   {/* Desktop Table View */}
                   <div className="hidden sm:block overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+                    <table className="w-full min-w-[36rem] lg:min-w-full divide-y divide-gray-200">
                       <thead>
                         <tr className="bg-gray-50">
                           <SortableTableHeader label="Customer" field="name" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} />
-                          <SortableTableHeader label="Contact" field="contact" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} />
-                          <SortableTableHeader label="Balance" field="balance" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} align="right" filtered={filterBalanceOnly} />
-                          <SortableTableHeader label="Deposits" field="deposits" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} align="right" />
-                          <SortableTableHeader label="Credit Limit" field="creditLimit" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} align="right" />
-                          <SortableTableHeader label="Status" field="status" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} />
+                          <SortableTableHeader label="Contact" field="contact" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className={CUSTOMER_CONTACT_CLASS} />
+                          <SortableTableHeader label="Balance" field="balance" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} filtered={filterBalanceOnly} className="whitespace-nowrap" />
+                          <SortableTableHeader label="Deposits" field="deposits" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="whitespace-nowrap" />
+                          <SortableTableHeader label="Credit Limit" field="creditLimit" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="whitespace-nowrap" />
+                          <SortableTableHeader label="Status" field="status" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="whitespace-nowrap" />
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
@@ -358,17 +311,17 @@ export default function CustomersPage() {
                             className="hover:bg-gray-50 cursor-pointer"
                             onClick={() => { setSelectedCustomerId(customer.id); setDetailModalTab('overview'); setDetailModalOpen(true); }}
                           >
-                            <td className="px-4 py-3">
-                              <div className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
-                                {customer.name}
+                            <td className={CUSTOMER_CELL}>
+                              <div className="font-medium text-gray-900 flex items-center gap-2 min-w-0">
+                                <span className="truncate">{customer.name}</span>
                                 <PartnerWhtLiableBadge liable={customer.whtLiable} />
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              <div>{customer.email || '-'}</div>
-                              <div className="text-xs text-gray-500">{customer.phone || '-'}</div>
+                            <td className={`${CUSTOMER_CELL} ${CUSTOMER_CONTACT_CLASS} text-sm text-gray-600`}>
+                              <div className="truncate">{customer.email || '-'}</div>
+                              <div className="text-xs text-gray-500 truncate">{customer.phone || '-'}</div>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className={CUSTOMER_MONEY_CELL}>
                               <span
                                 className={`font-medium ${toNumber(customer.balance) > 0 ? 'text-red-600' : toNumber(customer.balance) < 0 ? 'text-green-600' : 'text-gray-600'
                                   }`}
@@ -377,15 +330,15 @@ export default function CustomersPage() {
                                 {toNumber(customer.balance) < 0 && <span className="text-xs ml-1">(CR)</span>}
                               </span>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className={CUSTOMER_MONEY_CELL}>
                               <span className={`font-medium ${toNumber(customer.depositBalance) > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
                                 {formatCurrency(toNumber(customer.depositBalance))}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
+                            <td className={`${CUSTOMER_MONEY_CELL} text-sm text-gray-600`}>
                               {customer.unlimitedCredit ? 'Unlimited' : formatCurrency(customer.creditLimit)}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className={`${CUSTOMER_CELL} whitespace-nowrap`}>
                               <span
                                 className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${customer.isActive
                                   ? 'bg-green-100 text-green-800'
@@ -516,16 +469,16 @@ export default function CustomersPage() {
 
                   {/* Desktop Table View */}
                   <div className="hidden sm:block overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
+                    <table className="w-full min-w-[44rem] xl:min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <SortableTableHeader label="Customer" field="name" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="px-6" />
-                          <SortableTableHeader label="Contact Info" field="contact" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="px-6" />
-                          <SortableTableHeader label="Balance" field="balance" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="px-6" filtered={filterBalanceOnly} />
-                          <SortableTableHeader label="Deposits" field="deposits" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="px-6" />
-                          <SortableTableHeader label="Credit Limit" field="creditLimit" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="px-6" />
-                          <SortableTableHeader label="Status" field="status" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="px-6" />
-                          <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <SortableTableHeader label="Customer" field="name" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} />
+                          <SortableTableHeader label="Contact Info" field="contact" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className={CUSTOMER_CONTACT_CLASS} />
+                          <SortableTableHeader label="Balance" field="balance" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} filtered={filterBalanceOnly} className="whitespace-nowrap" />
+                          <SortableTableHeader label="Deposits" field="deposits" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="whitespace-nowrap" />
+                          <SortableTableHeader label="Credit Limit" field="creditLimit" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="whitespace-nowrap" />
+                          <SortableTableHeader label="Status" field="status" activeField={sortField} direction={sortOrder} onSort={handleColumnSort} className="whitespace-nowrap" />
+                          <th className="px-3 sm:px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                             Actions
                           </th>
                         </tr>
@@ -533,29 +486,29 @@ export default function CustomersPage() {
                       <tbody className="bg-white divide-y divide-gray-200">
                         {displayCustomers.map((customer: Customer) => (
                           <tr key={customer.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-4">
-                              <div className="flex items-center">
+                            <td className={CUSTOMER_CELL}>
+                              <div className="flex items-center min-w-0">
                                 <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
                                   <span className="text-blue-600 font-semibold text-sm">
                                     {customer.name.charAt(0).toUpperCase()}
                                   </span>
                                 </div>
-                                <div className="ml-4">
-                                  <div className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
-                                    {customer.name}
+                                <div className="ml-4 min-w-0">
+                                  <div className="font-medium text-gray-900 flex items-center gap-2 min-w-0">
+                                    <span className="truncate">{customer.name}</span>
                                     <PartnerWhtLiableBadge liable={customer.whtLiable} />
                                   </div>
-                                  <div className="text-xs text-gray-500">
+                                  <div className="text-xs text-gray-500 truncate">
                                     ID: {customer.id.slice(0, 8)}...
                                   </div>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm text-gray-900">{customer.email || '-'}</div>
-                              <div className="text-xs text-gray-500">{customer.phone || '-'}</div>
+                            <td className={`${CUSTOMER_CELL} ${CUSTOMER_CONTACT_CLASS}`}>
+                              <div className="text-sm text-gray-900 truncate">{customer.email || '-'}</div>
+                              <div className="text-xs text-gray-500 truncate">{customer.phone || '-'}</div>
                             </td>
-                            <td className="px-6 py-4">
+                            <td className={CUSTOMER_MONEY_CELL}>
                               <div
                                 className={`font-semibold ${toNumber(customer.balance) > 0
                                   ? 'text-red-600'
@@ -568,15 +521,15 @@ export default function CustomersPage() {
                                 {toNumber(customer.balance) < 0 && <span className="text-xs ml-1">(CR)</span>}
                               </div>
                             </td>
-                            <td className="px-6 py-4">
+                            <td className={CUSTOMER_MONEY_CELL}>
                               <span className={`font-semibold ${toNumber(customer.depositBalance) > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
                                 {formatCurrency(toNumber(customer.depositBalance))}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-sm text-gray-600">
+                            <td className={`${CUSTOMER_MONEY_CELL} text-sm text-gray-600`}>
                               {customer.unlimitedCredit ? 'Unlimited' : formatCurrency(customer.creditLimit)}
                             </td>
-                            <td className="px-6 py-4">
+                            <td className={`${CUSTOMER_CELL} whitespace-nowrap`}>
                               <span
                                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${customer.isActive
                                   ? 'bg-green-100 text-green-800'
@@ -586,7 +539,7 @@ export default function CustomersPage() {
                                 {customer.isActive ? '✓ Active' : '✗ Inactive'}
                               </span>
                             </td>
-                            <td className="px-6 py-4 text-right text-sm font-medium">
+                            <td className={`${CUSTOMER_CELL} text-right text-sm font-medium whitespace-nowrap`}>
                               <button className="text-blue-600 hover:text-blue-900 mr-3" onClick={() => { setSelectedCustomerId(customer.id); setDetailModalTab('overview'); setDetailModalOpen(true); }}>View</button>
                               <button className="text-gray-600 hover:text-gray-900 mr-3" onClick={() => { setSelectedCustomerId(customer.id); setDetailModalTab('edit'); setDetailModalOpen(true); }}>Edit</button>
                               <button className="text-gray-600 hover:text-gray-900" onClick={() => { setSelectedCustomerId(customer.id); setDetailModalTab('transactions'); setDetailModalOpen(true); }}>Statement</button>

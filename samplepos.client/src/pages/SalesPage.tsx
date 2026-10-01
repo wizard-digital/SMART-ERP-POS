@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useSales, useSalesSummary, useSalesSummaryByDate, useSalesByCashier } from '../hooks/useApi';
 import { useAuth } from '../hooks/useAuth';
@@ -61,6 +62,7 @@ import { MobileSortSelect } from '../components/ui/MobileSortSelect';
 import { useColumnSort } from '../hooks/useColumnSort';
 import { useServerTableSort } from '../hooks/useServerTableSort';
 import { applyTableSort } from '../lib/tableSortUtils';
+import { salesWindowForRecentActivity } from '../lib/customerCenterOverview';
 
 // ── Local type definitions ──────────────────────────────────────────────
 
@@ -305,6 +307,7 @@ function saleAmountPaid(sale: SaleRow): number {
 }
 
 // Utility functions for precise date calculations
+/** Inclusive business-calendar window: today and the six days before it. */
 function getDateRange(filterType: DateFilterType): { start: string; end: string } {
   // Simple date formatting without any timezone manipulation
   const formatDate = (year: number, month: number, day: number): string => {
@@ -409,13 +412,24 @@ export default function SalesPage() {
     () => shouldLockSalesToBusinessDay(permissions, user?.role),
     [permissions, user?.role],
   );
-  const [activeTab, setActiveTab] = useState<TabType>(isScopedSalesUser ? 'all-sales' : 'overview');
+  const [searchParams] = useSearchParams();
+  const recentActivityRange = searchParams.get('range');
+  const recentWindow = salesWindowForRecentActivity({
+    range: recentActivityRange,
+    lockToBusinessDay: lockSalesToBusinessDay,
+    today: getBusinessDate(),
+  });
+  const openLastSevenDays = recentWindow != null;
+  const [activeTab, setActiveTab] = useState<TabType>(
+    isScopedSalesUser || openLastSevenDays ? 'all-sales' : 'overview',
+  );
   const [dateFilter, setDateFilter] = useState<DateFilterType>(
-    lockSalesToBusinessDay ? 'today' : 'this-month',
+    openLastSevenDays ? 'custom' : lockSalesToBusinessDay ? 'today' : 'this-month',
   );
 
-  // Initialize with this month's date range (cashiers: business day only)
-  const initialRange = getDateRange(lockSalesToBusinessDay ? 'today' : 'this-month');
+  // Initialize with this month's date range (cashiers: business day only).
+  // Customer Center "Recent Activity" opens this page already set to the last 7 days.
+  const initialRange = recentWindow ?? getDateRange(lockSalesToBusinessDay ? 'today' : 'this-month');
   const [startDate, setStartDate] = useState<string>(initialRange.start);
   const [endDate, setEndDate] = useState<string>(initialRange.end);
   const [paymentMethodFilter, setPaymentMethodFilter] = useState<string>('ALL');
@@ -437,6 +451,16 @@ export default function SalesPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [paymentMethodFilter, statusFilter, debouncedSearch, startDate, endDate]);
+
+  const recentWindowKey = recentWindow ? `${recentWindow.start}|${recentWindow.end}` : '';
+  useEffect(() => {
+    if (!recentWindowKey) return;
+    const [start, end] = recentWindowKey.split('|');
+    setDateFilter('custom');
+    setStartDate(start);
+    setEndDate(end);
+    setActiveTab((tab) => (tab === 'overview' ? 'all-sales' : tab));
+  }, [recentWindowKey]);
 
   const {
     sortField: salesSortField,
