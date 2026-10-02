@@ -1909,8 +1909,14 @@ export function planDepositRefundCredits(
 ): { depositBack: number; tender: number } {
   const total = Money.parseDb(totalAmount);
   const restored = Money.parseDb(depositRestored);
-  const depositBack = Decimal.min(Decimal.max(restored, 0), Decimal.max(total, 0));
-  const tender = Decimal.max(total.minus(depositBack), 0);
+  // Clamp restored into [0, max(total, 0)] without Decimal.max/min (not on our typings).
+  let depositBack = restored;
+  if (depositBack.lessThan(0)) depositBack = new Decimal(0);
+  if (total.lessThan(0) || total.equals(0)) {
+    return { depositBack: 0, tender: 0 };
+  }
+  if (depositBack.greaterThan(total)) depositBack = total;
+  const tender = total.minus(depositBack);
   return {
     depositBack: depositBack.toDecimalPlaces(2).toNumber(),
     tender: tender.toDecimalPlaces(2).toNumber(),
@@ -1936,11 +1942,14 @@ function buildRefundRevenueCreditLines(data: SaleRefundData): JournalLine[] {
     );
   }
   if (plan.tender <= 0.009) return lines;
-  const arCredit = data.arCreditAmount == null
-    ? undefined
-    : Decimal.max(Decimal.min(Money.parseDb(data.arCreditAmount), Money.parseDb(plan.tender)), 0)
-        .toDecimalPlaces(2)
-        .toNumber();
+  let arCredit = data.arCreditAmount;
+  if (arCredit != null) {
+    let capped = Money.parseDb(arCredit);
+    if (capped.lessThan(0)) capped = new Decimal(0);
+    const tenderAmt = Money.parseDb(plan.tender);
+    if (capped.greaterThan(tenderAmt)) capped = tenderAmt;
+    arCredit = capped.toDecimalPlaces(2).toNumber();
+  }
   lines.push(...buildTenderRefundCreditLines({
     ...data,
     totalAmount: plan.tender,
