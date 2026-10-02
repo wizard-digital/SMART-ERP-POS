@@ -22,6 +22,7 @@ import {
     hasPendingOrders,
     registerBackgroundSync,
 } from '../services/offlineSyncEngine';
+import { isSyncPausedForAuth } from '../lib/syncAuthGate';
 
 const RETRY_INTERVAL_MS = 30_000; // 30 seconds
 
@@ -58,6 +59,7 @@ export default function OfflineAutoSync() {
         if (!isOnline) return;
 
         const id = setInterval(() => {
+            if (isSyncPausedForAuth()) return;
             const hasSales = hasPendingSales();
             const hasOrders = hasPendingOrders();
             if (!hasSales && !hasOrders) return;

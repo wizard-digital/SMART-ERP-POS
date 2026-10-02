@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useOfflineContext } from '../contexts/OfflineContext';
 import { decrementLocalStock, getCachedCatalog, restoreLocalStock } from '../services/offlineCatalogService';
 import { syncOfflineCustomers, acquireSyncLock, releaseSyncLock } from '../services/offlineSyncEngine';
+import { decideSyncPost, isSyncPausedForAuth, pauseSyncForAuth } from '../lib/syncAuthGate';
 import { isServiceProductType } from '@shared/utils/productTypeRules';
 import {
   appendEvent,
@@ -307,6 +308,7 @@ export function useOfflineMode() {
     async (
       apiClient: AxiosInstance
     ): Promise<Array<{ offlineId: string; success: boolean; error?: string }>> => {
+      if (isSyncPausedForAuth()) return [];
       if (!navigator.onLine || isSyncingRef.current) return [];
       if (!acquireSyncLock()) return [];
 
@@ -382,39 +384,81 @@ export function useOfflineMode() {
                 });
               }
             } else {
-              markFailed(event.key, response.data?.error);
-              if (event.eventType === 'SALE_COMPLETED') {
-                results.push({
-                  offlineId: event.offlineId,
-                  success: false,
-                  error: response.data?.error ?? 'Unknown error',
-                });
+              const serverMsg = response.data?.error;
+              const decision = decideSyncPost({
+                network: false,
+                online: navigator.onLine,
+                status: response.status,
+                message: typeof serverMsg === 'string' ? serverMsg : 'Sync rejected',
+              });
+              if (decision.kind === 'auth-stop') {
+                pauseSyncForAuth();
+                break;
+              }
+              if (decision.kind === 'review') {
+                markReview(event.key, decision.message);
+                if (event.eventType === 'SALE_COMPLETED') {
+                  results.push({
+                    offlineId: event.offlineId,
+                    success: false,
+                    error: decision.message,
+                  });
+                }
+              } else if (decision.kind === 'retry') {
+                markFailed(event.key, decision.message);
+                if (event.eventType === 'SALE_COMPLETED') {
+                  results.push({
+                    offlineId: event.offlineId,
+                    success: false,
+                    error: decision.message,
+                  });
+                }
               }
             }
           } catch (error: unknown) {
             const axErr = error as AxiosError;
-            if (axErr.code === 'ERR_NETWORK' || !navigator.onLine) {
+            const serverMsg = (axErr.response?.data as Record<string, unknown>)?.error;
+            const errMsg =
+              (typeof serverMsg === 'string' ? serverMsg : '') ||
+              axErr.message ||
+              'Sync error';
+            const decision = decideSyncPost({
+              network: axErr.code === 'ERR_NETWORK' || !axErr.response,
+              online: navigator.onLine,
+              status: axErr.response?.status,
+              message: errMsg,
+            });
+            if (decision.kind === 'offline-stop') {
               if (event.eventType === 'SALE_COMPLETED') {
                 results.push({ offlineId: event.offlineId, success: false, error: 'Still offline' });
               }
               break;
             }
-            // 409 = idempotency hit → treat as success
-            if (axErr.response?.status === 409) {
+            if (decision.kind === 'synced') {
               markSynced(event.key);
               if (event.eventType === 'SALE_COMPLETED') {
                 results.push({ offlineId: event.offlineId, success: true });
               }
               continue;
             }
-            const serverMsg = (axErr.response?.data as Record<string, unknown>)?.error;
-            const errMsg =
-              (typeof serverMsg === 'string' ? serverMsg : '') ||
-              axErr.message ||
-              'Sync error';
-            markFailed(event.key, errMsg);
+            if (decision.kind === 'auth-stop') {
+              pauseSyncForAuth();
+              break;
+            }
+            if (decision.kind === 'review') {
+              markReview(event.key, decision.message);
+              if (event.eventType === 'SALE_COMPLETED') {
+                results.push({
+                  offlineId: event.offlineId,
+                  success: false,
+                  error: decision.message,
+                });
+              }
+              continue;
+            }
+            markFailed(event.key, decision.message);
             if (event.eventType === 'SALE_COMPLETED') {
-              results.push({ offlineId: event.offlineId, success: false, error: errMsg });
+              results.push({ offlineId: event.offlineId, success: false, error: decision.message });
             }
           }
         }

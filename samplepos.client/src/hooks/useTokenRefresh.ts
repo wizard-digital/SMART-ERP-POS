@@ -20,6 +20,7 @@ import {
 import { isAuthRecoveryPath } from '../lib/offlineLoginCredentials';
 import { AUTH_SESSION_WIPE_KEYS } from '@shared/security/deviceSessionPolicySsot';
 import { persistAuthStorage } from '../lib/originStorageQuota';
+import { resumeSyncAfterAuth } from '../lib/syncAuthGate';
 
 // Bare axios instance used exclusively for the /token/refresh HTTP call.
 // Must have NO response interceptors so that a 401 from the refresh endpoint
@@ -78,6 +79,7 @@ export function storeTokens(accessToken: string, refreshToken: string, expiresIn
     // Calculate expiry timestamp (subtract 60 seconds buffer for refresh)
     const expiryTime = Date.now() + (expiresIn - 60) * 1000;
     persistAuthStorage(TOKEN_EXPIRY_KEY, expiryTime.toString());
+    resumeSyncAfterAuth();
 }
 
 /**

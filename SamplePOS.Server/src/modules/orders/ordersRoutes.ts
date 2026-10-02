@@ -14,7 +14,6 @@ import { DocumentTaxService } from '../../services/documentTaxService.js';
 import { userHasPermission } from '../../authorization/serviceAuth.js';
 import {
   findSaleByIdempotencyKey,
-  isIdempotencyUniqueViolation,
   resolveExistingCompleteSale,
 } from './orderCompleteIdempotency.js';
 
@@ -394,36 +393,21 @@ router.post(
     try {
       result = await salesService.createSale(pool, saleInput);
     } catch (createErr: unknown) {
-      if (isIdempotencyUniqueViolation(createErr)) {
-        const dup = await resolveExistingCompleteSale(pool, { orderId, idempotencyKey });
-        if (dup) {
-          res.status(200).json({
-            success: true,
-            data: {
-              order: { ...order, status: 'COMPLETED' },
-              sale: { id: dup.id, saleNumber: dup.saleNumber },
-              alreadyCompleted: true,
-            },
-            message: 'Order already completed (idempotent)',
-          });
-          return;
-        }
-      }
-      const biz = createErr instanceof BusinessError ? createErr : null;
-      if (biz?.errorCode === 'ERR_ORDER_003') {
-        const existing = await resolveExistingCompleteSale(pool, { orderId, idempotencyKey });
-        if (existing) {
-          res.status(200).json({
-            success: true,
-            data: {
-              order: { ...order, status: 'COMPLETED' },
-              sale: { id: existing.id, saleNumber: existing.saleNumber },
-              alreadyCompleted: true,
-            },
-            message: 'Order already completed (idempotent)',
-          });
-          return;
-        }
+      // A second terminal, or a retry after commit, must receive the sale
+      // whether the throw was ERR_ORDER_003, isIdempotencyUniqueViolation, or
+      // any other error raised after the sale row exists.
+      const settled = await resolveExistingCompleteSale(pool, { orderId, idempotencyKey });
+      if (settled) {
+        res.status(200).json({
+          success: true,
+          data: {
+            order: { ...order, status: 'COMPLETED' },
+            sale: { id: settled.id, saleNumber: settled.saleNumber },
+            alreadyCompleted: true,
+          },
+          message: 'Order already completed (idempotent)',
+        });
+        return;
       }
       throw createErr;
     }

@@ -5,6 +5,7 @@
  * Prefer: npm run proof:order-complete-soak (writes metrics report).
  */
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import dotenv from 'dotenv';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,8 +16,19 @@ import {
   resolveExistingCompleteSale,
 } from './orderCompleteIdempotency.js';
 
+dotenv.config({ path: '.env.test' });
+
 const serverRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const RUN_LIVE = process.env.ORDER_COMPLETE_SOAK === '1' && !!process.env.DATABASE_URL;
+const databaseHost = (() => {
+  try {
+    return new URL(process.env.DATABASE_URL ?? '').hostname;
+  } catch {
+    return '';
+  }
+})();
+const RUN_LIVE =
+  process.env.ORDER_COMPLETE_SOAK === '1' &&
+  (databaseHost === 'localhost' || databaseHost === '127.0.0.1');
 
 function src(rel: string): string {
   return readFileSync(resolve(serverRoot, rel), 'utf8');

@@ -6,6 +6,7 @@
 import type { Pool, PoolClient } from 'pg';
 import Decimal from 'decimal.js';
 import { UnitOfWork } from '../../db/unitOfWork.js';
+import { restaurantTableLockKey, withRestaurantTableLocks } from './restaurantTableLock.js';
 import { tableHasColumn } from '../../db/schemaColumnCache.js';
 import { BusinessError, ForbiddenError, NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 import { Money } from '../../utils/money.js';
@@ -752,9 +753,7 @@ export const restaurantService = {
     const effectiveWaiterId =
       actor && !canEditOtherWaitersChecks(actor) ? actor.userId : input.waiterId;
 
-    const lockKey = `restaurant_table_${input.tableId}`;
-    await pool.query(`SELECT pg_advisory_lock(hashtext($1))`, [lockKey]);
-    try {
+    return withRestaurantTableLocks(pool, [restaurantTableLockKey(input.tableId)], async () => {
       const locked = await restaurantRepository.getTableById(pool, input.tableId);
       if (!locked) throw new NotFoundError('Restaurant table');
 
@@ -846,9 +845,7 @@ export const restaurantService = {
       });
 
       return this.getTableCheck(pool, input.tableId, orderId, actor);
-    } finally {
-      await pool.query(`SELECT pg_advisory_unlock(hashtext($1))`, [lockKey]);
-    }
+    });
   },
 
   /**
@@ -950,10 +947,8 @@ export const restaurantService = {
       });
     }
 
-    // Append / create under session advisory lock — prevent double-open races
-    const lockKey = `restaurant_table_${input.tableId}`;
-    await pool.query(`SELECT pg_advisory_lock(hashtext($1))`, [lockKey]);
-    try {
+    // Same-connection lock: two terminals on this table serialize; other tables do not wait.
+    return withRestaurantTableLocks(pool, [restaurantTableLockKey(input.tableId)], async () => {
       let orderId: string | null = null;
       const forceNew = !!input.forceNewCheck;
 
@@ -1287,9 +1282,7 @@ export const restaurantService = {
         order: await ordersService.getOrder(pool, orderId),
         meta: await restaurantRepository.getOrderRestaurantMeta(pool, orderId),
       };
-    } finally {
-      await pool.query(`SELECT pg_advisory_unlock(hashtext($1))`, [lockKey]);
-    }
+    });
   },
 
   /**
@@ -2242,13 +2235,10 @@ export const restaurantService = {
       throw new BusinessError('Target table must be free', 'ERR_RESTAURANT_TABLE_BUSY');
     }
 
-    const lockFrom = `restaurant_table_${meta.tableId}`;
-    const lockTo = `restaurant_table_${toTableId}`;
-    await pool.query(`SELECT pg_advisory_lock(hashtext($1)), pg_advisory_lock(hashtext($2))`, [
-      lockFrom,
-      lockTo,
-    ]);
-    try {
+    await withRestaurantTableLocks(
+      pool,
+      [restaurantTableLockKey(meta.tableId), restaurantTableLockKey(toTableId)],
+      async () => {
       await UnitOfWork.run(pool, async (client: PoolClient) => {
         const lockedTo = await restaurantRepository.getTableById(client, toTableId);
         if (!lockedTo || lockedTo.status !== 'FREE' || lockedTo.currentOrderId) {
@@ -2266,12 +2256,8 @@ export const restaurantService = {
         }
         await restaurantRepository.occupyTable(client, toTableId, orderId);
       });
-    } finally {
-      await pool.query(`SELECT pg_advisory_unlock(hashtext($1)), pg_advisory_unlock(hashtext($2))`, [
-        lockFrom,
-        lockTo,
-      ]);
-    }
+      },
+    );
 
     logger.info('Restaurant check transferred', { orderId, from: meta.tableId, to: toTableId });
     return {
@@ -2477,15 +2463,14 @@ export const restaurantService = {
     }
 
     const lockKeys = sameTable
-      ? [`restaurant_table_${sourceMeta.tableId}`]
-      : [`restaurant_table_${sourceMeta.tableId}`, `restaurant_table_${input.targetTableId}`];
-
-    for (const k of lockKeys) {
-      await pool.query(`SELECT pg_advisory_lock(hashtext($1))`, [k]);
-    }
+      ? [restaurantTableLockKey(sourceMeta.tableId!)]
+      : [
+          restaurantTableLockKey(sourceMeta.tableId!),
+          restaurantTableLockKey(input.targetTableId),
+        ];
 
     let newOrderId = '';
-    try {
+    await withRestaurantTableLocks(pool, lockKeys, async () => {
       await UnitOfWork.run(pool, async (client: PoolClient) => {
         if (!sameTable) {
           const lockedTo = await restaurantRepository.getTableById(client, input.targetTableId);
@@ -2606,11 +2591,7 @@ export const restaurantService = {
           await restaurantRepository.occupyTable(client, destTableId, newOrderId);
         }
       });
-    } finally {
-      for (const k of lockKeys) {
-        await pool.query(`SELECT pg_advisory_unlock(hashtext($1))`, [k]);
-      }
-    }
+    });
 
     logger.info('Restaurant check split', {
       sourceOrderId,

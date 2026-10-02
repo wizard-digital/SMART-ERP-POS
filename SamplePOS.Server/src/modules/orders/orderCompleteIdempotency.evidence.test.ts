@@ -83,6 +83,9 @@ describe('order complete idempotency — SSOT source gates', () => {
     expect(routes).toContain('isIdempotencyUniqueViolation');
     expect(routes).toContain('ERR_ORDER_003');
     expect(routes).toContain("headers['x-idempotency-key']");
+    expect(routes).toMatch(
+      /catch \(createErr: unknown\) \{[\s\S]*resolveExistingCompleteSale\(pool, \{ orderId, idempotencyKey \}\)[\s\S]*throw createErr/,
+    );
   });
 
   it('EVIDENCE: createSale locks order FOR UPDATE and fails closed on lost complete race', () => {

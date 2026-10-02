@@ -21,6 +21,7 @@ import { enqueueOfflineRequest } from '../lib/offlineRequestQueue';
 import { isPublicApiRoute } from '../lib/apiPublicRoutes';
 import { isBackendUnavailableError } from '../lib/isBackendUnavailableError';
 import { HandledApiError, ACCESS_DENIED_MESSAGE, friendlyHttpErrorMessage, dispatchUserFacingApiNotification, resolveUserFacingApiNotification, markApiErrorNotified, installGlobalApiToastDedupe } from './errorHandler';
+import { enqueueTerminalMutation, newIdempotencyKey, resolveRequestIdempotencyKey, singleFlight } from '../lib/terminalMutationGate';
 
 // Global: interceptor-notified API errors suppress page-level re-toasts
 installGlobalApiToastDedupe();
@@ -161,11 +162,13 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    // Idempotency key — prevents duplicate transactions from retries / double-clicks.
-    // Generated per request so each submission gets a unique key.
+    // Keep a caller-supplied key so a retry of the same pay or add replays.
+    // Mint a key only when the caller did not send one.
     const method = (config.method ?? 'get').toUpperCase();
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && config.headers) {
-      config.headers['X-Idempotency-Key'] = crypto.randomUUID();
+      config.headers['X-Idempotency-Key'] = resolveRequestIdempotencyKey(
+        config.headers['X-Idempotency-Key'],
+      );
     }
 
     // Log request in development
@@ -622,9 +625,11 @@ export const api = {
       /** Stable per payment attempt — retries must reuse the same key. */
       idempotencyKey: string;
     }) =>
-      apiClient.post<ApiResponse>(`orders/${id}/complete`, data, {
-        headers: { 'X-Idempotency-Key': data.idempotencyKey },
-      }),
+      enqueueTerminalMutation(`complete:${id}`, () =>
+        apiClient.post<ApiResponse>(`orders/${id}/complete`, data, {
+          headers: { 'X-Idempotency-Key': data.idempotencyKey },
+        }),
+      ),
     cancel: (id: string, data: { reason: string }) =>
       apiClient.post<ApiResponse>(`orders/${id}/cancel`, data),
   },
@@ -1492,10 +1497,12 @@ export const api = {
       params?: { orderId?: string },
       config?: AxiosRequestConfig,
     ) =>
-      apiClient.get<ApiResponse>(`restaurant/tables/${tableId}/check`, {
-        params,
-        ...config,
-      }),
+      singleFlight(`check:${tableId}:${params?.orderId ?? ''}`, () =>
+        apiClient.get<ApiResponse>(`restaurant/tables/${tableId}/check`, {
+          params,
+          ...config,
+        }),
+      ),
     activateCheck: (
       tableId: string,
       data: { orderId: string },
@@ -1595,7 +1602,15 @@ export const api = {
         }>;
         uomId?: string | null;
       }>;
-    }) => apiClient.post<ApiResponse>('restaurant/checks/items', data),
+    }) => {
+      const idempotencyKey = newIdempotencyKey();
+      const lane = `add:${data.tableId}:${data.orderId ?? 'new'}`;
+      return enqueueTerminalMutation(lane, () =>
+        apiClient.post<ApiResponse>('restaurant/checks/items', data, {
+          headers: { 'X-Idempotency-Key': idempotencyKey },
+        }),
+      );
+    },
     updateGuest: (
       orderId: string,
       data: {
@@ -2006,6 +2021,30 @@ export const api = {
   },
 
   // ── Enterprise Accounting ─────────────────────────────────────────
+  ownership: {
+    profile: () => apiClient.get<ApiResponse>('ownership/profile'),
+    setLegalForm: (legalForm: 'SOLE_PROPRIETOR' | 'COMPANY') =>
+      apiClient.put<ApiResponse>('ownership/legal-form', { legalForm }),
+    shareholders: () => apiClient.get<ApiResponse>('ownership/shareholders'),
+    createShareholder: (data: { legalName: string; userId?: string | null; customerId?: string | null }) =>
+      apiClient.post<ApiResponse>('ownership/shareholders', data),
+    register: (asOf: string) => apiClient.get<ApiResponse>('ownership/register', { params: { asOf } }),
+    liquidity: () => apiClient.get<ApiResponse>('ownership/liquidity-accounts'),
+    issue: (data: Record<string, string | null | undefined>) => apiClient.post<ApiResponse>('ownership/issues', data),
+    transfer: (data: Record<string, string | null | undefined>) => apiClient.post<ApiResponse>('ownership/transfers', data),
+    dividends: () => apiClient.get<ApiResponse>('ownership/dividends'),
+    proposeDividend: (amount: string) => apiClient.post<ApiResponse>('ownership/dividends', { amount }),
+    approveDividend: (id: string) => apiClient.post<ApiResponse>(`ownership/dividends/${id}/approve`),
+    declareDividend: (id: string, data: { declarationDate: string; idempotencyKey: string }) =>
+      apiClient.post<ApiResponse>(`ownership/dividends/${id}/declare`, data),
+    payDividend: (id: string, data: { paymentDate: string; cashAccountCode: string; idempotencyKey: string }) =>
+      apiClient.post<ApiResponse>(`ownership/dividends/${id}/pay`, data),
+    loans: () => apiClient.get<ApiResponse>('ownership/loans'),
+    drawLoan: (data: Record<string, string>) => apiClient.post<ApiResponse>('ownership/loans', data),
+    repayLoan: (id: string, idempotencyKey: string) =>
+      apiClient.post<ApiResponse>(`ownership/loans/${id}/repay`, { idempotencyKey }),
+  },
+
   enterprise: {
     // Fiscal Year Close
     fiscalYearStatus: (year: number) =>

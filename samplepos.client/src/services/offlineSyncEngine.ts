@@ -21,6 +21,11 @@ import {
     markFailed,
     getAllSyncState,
 } from '../lib/offlineEventJournal';
+import {
+    decideSyncPost,
+    isSyncPausedForAuth,
+    pauseSyncForAuth,
+} from '../lib/syncAuthGate';
 
 const OFFLINE_CUSTOMERS_KEY = 'pos_offline_customers';
 
@@ -166,6 +171,7 @@ export async function syncOfflineCustomers(): Promise<Map<string, string>> {
  * Dispatches `offline-queue-updated` event when done.
  */
 export async function syncOfflineSales(): Promise<SyncResult> {
+    if (isSyncPausedForAuth()) return { synced: 0, failed: 0, review: 0 };
     if (!navigator.onLine || !acquireSyncLock()) return { synced: 0, failed: 0, review: 0 };
 
     let syncedCount = 0;
@@ -224,27 +230,58 @@ export async function syncOfflineSales(): Promise<SyncResult> {
                     markReview(event.key, response.data.error);
                     reviewCount++;
                 } else {
-                    markFailed(event.key, response.data?.error);
-                    failedCount++;
+                    const serverMsg = response.data?.error;
+                    const decision = decideSyncPost({
+                        network: false,
+                        online: navigator.onLine,
+                        status: response.status,
+                        message: typeof serverMsg === 'string' ? serverMsg : 'Sync rejected',
+                    });
+                    if (decision.kind === 'auth-stop') {
+                        pauseSyncForAuth();
+                        break;
+                    }
+                    if (decision.kind === 'review') {
+                        markReview(event.key, decision.message);
+                        reviewCount++;
+                    } else if (decision.kind === 'retry') {
+                        markFailed(event.key, decision.message);
+                        failedCount++;
+                    }
                 }
             } catch (err: unknown) {
                 const axErr = err as AxiosError;
-                if (axErr.code === 'ERR_NETWORK' || !navigator.onLine) {
-                    break; // Stop — still offline
-                }
-                if (axErr.response?.status === 409) {
+                const serverMsg = (axErr.response?.data as Record<string, unknown>)?.error;
+                const errMsg = (typeof serverMsg === 'string' ? serverMsg : '') || axErr.message || 'Sync error';
+                const decision = decideSyncPost({
+                    network: axErr.code === 'ERR_NETWORK' || !axErr.response,
+                    online: navigator.onLine,
+                    status: axErr.response?.status,
+                    message: errMsg,
+                });
+                if (decision.kind === 'offline-stop') break;
+                if (decision.kind === 'synced') {
                     markSynced(event.key);
                     syncedCount++;
                     continue;
                 }
-                const serverMsg = (axErr.response?.data as Record<string, unknown>)?.error;
-                const errMsg = (typeof serverMsg === 'string' ? serverMsg : '') || axErr.message || 'Sync error';
-                markFailed(event.key, errMsg);
+                if (decision.kind === 'auth-stop') {
+                    pauseSyncForAuth();
+                    break;
+                }
+                if (decision.kind === 'review') {
+                    markReview(event.key, decision.message);
+                    reviewCount++;
+                    continue;
+                }
+                markFailed(event.key, decision.message);
                 failedCount++;
             }
         }
 
-        window.dispatchEvent(new CustomEvent('offline-queue-updated'));
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('offline-queue-updated'));
+        }
 
         return { synced: syncedCount, failed: failedCount, review: reviewCount };
     } finally {

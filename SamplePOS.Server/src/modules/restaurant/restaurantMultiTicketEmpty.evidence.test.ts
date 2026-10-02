@@ -23,8 +23,10 @@ describe('EVIDENCE multi-ticket empty open (party integrity)', () => {
     expect(start).toBeGreaterThan(0);
     expect(end).toBeGreaterThan(start);
     const body = service.slice(start, end);
-    expect(body).toMatch(/pg_advisory_lock/);
-    expect(body).toMatch(/pg_advisory_unlock/);
+    expect(body).toMatch(/withRestaurantTableLocks/);
+    expect(body).toMatch(/restaurantTableLockKey/);
+    expect(body).not.toMatch(/pool\.query\(`SELECT pg_advisory_lock/);
+    expect(body).not.toMatch(/pool\.query\(`SELECT pg_advisory_unlock/);
     expect(body).toMatch(/listPendingOrdersForTable/);
     expect(body).toMatch(/occupyTable/);
     // Must not pay or cancel peer tickets when opening a new tab.
