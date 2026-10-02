@@ -28,7 +28,10 @@ export type IdempotentResult = {
   executed: boolean;
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 export async function waitForCompleted(
   store: IdempotencyStore,
