@@ -25,6 +25,7 @@ import {
     decideSyncPost,
     isSyncPausedForAuth,
     pauseSyncForAuth,
+    readThrownSync,
 } from '../lib/syncAuthGate';
 
 const OFFLINE_CUSTOMERS_KEY = 'pos_offline_customers';
@@ -250,14 +251,12 @@ export async function syncOfflineSales(): Promise<SyncResult> {
                     }
                 }
             } catch (err: unknown) {
-                const axErr = err as AxiosError;
-                const serverMsg = (axErr.response?.data as Record<string, unknown>)?.error;
-                const errMsg = (typeof serverMsg === 'string' ? serverMsg : '') || axErr.message || 'Sync error';
+                const thrown = readThrownSync(err);
                 const decision = decideSyncPost({
-                    network: axErr.code === 'ERR_NETWORK' || !axErr.response,
+                    network: thrown.network,
                     online: navigator.onLine,
-                    status: axErr.response?.status,
-                    message: errMsg,
+                    status: thrown.status,
+                    message: thrown.message,
                 });
                 if (decision.kind === 'offline-stop') break;
                 if (decision.kind === 'synced') {

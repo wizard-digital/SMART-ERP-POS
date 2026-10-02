@@ -22,6 +22,7 @@ import { isPublicApiRoute } from '../lib/apiPublicRoutes';
 import { isBackendUnavailableError } from '../lib/isBackendUnavailableError';
 import { HandledApiError, ACCESS_DENIED_MESSAGE, friendlyHttpErrorMessage, dispatchUserFacingApiNotification, resolveUserFacingApiNotification, markApiErrorNotified, installGlobalApiToastDedupe } from './errorHandler';
 import { enqueueTerminalMutation, newIdempotencyKey, resolveRequestIdempotencyKey, singleFlight } from '../lib/terminalMutationGate';
+import { isAlreadySyncedSyncResponse } from '../lib/syncAuthGate';
 
 // Global: interceptor-notified API errors suppress page-level re-toasts
 installGlobalApiToastDedupe();
@@ -309,6 +310,10 @@ apiClient.interceptors.response.use(
     if (error.response?.status) {
       // Soft-confirm gates: caller shows impact dialog and may retry — do not toast here.
       if (brvCode === 'OB_REPLACE_CONFIRM_REQUIRED') {
+        return Promise.reject(error);
+      }
+      // Offline sync 409 alreadySynced is a saved duplicate, not a user conflict.
+      if (isAlreadySyncedSyncResponse(error)) {
         return Promise.reject(error);
       }
       if (error.config?.silentErrorToast) {

@@ -11,7 +11,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useOfflineContext } from '../contexts/OfflineContext';
 import { decrementLocalStock, getCachedCatalog, restoreLocalStock } from '../services/offlineCatalogService';
 import { syncOfflineCustomers, acquireSyncLock, releaseSyncLock } from '../services/offlineSyncEngine';
-import { decideSyncPost, isSyncPausedForAuth, pauseSyncForAuth } from '../lib/syncAuthGate';
+import { decideSyncPost, isSyncPausedForAuth, pauseSyncForAuth, readThrownSync } from '../lib/syncAuthGate';
 import { isServiceProductType } from '@shared/utils/productTypeRules';
 import {
   appendEvent,
@@ -37,7 +37,7 @@ import {
   type DerivedSale,
   type DerivedOrder,
 } from '../lib/offlineEventSelectors';
-import type { AxiosInstance, AxiosError } from 'axios';
+import type { AxiosInstance } from 'axios';
 
 // ── Re-export derived types for consumers ─────────────────────
 export type { DerivedSale, DerivedOrder };
@@ -416,17 +416,12 @@ export function useOfflineMode() {
               }
             }
           } catch (error: unknown) {
-            const axErr = error as AxiosError;
-            const serverMsg = (axErr.response?.data as Record<string, unknown>)?.error;
-            const errMsg =
-              (typeof serverMsg === 'string' ? serverMsg : '') ||
-              axErr.message ||
-              'Sync error';
+            const thrown = readThrownSync(error);
             const decision = decideSyncPost({
-              network: axErr.code === 'ERR_NETWORK' || !axErr.response,
+              network: thrown.network,
               online: navigator.onLine,
-              status: axErr.response?.status,
-              message: errMsg,
+              status: thrown.status,
+              message: thrown.message,
             });
             if (decision.kind === 'offline-stop') {
               if (event.eventType === 'SALE_COMPLETED') {

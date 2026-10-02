@@ -51,6 +51,51 @@ export function resumeSyncAfterAuth(): void {
   }
 }
 
+/**
+ * A 409 from offline sync with success / alreadySynced is a saved duplicate.
+ * It must not be shown as "conflicts with existing data", and the event must
+ * leave the retry queue.
+ */
+export function isAlreadySyncedSyncResponse(error: {
+  config?: { url?: string };
+  response?: { status?: number; data?: unknown };
+}): boolean {
+  if (error.response?.status !== 409) return false;
+  const url = error.config?.url ?? '';
+  if (!url.includes('pos/sync-events')) return false;
+  const body = error.response.data as
+    | { success?: boolean; data?: { alreadySynced?: boolean } }
+    | undefined;
+  return body?.success === true || body?.data?.alreadySynced === true;
+}
+
+/** Read a thrown sync failure, including the interceptor's HandledApiError. */
+export function readThrownSync(err: unknown): {
+  network: boolean;
+  status?: number;
+  message: string;
+} {
+  if (err && typeof err === 'object' && (err as { isHandled?: boolean }).isHandled === true) {
+    const handled = err as { httpStatus?: number; message?: string };
+    return {
+      network: false,
+      status: handled.httpStatus,
+      message: handled.message || 'Sync error',
+    };
+  }
+  const ax = err as {
+    code?: string;
+    message?: string;
+    response?: { status?: number; data?: { error?: unknown } };
+  };
+  const serverMsg = ax.response?.data?.error;
+  return {
+    network: ax.code === 'ERR_NETWORK' || !ax.response,
+    status: ax.response?.status,
+    message: (typeof serverMsg === 'string' ? serverMsg : '') || ax.message || 'Sync error',
+  };
+}
+
 export function decideSyncPost(input: {
   network: boolean;
   online: boolean;

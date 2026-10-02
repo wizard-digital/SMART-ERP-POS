@@ -15,6 +15,7 @@ vi.mock('../utils/api', () => ({
 import { appendEvent, getSyncStatus, invalidateJournalMemoryCache } from './offlineEventJournal';
 import {
   decideSyncPost,
+  isAlreadySyncedSyncResponse,
   isSyncPausedForAuth,
   pauseSyncForAuth,
   resumeSyncAfterAuth,
@@ -116,6 +117,72 @@ describe('terminal sync and check lanes', () => {
     post.mockClear();
     const second = await syncOfflineSales();
     expect(second).toEqual({ synced: 0, failed: 0, review: 0 });
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('marks an already-synced 409 as saved and does not post it again', async () => {
+    resumeSyncAfterAuth();
+    appendEvent({
+      eventType: 'ORDER_CREATED',
+      key: 'ofl_already',
+      orderId: '0ce60731-c0a8-4fd8-8e15-630bf251a565',
+      offlineId: 'OFF-2',
+      lines: [],
+      ts: Date.now(),
+    });
+    const body = {
+      success: true,
+      data: { alreadySynced: true, orderId: '0ce60731-c0a8-4fd8-8e15-630bf251a565' },
+    };
+    expect(
+      isAlreadySyncedSyncResponse({
+        config: { url: '/pos/sync-events' },
+        response: { status: 409, data: body },
+      }),
+    ).toBe(true);
+    post.mockRejectedValueOnce({
+      isHandled: true,
+      httpStatus: 409,
+      message: 'This conflicts with existing data. Please refresh and try again.',
+    });
+
+    const first = await syncOfflineSales();
+    expect(first.synced).toBe(1);
+    expect(getSyncStatus('ofl_already')).toBe('SYNCED');
+
+    post.mockClear();
+    const second = await syncOfflineSales();
+    expect(second.synced).toBe(0);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('marks the interceptor-forwarded 409 body as saved and does not post it again', async () => {
+    resumeSyncAfterAuth();
+    appendEvent({
+      eventType: 'ORDER_CREATED',
+      key: 'ofl_forwarded',
+      orderId: '0ce60731-c0a8-4fd8-8e15-630bf251a565',
+      offlineId: 'OFF-3',
+      lines: [],
+      ts: Date.now(),
+    });
+    const body = {
+      success: true,
+      data: { alreadySynced: true, orderId: '0ce60731-c0a8-4fd8-8e15-630bf251a565' },
+    };
+    post.mockRejectedValueOnce({
+      config: { url: '/pos/sync-events' },
+      response: { status: 409, data: body },
+      message: 'Request failed with status code 409',
+    });
+
+    const first = await syncOfflineSales();
+    expect(first.synced).toBe(1);
+    expect(getSyncStatus('ofl_forwarded')).toBe('SYNCED');
+
+    post.mockClear();
+    const second = await syncOfflineSales();
+    expect(second.synced).toBe(0);
     expect(post).not.toHaveBeenCalled();
   });
 
