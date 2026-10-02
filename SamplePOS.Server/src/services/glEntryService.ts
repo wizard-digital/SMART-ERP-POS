@@ -27,6 +27,7 @@
  */
 
 import type pg from 'pg';
+import Decimal from 'decimal.js';
 import { AccountingCore, JournalLine, AccountingError } from './accountingCore.js';
 import { BusinessRuleException } from '../errors/BusinessRuleException.js';
 import { AppError, ValidationError } from '../middleware/errorHandler.js';
@@ -1897,7 +1898,58 @@ export async function recordSaleVoidToGL(data: SaleVoidData, pool?: pg.Pool, txC
 // SALE REFUND (PARTIAL/FULL REVERSAL) JOURNAL ENTRIES
 // =============================================================================
 
+/**
+ * Deposit already applied to the sale is returned to the deposit, not paid out again as cash.
+ * depositBack is credited to AR because reversing the application journal reopened that AR.
+ * tender is the rest, credited to the sale's payment method.
+ */
+export function planDepositRefundCredits(
+  totalAmount: number,
+  depositRestored: number,
+): { depositBack: number; tender: number } {
+  const total = Money.parseDb(totalAmount);
+  const restored = Money.parseDb(depositRestored);
+  const depositBack = Decimal.min(Decimal.max(restored, 0), Decimal.max(total, 0));
+  const tender = Decimal.max(total.minus(depositBack), 0);
+  return {
+    depositBack: depositBack.toDecimalPlaces(2).toNumber(),
+    tender: tender.toDecimalPlaces(2).toNumber(),
+  };
+}
+
 function buildRefundRevenueCreditLines(data: SaleRefundData): JournalLine[] {
+  const total = data.totalAmount;
+  if (total <= 0.009) return [];
+  const plan = planDepositRefundCredits(total, data.depositRestoredAmount ?? 0);
+  const lines: JournalLine[] = [];
+  if (plan.depositBack > 0.009) {
+    const customerId = requireCustomerIdForAr(
+      data.customerId,
+      `refund ${data.refundNumber} deposit restore`,
+    );
+    lines.push(
+      customerArLine({
+        customerId,
+        creditAmount: plan.depositBack,
+        description: `Refund ${data.refundNumber}: deposit restored for ${data.saleNumber}`,
+      }),
+    );
+  }
+  if (plan.tender <= 0.009) return lines;
+  const arCredit = data.arCreditAmount == null
+    ? undefined
+    : Decimal.max(Decimal.min(Money.parseDb(data.arCreditAmount), Money.parseDb(plan.tender)), 0)
+        .toDecimalPlaces(2)
+        .toNumber();
+  lines.push(...buildTenderRefundCreditLines({
+    ...data,
+    totalAmount: plan.tender,
+    arCreditAmount: arCredit,
+  }));
+  return lines;
+}
+
+function buildTenderRefundCreditLines(data: SaleRefundData): JournalLine[] {
   const total = data.totalAmount;
   if (total <= 0.009) return [];
 
@@ -1953,6 +2005,20 @@ function buildRefundRevenueCreditLines(data: SaleRefundData): JournalLine[] {
     return lines;
   }
 
+  // A deposit-paid sale already sits on AR. The deposit itself comes back by
+  // reversing the application journal, which credits 2200. This line must not
+  // credit 2200 a second time.
+  if (data.paymentMethod === 'DEPOSIT') {
+    const customerId = requireCustomerIdForAr(data.customerId, `refund ${data.refundNumber}`);
+    return [
+      customerArLine({
+        customerId,
+        creditAmount: total,
+        description: `Refund ${data.refundNumber}: deposit sale cleared for ${data.saleNumber}`,
+      }),
+    ];
+  }
+
   let creditAccountCode: string;
   switch (data.paymentMethod) {
     case 'CARD':
@@ -1961,9 +2027,6 @@ function buildRefundRevenueCreditLines(data: SaleRefundData): JournalLine[] {
     case 'MOBILE_MONEY':
     case 'AIRTEL_MONEY':
       creditAccountCode = AccountCodes.MOBILE_MONEY;
-      break;
-    case 'DEPOSIT':
-      creditAccountCode = AccountCodes.CUSTOMER_DEPOSITS;
       break;
     default:
       creditAccountCode = AccountCodes.CASH;
@@ -1975,9 +2038,6 @@ function buildRefundRevenueCreditLines(data: SaleRefundData): JournalLine[] {
       debitAmount: 0,
       creditAmount: total,
       description: `Refund ${data.refundNumber}: ${data.paymentMethod} refund for ${data.saleNumber}`,
-      ...(creditAccountCode === AccountCodes.CUSTOMER_DEPOSITS && data.customerId
-        ? { entityType: 'customer' as const, entityId: data.customerId }
-        : {}),
     },
   ];
 }
@@ -1997,6 +2057,11 @@ export interface SaleRefundData {
   arCreditAmount?: number;
   /** REFUND = cash/AR repayment; EXCHANGE = store credit (2200) for POS replacement */
   refundType?: 'REFUND' | 'EXCHANGE';
+  /**
+   * Amount of this refund that was put back onto customer deposits by reversing
+   * the sale's deposit-application journals. That portion credits AR, not cash.
+   */
+  depositRestoredAmount?: number;
 }
 
 /**

@@ -9,6 +9,7 @@ import * as depositsRepository from './depositsRepository.js';
 import { findCustomerById } from '../customers/customerRepository.js';
 import * as glEntryService from '../../services/glEntryService.js';
 import { UnitOfWork } from '../../db/unitOfWork.js';
+import { AccountingCore } from '../../services/accountingCore.js';
 import logger from '../../utils/logger.js';
 import { Money } from '../../utils/money.js';
 import {
@@ -352,32 +353,162 @@ async function applyDepositsToSaleWithPool(
     });
 }
 
+export interface DepositApplicationRestore {
+    /** Amount whose liability journal and deposit balance both moved. */
+    restored: number;
+    applications: number;
+}
+
 /**
- * Reverse all deposit applications for a sale (used when voiding sale)
- * All reversals are atomic — if one fails, none are committed.
+ * Put deposit applications for a sale back onto the customer deposit,
+ * in the caller's transaction.
+ *
+ * The deposit balance moves only when the matching DEPOSIT_APPLICATION
+ * journal moves with it. An application with no journal is left in place,
+ * because restoring the balance alone would break the liability.
+ * Newest applications are restored first, up to `amount`.
+ */
+export async function restoreSaleDepositApplicationsInTransaction(
+    client: PoolClient,
+    pool: Pool,
+    input: {
+        saleId: string;
+        amount: number;
+        reversalDate: string;
+        reason: string;
+        userId: string;
+    },
+): Promise<DepositApplicationRestore> {
+    const cap = money2(input.amount);
+    if (!cap.greaterThan(0)) {
+        return { restored: 0, applications: 0 };
+    }
+
+    const apps = await client.query<{
+        id: string;
+        amount_applied: string;
+        customer_id: string;
+        deposit_number: string;
+    }>(
+        `SELECT a.id, a.amount_applied, d.customer_id, d.deposit_number
+         FROM pos_deposit_applications a
+         JOIN pos_customer_deposits d ON d.id = a.deposit_id
+         WHERE a.sale_id = $1
+         ORDER BY a.applied_at DESC, a.id DESC
+         FOR UPDATE OF a, d`,
+        [input.saleId],
+    );
+
+    let remaining = cap;
+    let restored = money2(0);
+    let applications = 0;
+
+    for (const app of apps.rows) {
+        if (!remaining.greaterThan(0.009)) break;
+        const applied = money2(app.amount_applied);
+        if (!applied.greaterThan(0)) continue;
+
+        const journal = await client.query<{ Id: string }>(
+            `SELECT "Id"
+             FROM ledger_transactions
+             WHERE "ReferenceType" = 'DEPOSIT_APPLICATION'
+               AND "ReferenceId" = $1
+               AND "IsReversed" = FALSE
+             ORDER BY "CreatedAt" DESC
+             LIMIT 1`,
+            [app.id],
+        );
+        if (journal.rows.length === 0) {
+            logger.warn('Deposit application left in place: no unreversed journal to match it', {
+                applicationId: app.id,
+                saleId: input.saleId,
+            });
+            continue;
+        }
+
+        const slice = Decimal.min(remaining, applied);
+        const whole = slice.minus(applied).abs().lessThan(0.001);
+        if (whole) {
+            await AccountingCore.reverseTransaction({
+                originalTransactionId: journal.rows[0].Id,
+                reversalDate: input.reversalDate,
+                reason: input.reason,
+                userId: input.userId,
+                idempotencyKey: `DEPOSIT_APP_RESTORE-${app.id}`,
+            }, pool, client);
+            await depositsRepository.reverseDepositApplicationInTransaction(client, app.id);
+        } else {
+            const amount = slice.toDecimalPlaces(2).toNumber();
+            await AccountingCore.createJournalEntry({
+                entryDate: input.reversalDate,
+                description: `Restore part of ${app.deposit_number}: ${input.reason}`,
+                referenceType: 'DEPOSIT_APPLICATION_REVERSAL',
+                referenceId: `${app.id}:${slice.toFixed(2)}`,
+                referenceNumber: `REV-${app.deposit_number}`,
+                lines: [
+                    {
+                        accountCode: glEntryService.AccountCodes.ACCOUNTS_RECEIVABLE,
+                        description: `AR reopened — part of ${app.deposit_number} restored`,
+                        debitAmount: amount,
+                        creditAmount: 0,
+                        entityType: 'customer',
+                        entityId: app.customer_id,
+                    },
+                    {
+                        accountCode: glEntryService.AccountCodes.CUSTOMER_DEPOSITS,
+                        description: `Customer deposit restored — ${app.deposit_number}`,
+                        debitAmount: 0,
+                        creditAmount: amount,
+                        entityType: 'customer',
+                        entityId: app.customer_id,
+                    },
+                ],
+                userId: input.userId,
+                idempotencyKey: `DEPOSIT_APP_RESTORE-${app.id}-${slice.toFixed(2)}`,
+                source: 'SYSTEM_CORRECTION',
+            }, pool, client);
+            await depositsRepository.reduceDepositApplicationInTransaction(
+                client,
+                app.id,
+                slice.toFixed(2),
+            );
+        }
+
+        remaining = remaining.minus(slice);
+        restored = restored.plus(slice);
+        applications += 1;
+        logger.info('Deposit application restored with its journal', {
+            depositNumber: app.deposit_number,
+            amount: slice.toFixed(2),
+            saleId: input.saleId,
+        });
+    }
+
+    return {
+        restored: restored.toDecimalPlaces(2).toNumber(),
+        applications,
+    };
+}
+
+/**
+ * Reverse all deposit applications for a sale.
+ * Balance and liability move together inside one transaction.
  */
 export async function reverseDepositsForSale(
     pool: Pool,
-    saleId: string
+    saleId: string,
+    input: { reversalDate: string; reason: string; userId: string },
 ): Promise<number> {
-    const applications = await depositsRepository.getDepositApplicationsBySale(pool, saleId);
-
-    if (applications.length === 0) {
-        return 0;
-    }
-
-    await UnitOfWork.run<void>(pool, async (client) => {
-        for (const app of applications) {
-            await depositsRepository.reverseDepositApplicationInTransaction(client, app.id);
-            logger.info('Deposit application reversed', {
-                depositNumber: app.deposit_number,
-                amountReversed: app.amount_applied,
-                saleId
-            });
-        }
+    const result = await UnitOfWork.run(pool, async (client) => {
+        return restoreSaleDepositApplicationsInTransaction(client, pool, {
+            saleId,
+            amount: Number.MAX_SAFE_INTEGER,
+            reversalDate: input.reversalDate,
+            reason: input.reason,
+            userId: input.userId,
+        });
     });
-
-    return applications.length;
+    return result.applications;
 }
 
 /**

@@ -1,0 +1,256 @@
+{
+  "at": "2026-10-02T18:31:46.019Z",
+  "feature": "DEPOSIT_REFUND_RESTORE_SSOT",
+  "historicalBug": {
+    "tenants": [
+      "pos_tenant_blis"
+    ],
+    "symptom": "Full return of a deposit-applied sale left pos_deposit_applications in place; CASH refund paid till cash; DEPOSIT refund could credit 2200 twice; deposit available and account 2200 diverged",
+    "cause": "refundSale/voidSale never called deposit reverse; reverseDepositsForSale existed but had zero callers and did not reverse GL; buildTenderRefundCreditLines credited 2200 for DEPOSIT tender",
+    "doNotHeal": "Blis SALE-2026-1812 / SALE-2026-2053 already cash-refunded — restoring those deposits would double-pay. Orphan apps (no JE) stay used."
+  },
+  "ssot": {
+    "restore": "restoreSaleDepositApplicationsInTransaction on refund/void client before GL",
+    "journalCouple": "subledger moves only with DEPOSIT_APPLICATION reverse (or partial DR AR / CR 2200)",
+    "refundCredits": "CR AR for depositRestoredAmount; tender = remainder; never second CR 2200",
+    "depositTender": "DEPOSIT paymentMethod refund credits AR (sale parked on AR), not 2200"
+  },
+  "summary": {
+    "pass": 46,
+    "fail": 0,
+    "total": 46,
+    "verdict": "PASS"
+  },
+  "gates": [
+    {
+      "id": "REFUND_CALLS_RESTORE",
+      "ok": true,
+      "detail": "refundSale calls restoreSaleDepositApplicationsInTransaction"
+    },
+    {
+      "id": "REFUND_RESTORE_BEFORE_GL",
+      "ok": true,
+      "detail": "restore runs before recordSaleRefundToGL"
+    },
+    {
+      "id": "REFUND_PASSES_RESTORED",
+      "ok": true,
+      "detail": "refund GL receives depositRestore.restored"
+    },
+    {
+      "id": "REFUND_RESTORE_NOT_OWN_UOW",
+      "ok": true,
+      "detail": "refund must not call reverseDepositsForSale (own UnitOfWork)"
+    },
+    {
+      "id": "VOID_DEPOSIT_GUARD",
+      "ok": true,
+      "detail": "void restore only for DEPOSIT tender"
+    },
+    {
+      "id": "VOID_CALLS_RESTORE",
+      "ok": true,
+      "detail": "voidSale calls restore for DEPOSIT sales"
+    },
+    {
+      "id": "VOID_RESTORE_BEFORE_GL",
+      "ok": true,
+      "detail": "restore runs before recordSaleVoidToGL"
+    },
+    {
+      "id": "RESTORE_FN_EXISTS",
+      "ok": true,
+      "detail": "restoreSaleDepositApplicationsInTransaction exported"
+    },
+    {
+      "id": "RESTORE_USES_REVERSE_TX",
+      "ok": true,
+      "detail": "full restore reverses DEPOSIT_APPLICATION JE"
+    },
+    {
+      "id": "RESTORE_PARTIAL_JE",
+      "ok": true,
+      "detail": "partial restore posts balanced reverse slice"
+    },
+    {
+      "id": "RESTORE_SKIP_NO_JOURNAL",
+      "ok": true,
+      "detail": "no journal → leave deposit used"
+    },
+    {
+      "id": "RESTORE_NEWEST_FIRST",
+      "ok": true,
+      "detail": "newest applications restored first"
+    },
+    {
+      "id": "REVERSE_FOR_SALE_USES_RESTORE",
+      "ok": true,
+      "detail": "reverseDepositsForSale delegates to in-tx restore (GL+balance)"
+    },
+    {
+      "id": "PLAN_FN_EXPORTED",
+      "ok": true,
+      "detail": "planDepositRefundCredits exported"
+    },
+    {
+      "id": "SALE_REFUND_DATA_RESTORED",
+      "ok": true,
+      "detail": "SaleRefundData carries depositRestoredAmount"
+    },
+    {
+      "id": "DEPOSIT_TENDER_CREDITS_AR_NOT_2200",
+      "ok": true,
+      "detail": "DEPOSIT refund tender credits AR via customerArLine; no case DEPOSIT → 2200"
+    },
+    {
+      "id": "SPLIT_FULL_DEPOSIT",
+      "ok": true,
+      "detail": "full deposit restore → tender 0"
+    },
+    {
+      "id": "SPLIT_PARTIAL",
+      "ok": true,
+      "detail": "partial restore → AR 40 + tender 60"
+    },
+    {
+      "id": "SPLIT_NONE",
+      "ok": true,
+      "detail": "no restore → all tender"
+    },
+    {
+      "id": "SPLIT_CAP",
+      "ok": true,
+      "detail": "restore capped to refund total"
+    },
+    {
+      "id": "JE_FULL_AR",
+      "ok": true,
+      "detail": "CR AR = restored"
+    },
+    {
+      "id": "JE_FULL_NO_CASH",
+      "ok": true,
+      "detail": "no cash credit"
+    },
+    {
+      "id": "JE_FULL_NO_2200",
+      "ok": true,
+      "detail": "no second 2200 credit"
+    },
+    {
+      "id": "JE_FULL_BALANCED",
+      "ok": true,
+      "detail": "DR=CR"
+    },
+    {
+      "id": "JE_MIX_AR",
+      "ok": true,
+      "detail": "CR AR = restored slice"
+    },
+    {
+      "id": "JE_MIX_CASH",
+      "ok": true,
+      "detail": "CR cash = remainder"
+    },
+    {
+      "id": "JE_MIX_NO_2200",
+      "ok": true,
+      "detail": "refund JE does not credit 2200"
+    },
+    {
+      "id": "JE_MIX_BALANCED",
+      "ok": true,
+      "detail": "DR=CR"
+    },
+    {
+      "id": "JE_ZERO_RESTORE_AR",
+      "ok": true,
+      "detail": "CR AR"
+    },
+    {
+      "id": "JE_ZERO_RESTORE_NO_2200",
+      "ok": true,
+      "detail": "never CR 2200 on refund JE"
+    },
+    {
+      "id": "RESTORE_RESULT_FULL",
+      "ok": true,
+      "detail": "{\"restored\":275000,\"applications\":1}"
+    },
+    {
+      "id": "RESTORE_CALLS_REVERSE",
+      "ok": true,
+      "detail": "AccountingCore.reverseTransaction once"
+    },
+    {
+      "id": "RESTORE_IDEM_KEY",
+      "ok": true,
+      "detail": "idempotency DEPOSIT_APP_RESTORE-{appId}"
+    },
+    {
+      "id": "RESTORE_DELETES_APP",
+      "ok": true,
+      "detail": "application row removed"
+    },
+    {
+      "id": "ORPHAN_NO_RESTORE",
+      "ok": true,
+      "detail": "{\"restored\":0,\"applications\":0}"
+    },
+    {
+      "id": "ORPHAN_NO_REVERSE",
+      "ok": true,
+      "detail": "no reverseTransaction"
+    },
+    {
+      "id": "ORPHAN_NO_DELETE",
+      "ok": true,
+      "detail": "orphan application left in place"
+    },
+    {
+      "id": "PARTIAL_RESULT",
+      "ok": true,
+      "detail": "{\"restored\":100,\"applications\":1}"
+    },
+    {
+      "id": "PARTIAL_NO_FULL_REVERSE",
+      "ok": true,
+      "detail": "partial does not reverse whole JE"
+    },
+    {
+      "id": "PARTIAL_SOURCE",
+      "ok": true,
+      "detail": "source=SYSTEM_CORRECTION"
+    },
+    {
+      "id": "PARTIAL_CR_2200",
+      "ok": true,
+      "detail": "CR 2200 = slice"
+    },
+    {
+      "id": "PARTIAL_DR_AR",
+      "ok": true,
+      "detail": "DR AR = slice"
+    },
+    {
+      "id": "PARTIAL_BALANCED",
+      "ok": true,
+      "detail": "DR=CR"
+    },
+    {
+      "id": "PARTIAL_REDUCES_APP",
+      "ok": true,
+      "detail": "amount_applied reduced"
+    },
+    {
+      "id": "BUG_NO_DEPOSIT_CASE_2200",
+      "ok": true,
+      "detail": "removed: DEPOSIT refund tender → CR 2200"
+    },
+    {
+      "id": "BUG_REFUND_MUST_RESTORE",
+      "ok": true,
+      "detail": "refund without restore is forbidden"
+    }
+  ]
+}

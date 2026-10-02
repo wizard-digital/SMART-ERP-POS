@@ -3413,6 +3413,24 @@ export const salesService = {
         approvedById
       );
 
+      // A deposit-method sale posted AR, and the application cleared it.
+      // Reversing the sale credits that AR. Restoring the application
+      // reopens AR and puts the deposit back. A cash, card, or mobile sale
+      // is reversed as the tender that was posted, so its deposit applications
+      // are left for a refund, which can return the deposit without paying cash twice.
+      if (sale.payment_method === 'DEPOSIT') {
+        const { restoreSaleDepositApplicationsInTransaction } = await import(
+          '../deposits/depositsService.js'
+        );
+        await restoreSaleDepositApplicationsInTransaction(client, pool, {
+          saleId,
+          amount: totalAmount,
+          reversalDate: getBusinessDate(),
+          reason: `Void of ${sale.sale_number}: ${voidReason || 'No reason provided'}`,
+          userId: voidedById,
+        });
+      }
+
       // GL POSTING: Reverse the original sale GL entry
       // MUST succeed — if GL fails, the entire void rolls back to prevent discrepancies
       await glEntryService.recordSaleVoidToGL(
@@ -3972,6 +3990,20 @@ export const salesService = {
 
       // ── 7. GL Posting: Refund journal entry ─────────────────────
 
+      // Put applied deposits back before the refund journal, in this same transaction.
+      // The restored amount is credited to AR so it clears the AR the reversal reopened.
+      // It is not paid out again as cash or as a second customer-deposit credit.
+      const { restoreSaleDepositApplicationsInTransaction } = await import(
+        '../deposits/depositsService.js'
+      );
+      const depositRestore = await restoreSaleDepositApplicationsInTransaction(client, pool, {
+        saleId,
+        amount: refundTotalAmount.toNumber(),
+        reversalDate: input.refundDate || getBusinessDate(),
+        reason: `Refund of ${sale.sale_number}: ${input.reason}`,
+        userId: refundedById,
+      });
+
       // GL POSTING: Refund journal entry
       // MUST succeed — if GL fails, the entire refund rolls back to prevent discrepancies
       const glRefundData: SaleRefundData = {
@@ -3987,6 +4019,7 @@ export const salesService = {
         customerId: sale.customer_id || undefined,
         arCreditAmount,
         refundType,
+        depositRestoredAmount: depositRestore.restored,
       };
 
       const glTransactionId = await glEntryService.recordSaleRefundToGL(glRefundData, pool, client);

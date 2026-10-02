@@ -376,6 +376,53 @@ export async function reverseDepositApplicationInTransaction(
 }
 
 /**
+ * Put part of an application back on the deposit. The application row stays
+ * when some of it is still applied to the sale.
+ */
+export async function reduceDepositApplicationInTransaction(
+    client: PoolClient,
+    applicationId: string,
+    reduceBy: string,
+): Promise<void> {
+    const appResult = await client.query<{ amount_applied: string; deposit_id: string }>(
+        `SELECT amount_applied, deposit_id
+         FROM pos_deposit_applications
+         WHERE id = $1
+         FOR UPDATE`,
+        [applicationId],
+    );
+    if (appResult.rows.length === 0) {
+        throw new Error('Deposit application not found');
+    }
+    const application = appResult.rows[0];
+    const remaining = new Decimal(application.amount_applied).minus(reduceBy);
+    if (remaining.lessThan(-0.001)) {
+        throw new Error('Deposit application reduction exceeds the amount applied');
+    }
+
+    await client.query(
+        `UPDATE pos_customer_deposits
+         SET amount_used = amount_used - $1,
+             amount_available = amount - (amount_used - $1),
+             status = CASE WHEN (amount - (amount_used - $1)) > 0 THEN 'ACTIVE' ELSE 'DEPLETED' END
+         WHERE id = $2`,
+        [reduceBy, application.deposit_id],
+    );
+
+    if (remaining.abs().lessThan(0.001)) {
+        await client.query(`DELETE FROM pos_deposit_applications WHERE id = $1`, [applicationId]);
+        return;
+    }
+
+    await client.query(
+        `UPDATE pos_deposit_applications
+         SET amount_applied = $1
+         WHERE id = $2`,
+        [remaining.toDecimalPlaces(2).toFixed(2), applicationId],
+    );
+}
+
+/**
  * Reverse a deposit application (e.g., when voiding a sale)
  * Creates its own transaction when called with a Pool.
  */
