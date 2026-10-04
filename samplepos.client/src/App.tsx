@@ -611,6 +611,8 @@ function App() {
                       </ProtectedRoute>
                     }
                   />
+
+
                   <Route
                     path="/sales/targets"
                     element={
@@ -1191,6 +1193,599 @@ function App() {
                   />
 
                   {/* Enterprise Accounting */}
+                  <Route
+                    path="/accounting/fiscal-year-close"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <FiscalYearClosePage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/accounting/gl-reconciliation"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.reconcile', 'accounting.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <GLReconciliationPage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/accounting/tax-engine"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <TaxEnginePage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/accounting/currency-revaluation"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <CurrencyRevaluationPage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/accounting/gl-integrity"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <GLIntegrityPage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/accounting/aged-balances"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <AgedBalancePage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/accounting/down-payment-clearing"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.post', 'accounting.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <DownPaymentClearingPage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Quick Login Setup - ALL authenticated users */}
+                  <Route
+                    path="/my/quick-login"
+                    element={
+                      <ProtectedRoute>
+                        <MyQuickLoginPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/settings/notifications"
+                    element={
+                      <ProtectedRoute>
+                        <NotificationsSettingsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Settings */}
+                  <Route
+                    path="/settings"
+                    element={
+                      <ProtectedRoute requiredPermissions={['system.read']}>
+                        <SettingsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/settings/security"
+                    element={
+                      <ProtectedRoute requiredPermissions={['system.read']}>
+                        <SecuritySettingsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Reports */}
+                  <Route
+                    path="/reports"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.read', 'reports.sales_view', 'reports.inventory_view', 'reports.financial_view', 'reports.purchasing_view', 'reports.customers_view', 'reports.banking_view']} requiredFeature="reports">
+                        <ReportsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Expense Reports */}
+                  <Route
+                    path="/reports/expenses"
+                    element={
+                      <ProtectedRoute requiredPermissions={['expenses.read', 'reports.financial_view']} requiredFeature="reports">
+                        <ExpenseReportsPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Tax Compliance (accounting SSOT via /api/reports/tax-compliance) */}
+                  <Route
+                    path="/reports/tax-compliance"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.read', 'reports.financial_view', 'accounting.read']} requiredFeature="reports">
+                        <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                          <TaxComplianceReportsPage />
+                        </Suspense>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/reports/liquidity-movements"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.read', 'reports.financial_view', 'accounting.read']} requiredFeature="reports">
+                        <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                          <LiquidityMovementsReportPage />
+                        </Suspense>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/reports/sales-analysis"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.read', 'reports.financial_view']} requiredFeature="reports">
+                        <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                          <SalesAnalysisReportPage />
+                        </Suspense>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/reports/orders"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.read', 'reports.financial_view']} requiredFeature="reports">
+                        <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                          <OrdersReportPage />
+                        </Suspense>
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Business Performance Report */}
+                  <Route
+                    path="/reports/business-performance"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.financial_view']} requiredFeature="reports">
+                        <BusinessPerformancePage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Reorder Dashboard */}
+                  <Route
+                    path="/reports/reorder"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.inventory_view', 'inventory.read']} requiredFeature="reports">
+                        <ReorderDashboardPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* SAP/Odoo-style Inventory Reports (4 independent screens) */}
+                  <Route
+                    path="/reports/inventory/valuation"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.inventory_view', 'reports.read']} requiredFeature="reports">
+                        <InventoryValuationReportPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/reports/inventory/reconciliation"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.inventory_view', 'reports.read']} requiredFeature="reports">
+                        <InventoryReconciliationReportPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/reports/inventory/analytics"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.inventory_view', 'reports.read']} requiredFeature="reports">
+                        <InventoryAnalyticsReportPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/reports/inventory/margins"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.inventory_view', 'reports.read']} requiredFeature="reports">
+                        <InventoryMarginsReportPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/reports/inventory/network"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.inventory_view', 'reports.read', 'inventory.read']} requiredFeature="reports">
+                        <StoreNetworkReportPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Category Intelligence Report */}
+                  <Route
+                    path="/reports/category-intelligence"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.financial_view', 'reports.read']} requiredFeature="reports">
+                        <CategoryIntelligencePage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Admin Routes - ADMIN only */}
+                  <Route
+                    path="/admin/data-management"
+                    element={
+                      <ProtectedRoute requiredPermissions={['admin.delete']}>
+                        <AdminDataManagementPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin/audit-trail"
+                    element={
+                      <ProtectedRoute requiredPermissions={['admin.read']}>
+                        <AuditLogPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin/roles"
+                    element={
+                      <ProtectedRoute requiredPermissions={['system.roles_update', 'admin.update']}>
+                        <RoleManagementPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Delivery */}
+                  <Route
+                    path="/delivery"
+                    element={
+                      <ProtectedRoute requiredPermissions={['delivery.read']} requiredFeature="invoices">
+                        <DeliveryPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Wholesale Delivery Notes */}
+                  <Route
+                    path="/delivery-notes"
+                    element={
+                      <ProtectedRoute requiredPermissions={['delivery.read']} requiredFeature="invoices">
+                        <DeliveryNotesPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Distribution Module (SAP-style document flow) */}
+                  <Route
+                    path="/distribution/sales-orders"
+                    element={
+                      <ProtectedRoute requiredPermissions={['orders.read']} requiredFeature="invoices">
+                        <DistSalesOrderListPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/distribution/sales-orders/new"
+                    element={
+                      <ProtectedRoute requiredPermissions={['orders.create']} requiredFeature="invoices">
+                        <DistSalesOrderCreatePage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/distribution/sales-orders/:id/edit"
+                    element={
+                      <ProtectedRoute requiredPermissions={['orders.create']} requiredFeature="invoices">
+                        <DistSalesOrderEditPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/distribution/sales-orders/:id"
+                    element={
+                      <ProtectedRoute requiredPermissions={['orders.read']} requiredFeature="invoices">
+                        <DistSalesOrderDetailPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/distribution/invoices"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.read']} requiredFeature="invoices">
+                        <DistInvoiceListPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/distribution/clearing"
+                    element={
+                      <ProtectedRoute requiredPermissions={['accounting.post']} requiredFeature="invoices">
+                        <DistClearingPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* CSV Import */}
+                  <Route
+                    path="/import"
+                    element={
+                      <ProtectedRoute requiredPermissions={['admin.create']}>
+                        <ImportPage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  {/* Inventory Routes */}
+                  <Route
+                    path="/inventory"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <InventoryCommandCenterPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/stock-levels"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StockLevelsPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/products"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read', 'inventory.create']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <ProductsPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/batches"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <BatchManagementPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/stock-counts"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StoreNetworkSection>
+                            <StockCountsPage />
+                          </StoreNetworkSection>
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/reports"
+                    element={<Navigate to="/reports" replace />}
+                  />
+                  <Route
+                    path="/inventory/reports/*"
+                    element={<Navigate to="/reports" replace />}
+                  />
+                  <Route
+                    path="/inventory/store-network/stores"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read', 'inventory.approve']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StoreManagementPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/store-network/locations"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read', 'inventory.approve']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StoreNetworkLocationsPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/store-network/assortment"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read', 'inventory.manage']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StoreAssortmentMatrixPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/store-network/reports"
+                    element={<Navigate to="/reports/inventory/network" replace />}
+                  />
+                  <Route
+                    path="/inventory/store-network/settings"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read', 'settings.update']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StoreNetworkSettingsPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/store-network"
+                    element={<Navigate to="/inventory/store-network/stores" replace />}
+                  />
+                  <Route
+                    path="/inventory/stores"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read', 'inventory.approve']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StoreNetworkStoresRedirect />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/stores/:storeId"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StoreDashboardPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/store-transfers"
+                    element={
+                      <ProtectedRoute
+                       
+                        requiredPermissions={[
+                          'inventory.read',
+                          'inventory.transfer.request',
+                          'inventory.transfer.direct',
+                          'inventory.transfer.override',
+                          'inventory.approve',
+                        ]}
+                        requiredFeature="inventory"
+                      >
+                        <InventoryLayout>
+                          <StoreNetworkSection>
+                            <StoreTransfersPage />
+                          </StoreNetworkSection>
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/transfer-approvals"
+                    element={
+                      <ProtectedRoute
+                       
+                        requiredPermissions={[
+                          'inventory.read',
+                          'inventory.transfer.approve',
+                          'inventory.transfer.dispatch',
+                          'inventory.transfer.receive',
+                          'inventory.approve',
+                        ]}
+                        requiredFeature="inventory"
+                      >
+                        <InventoryLayout>
+                          <StoreNetworkSection>
+                            <TransferApprovalsPage />
+                          </StoreNetworkSection>
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/stock-movements"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <StockMovementsPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/adjustments"
+                    element={
+                      <ProtectedRoute
+                        requiredPermissions={['inventory.adjust', 'inventory.approve']}
+                        requiredFeature="inventory"
+                      >
+                        <InventoryLayout>
+                          <InventoryAdjustmentsPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/quarantine"
+                    element={
+                      <ProtectedRoute requiredPermissions={['inventory.read']} requiredFeature="inventory">
+                        <InventoryLayout>
+                          <QuarantineWorkqueuePage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/purchase-orders"
+                    element={
+                      <ProtectedRoute requiredPermissions={['purchasing.read']} requiredFeature="purchase_orders">
+                        <InventoryLayout>
+                          <PurchaseOrdersPage />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/goods-receipts"
+                    element={
+                      <ProtectedRoute requiredPermissions={['purchasing.read']} requiredFeature="purchase_orders">
+                        <InventoryLayout>
+                          <ReceivingWorkbench />
+                        </InventoryLayout>
+                      </ProtectedRoute>
+                    }
+                  >
+                    <Route index element={<GoodsReceiptsPage />} />
+                    <Route path="returns" element={<SupplierReturnsPage />} />
+                  </Route>
                   <Route
                     path="/inventory/supplier-returns"
                     element={<Navigate to="/inventory/goods-receipts/returns" replace />}
