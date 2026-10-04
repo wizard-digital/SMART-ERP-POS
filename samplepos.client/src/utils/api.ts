@@ -594,6 +594,75 @@ export const api = {
       apiClient.get<ApiResponse>(`sales/${id}/refunds`),
   },
 
+  salesTargets: {
+    getEnabled: () =>
+      apiClient.get<ApiResponse<{ enabled: boolean }>>('sales-targets/enabled'),
+    list: (params?: {
+      status?: string;
+      scope?: string;
+      salespersonId?: string;
+      teamId?: string;
+      periodStart?: string;
+      periodEnd?: string;
+      page?: number;
+      limit?: number;
+    }) => apiClient.get<ApiResponse>('sales-targets', { params }),
+    getById: (id: string) => apiClient.get<ApiResponse>(`sales-targets/${id}`),
+    listTeams: () => apiClient.get<ApiResponse>('sales-targets/teams'),
+    createTeam: (data: { name: string; memberIds: string[] }) =>
+      apiClient.post<ApiResponse>('sales-targets/teams', data),
+    updateTeam: (
+      teamId: string,
+      data: { name?: string; memberIds?: string[]; isActive?: boolean },
+    ) => apiClient.patch<ApiResponse>(`sales-targets/teams/${teamId}`, data),
+    create: (data: {
+      scope?: string;
+      salespersonId?: string | null;
+      teamId?: string | null;
+      periodType: string;
+      periodStart: string;
+      periodEnd: string;
+      targetAmount: number;
+      notes?: string | null;
+      submit?: boolean;
+    }) => apiClient.post<ApiResponse>('sales-targets', data),
+    updateDraft: (
+      id: string,
+      data: {
+        salespersonId?: string;
+        periodType?: string;
+        periodStart?: string;
+        periodEnd?: string;
+        targetAmount?: number;
+        notes?: string | null;
+        rowVersion: number;
+      },
+    ) => apiClient.patch<ApiResponse>(`sales-targets/${id}`, data),
+    submit: (id: string, rowVersion: number) =>
+      apiClient.post<ApiResponse>(`sales-targets/${id}/submit`, { rowVersion }),
+    approve: (id: string, rowVersion: number) =>
+      apiClient.post<ApiResponse>(`sales-targets/${id}/approve`, { rowVersion }),
+    amend: (
+      id: string,
+      data: {
+        targetAmount: number;
+        periodStart?: string;
+        periodEnd?: string;
+        amendmentReason: string;
+        rowVersion: number;
+      },
+    ) => apiClient.post<ApiResponse>(`sales-targets/${id}/amend`, data),
+    cancel: (id: string, reason: string, rowVersion: number) =>
+      apiClient.post<ApiResponse>(`sales-targets/${id}/cancel`, { reason, rowVersion }),
+    close: (id: string, rowVersion: number) =>
+      apiClient.post<ApiResponse>(`sales-targets/${id}/close`, { rowVersion }),
+    achievement: (id: string) =>
+      apiClient.get<ApiResponse>(`sales-targets/${id}/achievement`),
+    /** Compact Target/Achieved/Remaining for Sales + Dashboard KPI strips (server SSOT). */
+    progress: (params?: { salespersonId?: string; asOfDate?: string }) =>
+      apiClient.get<ApiResponse>('sales-targets/progress', { params }),
+  },
+
   // POS Orders (Order→Payment workflow)
   orders: {
     listPending: (params?: { orderDate?: string }) =>
