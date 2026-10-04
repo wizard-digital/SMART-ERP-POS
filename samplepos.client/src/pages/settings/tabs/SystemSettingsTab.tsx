@@ -77,6 +77,8 @@ interface SystemSettings {
     treasuryDocumentEnabled?: boolean;
     /** Restaurant FOH module (tables, KOT, SambaPOS-style ordering) */
     restaurantModeEnabled?: boolean;
+    /** Sales Targets (per-tenant opt-in) */
+    salesTargetsEnabled?: boolean;
     /** ADR-005 Kitchen Production cook-to-stock batches */
     kitchenProductionEnabled?: boolean;
 }
@@ -158,6 +160,9 @@ export default function SystemSettingsTab() {
             }
             if (variables.restaurantModeEnabled !== undefined) {
                 void queryClient.invalidateQueries({ queryKey: ['restaurant', 'enabled'] });
+            }
+            if (variables.salesTargetsEnabled !== undefined) {
+                void queryClient.invalidateQueries({ queryKey: ['sales-targets', 'enabled'] });
             }
             if (variables.kitchenProductionEnabled !== undefined) {
                 void queryClient.invalidateQueries({ queryKey: ['kitchen-production', 'enabled'] });
@@ -453,6 +458,7 @@ function TaxSettings({
             settings.vatOutputRequiresRegisteredCustomer ?? false,
         treasuryDocumentEnabled: settings.treasuryDocumentEnabled ?? false,
         restaurantModeEnabled: settings.restaurantModeEnabled ?? false,
+        salesTargetsEnabled: settings.salesTargetsEnabled ?? false,
         kitchenProductionEnabled: settings.kitchenProductionEnabled ?? false,
     });
 
@@ -585,6 +591,37 @@ function TaxSettings({
                                     Tables, kitchen tickets (KOT), Kitchen Display, Kitchen Production,
                                     and SambaPOS-style restaurant POS. Pure retail tenants leave this
                                     off — no restaurant UI or kitchen modules.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
+                        <div className="flex items-start">
+                            <input
+                                type="checkbox"
+                                id="salesTargetsEnabled"
+                                checked={formData.salesTargetsEnabled}
+                                onChange={(e) =>
+                                    setFormData({
+                                        ...formData,
+                                        salesTargetsEnabled: e.target.checked,
+                                    })
+                                }
+                                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                data-sales-targets-enabled-toggle="true"
+                            />
+                            <div className="ml-2">
+                                <label
+                                    htmlFor="salesTargetsEnabled"
+                                    className="block text-sm font-medium text-gray-900"
+                                >
+                                    Enable Sales Targets
+                                </label>
+                                <p className="mt-0.5 text-xs text-gray-600">
+                                    Individual cashier revenue targets with Target / Achieved /
+                                    Remaining on Sales. Leave off if this tenant does not use sales
+                                    targets — nav, KPI strip, and APIs stay hidden.
                                 </p>
                             </div>
                         </div>

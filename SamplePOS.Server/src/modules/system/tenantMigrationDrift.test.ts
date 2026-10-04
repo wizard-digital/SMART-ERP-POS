@@ -88,8 +88,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(decision).toBe('copy');
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–628 MoMo/banking column SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(628);
+  it('CURRENT_SCHEMA_VERSION matches 621–634 MoMo/banking and sales targets SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(634);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -124,6 +124,20 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(replay).not.toContain('ADD CONSTRAINT uq_ledger_transactions_reference');
     expect(replay).toContain('DROP CONSTRAINT IF EXISTS uq_ledger_transactions_reference');
     expect(refSql).toContain('SELECT 628');
+    const targetsSql = fs.readFileSync(path.join(sqlDir, '631_sales_targets.sql'), 'utf8');
+    expect(targetsSql).toContain('sales_targets');
+    expect(targetsSql).toContain('SELECT 631');
+    const targetsEnabledSql = fs.readFileSync(path.join(sqlDir, '632_sales_targets_enabled.sql'), 'utf8');
+    expect(targetsEnabledSql).toContain('sales_targets_enabled');
+    expect(targetsEnabledSql).toContain('SELECT 632');
+    const targetsScopeSql = fs.readFileSync(path.join(sqlDir, '633_sales_targets_general_team.sql'), 'utf8');
+    expect(targetsScopeSql).toContain('GENERAL');
+    expect(targetsScopeSql).toContain('TEAM');
+    expect(targetsScopeSql).toContain('SELECT 633');
+    const targetsDupSql = fs.readFileSync(path.join(sqlDir, '634_sales_targets_no_duplicate_ssot.sql'), 'utf8');
+    expect(targetsDupSql).toContain('uq_sales_target_teams_name_ci');
+    expect(targetsDupSql).toContain('SELECT 634');
+
     const sessionSql = fs.readFileSync(path.join(sqlDir, '620_pos_session_policy_ssot.sql'), 'utf8');
     expect(sessionSql).toMatch(/pg_constraint WHERE conname = 'chk_pos_session_policy'/);
     expect(sessionSql).not.toMatch(/^ALTER TABLE system_settings\s+ADD CONSTRAINT/m);

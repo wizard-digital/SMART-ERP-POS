@@ -15,6 +15,7 @@ import {
 } from '../hooks/useApi';
 import { useNeedingReorder, useStockLevels } from '../hooks/useInventory';
 import ExpiryAlertsWidget from '../components/ExpiryAlertsWidget';
+import { SalesTargetProgressStrip } from '../components/sales/SalesTargetProgressStrip';
 import { isCashierRole, resolveCashierHomePath } from '../utils/cashierLockdown';
 import {
   isRestaurantWaiterProfile,
@@ -23,6 +24,16 @@ import {
 import { useRestaurantEnabled, useRestaurantModeForRouting } from '../hooks/useRestaurantEnabled';
 import { RestaurantModeBoot } from '../components/auth/RestaurantModeBoot';
 import { shouldHideRetailPos } from '../utils/retailPosVisibility';
+import {
+  DASHBOARD_KPI_CARD_CLASS,
+  DASHBOARD_KPI_GRID_CLASS,
+  DASHBOARD_KPI_ICON_CLASS,
+  DASHBOARD_KPI_ICON_WRAP_CLASS,
+  DASHBOARD_KPI_LABEL_CLASS,
+  DASHBOARD_KPI_SUB_CLASS,
+  DASHBOARD_KPI_VALUE_CLASS,
+  DASHBOARD_PAGE_FRAME_CLASS,
+} from '../lib/adaptiveDashboard';
 import {
   ShoppingCart,
   UtensilsCrossed,
@@ -146,7 +157,7 @@ function MiniBarChart({ data, color = 'bg-blue-500' }: { data: number[]; color?:
   if (!data.length) return null;
   const max = Math.max(...data, 1);
   return (
-    <div className="flex items-end gap-[2px] h-10">
+    <div className="flex items-end gap-[2px] h-6 sm:h-10">
       {data.map((v, i) => (
         <div
           key={i}
@@ -315,21 +326,21 @@ function DashboardContent() {
 
   return (
     <Layout>
-      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+      <div className={DASHBOARD_PAGE_FRAME_CLASS}>
         {/* ─── Header ───────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-3xl font-bold text-gray-900 tracking-tight">
               {greeting}, {user?.fullName?.split(' ')[0] || 'there'}
             </h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">
               {isScopedSalesUser
                 ? "Here\u0027s your activity today"
                 : "Here\u0027s what\u0027s happening with your business today"}
             </p>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Clock className="w-4 h-4" />
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500">
+            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
             {new Date().toLocaleDateString('en-UG', {
               weekday: 'long',
               year: 'numeric',
@@ -340,24 +351,27 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* ─── KPI Cards ────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Active target progress — reuse Sales strip (server SSOT) */}
+        <SalesTargetProgressStrip />
+
+        {/* ─── KPI Cards — 2-up on phone (never full-bleed towers) ─ */}
+        <div className={DASHBOARD_KPI_GRID_CLASS} data-dashboard-kpis="true">
           {/* Today's Revenue */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-gray-500">Today&apos;s Revenue</p>
-              <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-                <DollarSign className="w-5 h-5 text-blue-600" />
+          <div className={DASHBOARD_KPI_CARD_CLASS}>
+            <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-3">
+              <p className={DASHBOARD_KPI_LABEL_CLASS}>Today&apos;s Revenue</p>
+              <div className={`${DASHBOARD_KPI_ICON_WRAP_CLASS} bg-blue-50`}>
+                <DollarSign className={`${DASHBOARD_KPI_ICON_CLASS} text-blue-600`} />
               </div>
             </div>
             {isLoading ? (
-              <div className="h-8 bg-gray-100 rounded animate-pulse" />
+              <div className="h-6 sm:h-8 bg-gray-100 rounded animate-pulse" />
             ) : (
               <>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className={`${DASHBOARD_KPI_VALUE_CLASS} text-gray-900`}>
                   {formatCurrency(todayData?.totalAmount || 0, true, 0)}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className={DASHBOARD_KPI_SUB_CLASS}>
                   {todayData?.totalSales || 0} transaction
                   {(todayData?.totalSales || 0) !== 1 ? 's' : ''}
                 </p>
@@ -367,44 +381,44 @@ function DashboardContent() {
 
           {/* Today's Profit — hidden for cashiers */}
           {!isScopedSalesUser && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium text-gray-500">Today&apos;s Profit</p>
-                <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-green-600" />
+            <div className={DASHBOARD_KPI_CARD_CLASS}>
+              <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-3">
+                <p className={DASHBOARD_KPI_LABEL_CLASS}>Today&apos;s Profit</p>
+                <div className={`${DASHBOARD_KPI_ICON_WRAP_CLASS} bg-green-50`}>
+                  <TrendingUp className={`${DASHBOARD_KPI_ICON_CLASS} text-green-600`} />
                 </div>
               </div>
               {isLoading ? (
-                <div className="h-8 bg-gray-100 rounded animate-pulse" />
+                <div className="h-6 sm:h-8 bg-gray-100 rounded animate-pulse" />
               ) : (
                 <>
                   <p
-                    className={`text-2xl font-bold ${(todayData?.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                    className={`${DASHBOARD_KPI_VALUE_CLASS} ${(todayData?.totalProfit || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}
                   >
                     {formatCurrency(todayData?.totalProfit || 0, true, 0)}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">{todayMargin.toFixed(1)}% margin</p>
+                  <p className={DASHBOARD_KPI_SUB_CLASS}>{todayMargin.toFixed(1)}% margin</p>
                 </>
               )}
             </div>
           )}
 
           {/* This Week */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-gray-500">This Week</p>
-              <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-                <BarChart3 className="w-5 h-5 text-purple-600" />
+          <div className={DASHBOARD_KPI_CARD_CLASS}>
+            <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-3">
+              <p className={DASHBOARD_KPI_LABEL_CLASS}>This Week</p>
+              <div className={`${DASHBOARD_KPI_ICON_WRAP_CLASS} bg-purple-50`}>
+                <BarChart3 className={`${DASHBOARD_KPI_ICON_CLASS} text-purple-600`} />
               </div>
             </div>
             {weekLoading ? (
-              <div className="h-8 bg-gray-100 rounded animate-pulse" />
+              <div className="h-6 sm:h-8 bg-gray-100 rounded animate-pulse" />
             ) : (
               <>
-                <p className="text-2xl font-bold text-gray-900">
+                <p className={`${DASHBOARD_KPI_VALUE_CLASS} text-gray-900`}>
                   {formatCurrency(weekData?.totalAmount || 0, true, 0)}
                 </p>
-                <div className="mt-2">
+                <div className="mt-1.5 sm:mt-2">
                   <MiniBarChart data={sparkData} color="bg-purple-400" />
                 </div>
               </>
@@ -412,34 +426,36 @@ function DashboardContent() {
           </div>
 
           {/* Alerts */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-sm font-medium text-gray-500">Alerts</p>
+          <div className={DASHBOARD_KPI_CARD_CLASS}>
+            <div className="flex items-start justify-between gap-2 mb-1.5 sm:mb-3">
+              <p className={DASHBOARD_KPI_LABEL_CLASS}>Alerts</p>
               <div
-                className={`w-10 h-10 rounded-lg flex items-center justify-center ${lowStockCount + reorderItems.length > 0 ? 'bg-red-50' : 'bg-gray-50'}`}
+                className={`${DASHBOARD_KPI_ICON_WRAP_CLASS} ${lowStockCount + reorderItems.length > 0 ? 'bg-red-50' : 'bg-gray-50'}`}
               >
                 <AlertTriangle
-                  className={`w-5 h-5 ${lowStockCount + reorderItems.length > 0 ? 'text-red-500' : 'text-gray-400'}`}
+                  className={`${DASHBOARD_KPI_ICON_CLASS} ${lowStockCount + reorderItems.length > 0 ? 'text-red-500' : 'text-gray-400'}`}
                 />
               </div>
             </div>
-            <div className="space-y-1">
+            <div className="space-y-0.5 sm:space-y-1">
               <button
+                type="button"
                 onClick={() => navigate('/inventory/stock-levels')}
-                className="flex items-center justify-between w-full text-left group"
+                className="flex items-center justify-between w-full text-left group min-h-[1.75rem]"
               >
-                <span className="text-sm text-gray-600 group-hover:text-blue-600">Low stock items</span>
-                <span className={`text-sm font-bold ${lowStockCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                <span className="text-xs sm:text-sm text-gray-600 group-hover:text-blue-600">Low stock</span>
+                <span className={`text-xs sm:text-sm font-bold ${lowStockCount > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   {lowStockCount}
                 </span>
               </button>
               <button
+                type="button"
                 onClick={() => navigate('/inventory/stock-levels')}
-                className="flex items-center justify-between w-full text-left group"
+                className="flex items-center justify-between w-full text-left group min-h-[1.75rem]"
               >
-                <span className="text-sm text-gray-600 group-hover:text-blue-600">Reorder needed</span>
+                <span className="text-xs sm:text-sm text-gray-600 group-hover:text-blue-600">Reorder</span>
                 <span
-                  className={`text-sm font-bold ${reorderItems.length > 0 ? 'text-orange-600' : 'text-green-600'}`}
+                  className={`text-xs sm:text-sm font-bold ${reorderItems.length > 0 ? 'text-orange-600' : 'text-green-600'}`}
                 >
                   {reorderItems.length}
                 </span>
@@ -449,7 +465,7 @@ function DashboardContent() {
         </div>
 
         {/* ─── Mid section: Recent Sales + Top Products ──────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Recent Sales */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">

@@ -1,0 +1,163 @@
+{
+  "feature": "SALES_TARGETS_INTEGRITY_GURU",
+  "provenAt": "2026-10-04T15:53:01.747Z",
+  "contract": "Opt-in flag default off; Money.round precision; Kampala toUtcRange achievement; progress embed; admin self-approve SoD; no client revenue duplicate math; API/UI gated",
+  "browserHarness": "NOT_AVAILABLE — structural + pure achievement matrix",
+  "gates": [
+    {
+      "id": "MIG_631",
+      "ok": true,
+      "detail": "631 creates sales_targets"
+    },
+    {
+      "id": "MIG_631_NO_ACHIEVED_COL",
+      "ok": true,
+      "detail": "no stored achievement column (derived SSOT)"
+    },
+    {
+      "id": "MIG_632_DEFAULT_OFF",
+      "ok": true,
+      "detail": "632 flag default FALSE"
+    },
+    {
+      "id": "MIG_633_SCOPES",
+      "ok": true,
+      "detail": "633 adds GENERAL + TEAM + team tables"
+    },
+    {
+      "id": "SETTINGS_HELPER",
+      "ok": true,
+      "detail": "flag helper pre-migration safe"
+    },
+    {
+      "id": "SYS_TYPES",
+      "ok": true,
+      "detail": "systemSettings maps salesTargetsEnabled"
+    },
+    {
+      "id": "SETTINGS_UI",
+      "ok": true,
+      "detail": "Settings toggle + query invalidate"
+    },
+    {
+      "id": "SERVER_MOUNT",
+      "ok": true,
+      "detail": "mounted under /api/sales-targets + pos plan feature"
+    },
+    {
+      "id": "ROUTE_ENABLED",
+      "ok": true,
+      "detail": "/enabled before requireSalesTargetsEnabled"
+    },
+    {
+      "id": "ROUTE_PROGRESS",
+      "ok": true,
+      "detail": "/progress before /:id"
+    },
+    {
+      "id": "ROUTE_DISABLED_CODE",
+      "ok": true,
+      "detail": "disabled tenants get ERR_SALES_TARGETS_DISABLED"
+    },
+    {
+      "id": "RBAC_KEYS",
+      "ok": true,
+      "detail": "targets.* in permission catalog"
+    },
+    {
+      "id": "ACH_MONEY",
+      "ok": true,
+      "detail": "achievement uses Money.round"
+    },
+    {
+      "id": "REPO_MONEY",
+      "ok": true,
+      "detail": "repository money() uses Money.round"
+    },
+    {
+      "id": "REPO_TZ",
+      "ok": true,
+      "detail": "achievement bounds sale_date via Kampala UTC range (not UTC::date)"
+    },
+    {
+      "id": "PROGRESS_BIZDATE",
+      "ok": true,
+      "detail": "progress asOf uses getBusinessDate"
+    },
+    {
+      "id": "PROGRESS_PRIORITY",
+      "ok": true,
+      "detail": "progress priority + advisory lock against duplicate live targets"
+    },
+    {
+      "id": "CLIENT_NO_REV_MATH",
+      "ok": true,
+      "detail": "strip fetches server progress — no client revenue math"
+    },
+    {
+      "id": "PREC_HALF_UP",
+      "ok": true,
+      "detail": "Money half-up: 10.005 → 10.01"
+    },
+    {
+      "id": "PREC_VOIDED_BY_RETURN",
+      "ok": true,
+      "detail": "VOIDED_BY_RETURN + refund nets to zero"
+    },
+    {
+      "id": "PREC_VOID_EXCL",
+      "ok": true,
+      "detail": "VOID sales excluded"
+    },
+    {
+      "id": "SOD_MANAGER",
+      "ok": true,
+      "detail": "non-admin creator cannot self-approve"
+    },
+    {
+      "id": "SOD_ADMIN_OK",
+      "ok": true,
+      "detail": "ADMIN/SUPER_ADMIN may self-approve"
+    },
+    {
+      "id": "ZOD_NO_MASS_ASSIGN",
+      "ok": true,
+      "detail": "CreateSalesTargetSchema is .strict() without achievement/status fields"
+    },
+    {
+      "id": "EMBED_SALES",
+      "ok": true,
+      "detail": "Sales embeds strip"
+    },
+    {
+      "id": "EMBED_DASH",
+      "ok": true,
+      "detail": "Dashboard embeds strip"
+    },
+    {
+      "id": "NAV_FLAG",
+      "ok": true,
+      "detail": "nav gated by tenant flag"
+    },
+    {
+      "id": "ROUTE_GATE",
+      "ok": true,
+      "detail": "routes wrapped in feature gate"
+    },
+    {
+      "id": "API_CLIENT",
+      "ok": true,
+      "detail": "client API: enabled + progress"
+    },
+    {
+      "id": "STRIP_FLAG",
+      "ok": true,
+      "detail": "strip respects feature flag"
+    }
+  ],
+  "summary": {
+    "total": 30,
+    "passed": 30,
+    "failed": 0
+  }
+}

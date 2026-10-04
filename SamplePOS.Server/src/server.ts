@@ -19,6 +19,7 @@ import { supplierRoutes } from './modules/suppliers/supplierRoutes.js';
 import { authRoutes } from './modules/auth/authRoutes.js';
 import { quickLoginRoutes } from './modules/auth/quickLoginRoutes.js';
 import { salesRoutes } from './modules/sales/salesRoutes.js';
+import { salesTargetRoutes } from './modules/sales-targets/index.js';
 import { inventoryRoutes } from './modules/inventory/inventoryRoutes.js';
 import { purchaseOrderRoutes } from './modules/purchase-orders/purchaseOrderRoutes.js';
 import { goodsReceiptRoutes } from './modules/goods-receipts/goodsReceiptRoutes.js';
@@ -379,6 +380,7 @@ app.use('/api/suppliers', requireFeature('customers'), supplierRoutes);
 
 // ── POS & Sales (plan: FREE+) ───────────────────────────────
 app.use('/api/sales', requireFeature('pos'), salesRoutes);
+app.use('/api/sales-targets', requireFeature('pos'), salesTargetRoutes);
 app.use('/api/orders', requireFeature('pos'), ordersRoutes);
 app.use('/api/pos/hold', requireFeature('pos'), createHoldRoutes(pool));
 app.use('/api/pos/sync-offline-sales', requireFeature('pos'), createOfflineSyncRoutes(pool));

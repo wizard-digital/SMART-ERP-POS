@@ -20,7 +20,8 @@ export type PermissionModule =
   | 'quotations'
   | 'distribution'
   | 'corrections'
-  | 'kitchen';
+  | 'kitchen'
+  | 'targets';
 
 export type PermissionAction =
   | 'read'

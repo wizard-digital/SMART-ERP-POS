@@ -47,6 +47,7 @@ import {
   KPI_ACCENT_VALUE_CLASS,
   kpiAccentCardClass,
 } from '../lib/adaptiveDashboard';
+import { SalesTargetProgressStrip } from '../components/sales/SalesTargetProgressStrip';
 import { useBackendPermission } from '../hooks/useBackendPermission';
 import { useCanAccess } from '../components/auth/ProtectedRoute';
 import { CreateExpenseForm } from '../components/expenses/CreateExpenseForm';
@@ -984,6 +985,9 @@ export default function SalesPage() {
         }
       >
         {/* Filters moved into AdaptiveToolbar — body starts with tabs / KPIs */}
+
+        {/* Active target: Target / Achieved / Remaining — server SSOT, all tabs */}
+        <SalesTargetProgressStrip />
 
         {/* KPI Cards - Overview Tab — 2-up compact on phone (SSOT) */}
         {activeTab === 'overview' && (

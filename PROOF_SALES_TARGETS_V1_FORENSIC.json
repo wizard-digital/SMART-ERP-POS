@@ -1,0 +1,374 @@
+{
+  "generatedAt": "2026-10-02T21:50:04.758Z",
+  "summary": {
+    "PASS": 34,
+    "FAIL": 0,
+    "BLOCKED": 1,
+    "NOT_TESTED": 0
+  },
+  "results": [
+    {
+      "id": "MIG_FILE",
+      "status": "PASS",
+      "detail": "631_sales_targets.sql present"
+    },
+    {
+      "id": "MIG_SCHEMA",
+      "status": "PASS",
+      "detail": "sales_targets columns=21",
+      "columns": [
+        "id",
+        "scope",
+        "salesperson_id",
+        "period_type",
+        "period_start",
+        "period_end",
+        "target_amount",
+        "status",
+        "created_by",
+        "approved_by",
+        "approved_at",
+        "closed_by",
+        "closed_at",
+        "cancelled_by",
+        "cancelled_at",
+        "amendment_reason",
+        "cancel_reason",
+        "notes",
+        "row_version",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    {
+      "id": "MIG_NO_ACHIEVED_SSOT",
+      "status": "PASS",
+      "detail": "no editable achievement column"
+    },
+    {
+      "id": "MIG_IDEMPOTENT_REAPPLY",
+      "status": "PASS",
+      "detail": "re-applied 631 SQL without error"
+    },
+    {
+      "id": "RBAC_CATALOG",
+      "status": "PASS",
+      "detail": "targets.* keys=targets.approve,targets.manage,targets.read"
+    },
+    {
+      "id": "RBAC_GRANTS",
+      "status": "PASS",
+      "detail": "grant rows=10",
+      "grants": [
+        {
+          "name": "Administrator",
+          "permission_key": "targets.approve"
+        },
+        {
+          "name": "Administrator",
+          "permission_key": "targets.manage"
+        },
+        {
+          "name": "Administrator",
+          "permission_key": "targets.read"
+        },
+        {
+          "name": "Cashier",
+          "permission_key": "targets.read"
+        },
+        {
+          "name": "Manager",
+          "permission_key": "targets.approve"
+        },
+        {
+          "name": "Manager",
+          "permission_key": "targets.manage"
+        },
+        {
+          "name": "Manager",
+          "permission_key": "targets.read"
+        },
+        {
+          "name": "Super Administrator",
+          "permission_key": "targets.approve"
+        },
+        {
+          "name": "Super Administrator",
+          "permission_key": "targets.manage"
+        },
+        {
+          "name": "Super Administrator",
+          "permission_key": "targets.read"
+        }
+      ]
+    },
+    {
+      "id": "FIXTURE_USERS",
+      "status": "PASS",
+      "detail": "cashier=7aa55a55… other=956f87a9…"
+    },
+    {
+      "id": "C9_OFFLINE_IDEM_UNIQUE",
+      "status": "PASS",
+      "detail": "duplicate idempotency_key rejected (23505)"
+    },
+    {
+      "id": "UNIT_HELPER_VOID_EXCL",
+      "status": "PASS",
+      "detail": "unit helper achieved=900 expected=900"
+    },
+    {
+      "id": "C1_COMPLETED_DISCOUNT",
+      "status": "PASS",
+      "detail": "revenue=900 refunds=0 achieved=900",
+      "expected": {
+        "revenue": 900,
+        "refunds": 0,
+        "achieved": 900
+      },
+      "actual": {
+        "revenue": 900,
+        "refunds": 0,
+        "achieved": 900
+      }
+    },
+    {
+      "id": "C2_PARTIAL_RETURN",
+      "status": "PASS",
+      "detail": "revenue=200 refunds=100 achieved=100",
+      "expected": {
+        "revenue": 200,
+        "refunds": 100,
+        "achieved": 100
+      },
+      "actual": {
+        "revenue": 200,
+        "refunds": 100,
+        "achieved": 100
+      }
+    },
+    {
+      "id": "C3_VOIDED_BY_RETURN_SAME_PERIOD",
+      "status": "PASS",
+      "detail": "revenue=500 refunds=500 achieved=0",
+      "note": "include VOIDED_BY_RETURN + deduct refund once → net 0",
+      "expected": {
+        "revenue": 500,
+        "refunds": 500,
+        "achieved": 0
+      },
+      "actual": {
+        "revenue": 500,
+        "refunds": 500,
+        "achieved": 0
+      }
+    },
+    {
+      "id": "C4A_SALE_JUNE_CROSS_PERIOD",
+      "status": "PASS",
+      "detail": "revenue=300 refunds=0 achieved=300",
+      "expected": {
+        "revenue": 300,
+        "refunds": 0,
+        "achieved": 300
+      },
+      "actual": {
+        "revenue": 300,
+        "refunds": 0,
+        "achieved": 300
+      }
+    },
+    {
+      "id": "C4B_REFUND_JULY_CROSS_PERIOD",
+      "status": "PASS",
+      "detail": "revenue=0 refunds=300 achieved=-300",
+      "expected": {
+        "revenue": 0,
+        "refunds": 300,
+        "achieved": -300
+      },
+      "actual": {
+        "revenue": 0,
+        "refunds": 300,
+        "achieved": -300
+      }
+    },
+    {
+      "id": "C7_MULTI_REFUND",
+      "status": "PASS",
+      "detail": "revenue=400 refunds=150 achieved=250",
+      "expected": {
+        "revenue": 400,
+        "refunds": 150,
+        "achieved": 250
+      },
+      "actual": {
+        "revenue": 400,
+        "refunds": 150,
+        "achieved": 250
+      }
+    },
+    {
+      "id": "C8_CANCELLED_REFUND",
+      "status": "PASS",
+      "detail": "revenue=150 refunds=0 achieved=150",
+      "expected": {
+        "revenue": 150,
+        "refunds": 0,
+        "achieved": 150
+      },
+      "actual": {
+        "revenue": 150,
+        "refunds": 0,
+        "achieved": 150
+      }
+    },
+    {
+      "id": "C10_VAT_INCLUSIVE_SCALE",
+      "status": "PASS",
+      "detail": "revenue=100 refunds=50 achieved=50",
+      "expected": {
+        "revenue": 100,
+        "refunds": 50,
+        "achieved": 50
+      },
+      "actual": {
+        "revenue": 100,
+        "refunds": 50,
+        "achieved": 50
+      }
+    },
+    {
+      "id": "C5_C6_STATUS_FILTER",
+      "status": "PASS",
+      "detail": "VOID/REFUNDED not in eligible status set"
+    },
+    {
+      "id": "C5_C6_NOT_IN_ELIGIBLE",
+      "status": "PASS",
+      "detail": "void/refunded pretax present=1887.00; intersect eligible=0"
+    },
+    {
+      "id": "ACHIEVE_REPO_CALLABLE",
+      "status": "PASS",
+      "detail": "computeAchievementTotals june revenue=2620 refunds=800"
+    },
+    {
+      "id": "AUTHZ_CREATE_DENIED",
+      "status": "PASS",
+      "detail": "create denied code=ERR_TARGETS_FORBIDDEN"
+    },
+    {
+      "id": "SELF_APPROVE",
+      "status": "PASS",
+      "detail": "code=ERR_TARGETS_SELF_APPROVE"
+    },
+    {
+      "id": "CONCURRENCY_STALE",
+      "status": "PASS",
+      "detail": "code=ERR_TARGETS_CONFLICT"
+    },
+    {
+      "id": "OVERLAP",
+      "status": "PASS",
+      "detail": "code=ERR_TARGETS_OVERLAP"
+    },
+    {
+      "id": "OVERLAP_CONCURRENT",
+      "status": "PASS",
+      "detail": "fulfilled=1 rejected=1 (accept 1/1 or 0/2 overlap)",
+      "rejectCodes": [
+        "ERR_TARGETS_OVERLAP"
+      ],
+      "window": {
+        "raceStart": "2088-05-01",
+        "raceEndA": "2088-05-31",
+        "raceEndB": "2088-06-10"
+      }
+    },
+    {
+      "id": "OVERLAP_CONCURRENT_INVARIANT",
+      "status": "PASS",
+      "detail": "live overlapping targets after race=1"
+    },
+    {
+      "id": "AUTHZ_OWN_ONLY",
+      "status": "PASS",
+      "detail": "code=ERR_TARGETS_FORBIDDEN"
+    },
+    {
+      "id": "INVALID_CLOSE_DRAFT",
+      "status": "PASS",
+      "detail": "code=ERR_TARGETS_INVALID_STATUS"
+    },
+    {
+      "id": "AUDIT_LIFECYCLE",
+      "status": "PASS",
+      "detail": "found 4 audit row(s) for target via SYSTEM+SALES_TARGET details",
+      "sample": [
+        {
+          "entity_type": "SYSTEM",
+          "action": "CANCEL",
+          "action_details": "{\"entity\":\"SALES_TARGET\",\"reason\":\"forensic cleanup\"}",
+          "entity_id": "ab116f6b-fce7-42e3-b928-06c0e2d35380"
+        },
+        {
+          "entity_type": "SYSTEM",
+          "action": "APPROVE",
+          "action_details": "{\"entity\":\"SALES_TARGET\",\"action\":\"APPROVE\"}",
+          "entity_id": "ab116f6b-fce7-42e3-b928-06c0e2d35380"
+        },
+        {
+          "entity_type": "SYSTEM",
+          "action": "STATUS_CHANGE",
+          "action_details": "{\"entity\":\"SALES_TARGET\",\"to\":\"PENDING_APPROVAL\"}",
+          "entity_id": "ab116f6b-fce7-42e3-b928-06c0e2d35380"
+        }
+      ]
+    },
+    {
+      "id": "AUDIT_SYSTEM_ENTITY_ACCEPTED",
+      "status": "PASS",
+      "detail": "SYSTEM entity_type insert OK"
+    },
+    {
+      "id": "GL_NO_WRITE",
+      "status": "PASS",
+      "detail": "ledger rows tagged before=0 after=0"
+    },
+    {
+      "id": "TENANT_DB_DISCOVERY",
+      "status": "PASS",
+      "detail": "candidate DBs: digitalshop, hotel_management, pos_accounting_clean, pos_template, pos_tenant_acme_store, pos_tenant_proof_alpha_p1c9x, pos_tenant_proof_beta_p1c9x, pos_wh_audit",
+      "databases": [
+        "digitalshop",
+        "hotel_management",
+        "pos_accounting_clean",
+        "pos_system",
+        "pos_template",
+        "pos_tenant_acme_store",
+        "pos_tenant_proof_alpha_p1c9x",
+        "pos_tenant_proof_beta_p1c9x",
+        "pos_wh_audit",
+        "samplepos"
+      ]
+    },
+    {
+      "id": "TENANT_B_SCHEMA",
+      "status": "BLOCKED",
+      "detail": "digitalshop has no sales_targets — migrate not applied there"
+    },
+    {
+      "id": "EXCHANGE_LIKE_FOR_LIKE",
+      "status": "PASS",
+      "detail": "like-for-like exchange net=0 (rev=120 ref=120); expected 0 — EXCHANGE must be deducted",
+      "origId": "40da5f6c-f1fa-4e44-80cc-a7081374212e",
+      "replId": "a3d70737-e427-4c44-b523-6ce6dcd85831"
+    },
+    {
+      "id": "EXCHANGE_REFUND_FILTER",
+      "status": "PASS",
+      "detail": "EXCHANGE refunds intentionally included (matches GL 4010; prevents overstatement with credit-discounted replacement)"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "tenants": [
+    {
+      "db": "pos_tenant_proof_alpha_p1c9x",
+      "table": "sales_targets",
+      "hasUser": true
+    },
+    {
+      "db": "pos_tenant_proof_beta_p1c9x",
+      "table": "sales_targets",
+      "hasUser": true
+    }
+  ],
+  "empty": {
+    "db": "pos_forensic_st_murhtwhm",
+    "status": "FAIL",
+    "exit": 1,
+    "stdoutTail": "\n📋 367 pending migration(s):\n\n  ✅ 000_schema_migrations.sql\n\n📊 Results: 1 applied, 1 failed, 365 skipped\n\n",
+    "stderrTail": "  ❌ 001_create_cost_layers.sql: relation \"products\" does not exist\n\n⛔ Stopping migration due to failure.\n",
+    "migration631": null,
+    "table": null,
+    "detail": "631 not recorded or table missing after migrate.mjs",
+    "dropped": true
+  },
+  "isolation": {
+    "status": "PASS",
+    "detail": "alpha target leak beta=0 pos_system=0",
+    "targetId": "f6ddd5bf-1ea8-4814-9ada-24ccc5a9f69b"
+  }
+}

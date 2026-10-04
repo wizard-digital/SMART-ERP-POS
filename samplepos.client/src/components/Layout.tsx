@@ -13,6 +13,7 @@ import {
 } from '../utils/restaurantWaiterLockdown';
 import { createClientAuthorization } from '../authorization/authorizationService';
 import { useRestaurantEnabled } from '../hooks/useRestaurantEnabled';
+import { useSalesTargetsEnabled } from '../hooks/useSalesTargetsEnabled';
 import { shouldHideRetailPos } from '../utils/retailPosVisibility';
 import {
   AdaptiveAppShell,
@@ -36,6 +37,8 @@ interface NavItem {
   permissions?: string[];
   feature?: string;
   requiresRestaurant?: boolean;
+  /** Tenant system_settings.sales_targets_enabled */
+  requiresSalesTargets?: boolean;
 }
 
 export default function Layout({ children }: LayoutProps) {
@@ -58,6 +61,7 @@ function LayoutChrome({ children }: LayoutProps) {
   const { config, loading: tenantLoading } = useTenant();
   const brandName = config.branding.companyName || config.name || 'SMART ERP';
   const { data: restaurantEnabled = false } = useRestaurantEnabled();
+  const { data: salesTargetsEnabled = false } = useSalesTargetsEnabled();
   const userInitial = user?.fullName?.charAt(0).toUpperCase() || 'U';
 
   useEffect(() => {
@@ -140,6 +144,16 @@ function LayoutChrome({ children }: LayoutProps) {
     { name: 'Customers', path: '/customers', icon: '👥', color: 'text-yellow-600', permissions: ['customers.read'], feature: 'customers' },
     { name: 'Suppliers', path: '/suppliers', icon: '🏢', color: 'text-indigo-600', permissions: ['suppliers.read'], feature: 'purchase_orders' },
     { name: 'Sales', path: '/sales', icon: '💰', color: 'text-emerald-600', permissions: ['sales.read'], feature: 'pos' },
+    /** Manage-only + tenant flag; cashiers see progress on Sales when enabled */
+    {
+      name: 'Sales Targets',
+      path: '/sales/targets',
+      icon: '🎯',
+      color: 'text-emerald-700',
+      permissions: ['targets.manage', 'targets.approve'],
+      feature: 'pos',
+      requiresSalesTargets: true,
+    },
     { name: 'Quotations', path: '/quotations', icon: '💼', color: 'text-blue-500', permissions: ['quotations.read'], feature: 'invoices' },
     { name: 'CRM', path: '/crm', icon: '🤝', color: 'text-violet-600', permissions: ['crm.read'], feature: 'crm' },
     { name: 'HR & Payroll', path: '/hr', icon: '📇', color: 'text-pink-600', permissions: ['hr.read'], feature: 'hr' },
@@ -204,6 +218,7 @@ function LayoutChrome({ children }: LayoutProps) {
       // Restaurant tenant = FOH, not retail POS.
       if (item.path === '/pos' && shouldHideRetailPos(restaurantEnabled)) return false;
       if (item.requiresRestaurant && !restaurantEnabled) return false;
+      if (item.requiresSalesTargets && !salesTargetsEnabled) return false;
       if (item.feature) {
         if (tenantLoading) return false;
         if (planFeatures.length > 0 && !planFeatures.includes(item.feature)) return false;
@@ -212,7 +227,7 @@ function LayoutChrome({ children }: LayoutProps) {
       if (!authz) return false;
       return item.permissions.some((p) => authz.hasPermission(p));
     });
-  }, [user, permissions, planFeatures, tenantLoading, restaurantEnabled]);
+  }, [user, permissions, planFeatures, tenantLoading, restaurantEnabled, salesTargetsEnabled]);
 
   const handleLogout = () => {
     logout();

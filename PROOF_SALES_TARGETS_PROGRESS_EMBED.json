@@ -1,0 +1,88 @@
+{
+  "feature": "SALES_TARGETS_PROGRESS_EMBED",
+  "provenAt": "2026-10-04T15:53:17.459Z",
+  "contract": "Cashiers see Target/Achieved/Remaining on Sales (and managers on Dashboard) via shared strip; achievement from GET /sales-targets/progress + Money.round; no client revenue duplicate math; manage nav only for targets.manage|approve",
+  "browserHarness": "NOT_AVAILABLE — source/contract evidence only",
+  "gates": [
+    {
+      "id": "API_PROGRESS_ROUTE",
+      "ok": true,
+      "detail": "GET /progress registered"
+    },
+    {
+      "id": "API_PROGRESS_BEFORE_ID",
+      "ok": true,
+      "detail": "/progress before /:id"
+    },
+    {
+      "id": "SERVICE_GET_PROGRESS",
+      "ok": true,
+      "detail": "getProgress reuses calculateTargetAchievement"
+    },
+    {
+      "id": "SERVICE_TEAM_FALLBACK",
+      "ok": true,
+      "detail": "managers fall back to team ACTIVE targets; business date SSOT"
+    },
+    {
+      "id": "MONEY_ROUND",
+      "ok": true,
+      "detail": "achievement precision uses Money.round SSOT"
+    },
+    {
+      "id": "API_CLIENT_PROGRESS",
+      "ok": true,
+      "detail": "api.salesTargets.progress wired"
+    },
+    {
+      "id": "STRIP_FETCH",
+      "ok": true,
+      "detail": "strip loads /progress"
+    },
+    {
+      "id": "STRIP_NO_REVENUE_MATH",
+      "ok": true,
+      "detail": "strip does not recompute achievement from sales lines"
+    },
+    {
+      "id": "STRIP_CURRENCY_SSOT",
+      "ok": true,
+      "detail": "strip uses formatCurrency"
+    },
+    {
+      "id": "STRIP_KPI_SSOT",
+      "ok": true,
+      "detail": "strip reuses adaptive KPI_ACCENT"
+    },
+    {
+      "id": "STRIP_FIELDS",
+      "ok": true,
+      "detail": "strip surfaces Target / Achieved / Remaining / %"
+    },
+    {
+      "id": "STRIP_EMPTY_HINT",
+      "ok": true,
+      "detail": "managers see empty hint on Sales when no ACTIVE target"
+    },
+    {
+      "id": "SALES_EMBED",
+      "ok": true,
+      "detail": "SalesPage embeds progress strip"
+    },
+    {
+      "id": "DASHBOARD_EMBED",
+      "ok": true,
+      "detail": "Dashboard embeds progress strip"
+    },
+    {
+      "id": "NAV_MANAGE_ONLY",
+      "ok": true,
+      "detail": "Layout Sales Targets nav is manage/approve + tenant flag (cashiers use Sales strip)"
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "passed": 15,
+    "failed": 0
+  }
+}

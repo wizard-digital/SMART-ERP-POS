@@ -23,7 +23,7 @@ import { useSubmitOnEnter } from '../../hooks/useSubmitOnEnter';
 const MODULE_ORDER: string[] = [
   'system', 'admin', 'sales', 'pos', 'orders', 'restaurant', 'quotations', 'inventory', 'purchasing',
   'accounting', 'expenses', 'banking', 'customers', 'suppliers', 'delivery', 'distribution',
-  'corrections', 'reports', 'settings', 'crm', 'hr',
+  'corrections', 'reports', 'settings', 'crm', 'hr', 'targets',
 ];
 
 // Module descriptions for admin context
@@ -49,6 +49,7 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   settings: 'Application configuration',
   crm: 'Leads, opportunities & pipeline',
   hr: 'Employees, departments & payroll',
+  targets: 'Sales targets & achievement',
 };
 
 export default function RoleManagementPage() {

@@ -17,6 +17,10 @@ describe('systemRoleGrants SSOT', () => {
     expect(SYSTEM_MANAGER_MODULES).toContain('accounting');
     expect(SYSTEM_MANAGER_MODULES).toContain('quotations');
     expect(SYSTEM_MANAGER_MODULES).toContain('distribution');
+    expect(SYSTEM_MANAGER_MODULES).toContain('targets');
+    expect(isSystemManagerPermission({ key: 'targets.manage', module: 'targets' })).toBe(true);
+    expect(SYSTEM_CASHIER_PERMISSION_KEYS).toContain('targets.read');
+    expect(isSystemCashierPermission({ key: 'targets.manage', module: 'targets' })).toBe(false);
   });
 
   it('isSystemManagerPermission grants accounting.read', () => {

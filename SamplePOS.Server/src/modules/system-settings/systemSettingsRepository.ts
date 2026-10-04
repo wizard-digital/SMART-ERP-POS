@@ -186,6 +186,10 @@ export const systemSettingsRepository = {
             setClauses.push(`restaurant_mode_enabled = $${paramIndex++}`);
             values.push(updates.restaurantModeEnabled);
         }
+        if (updates.salesTargetsEnabled !== undefined) {
+            setClauses.push(`sales_targets_enabled = $${paramIndex++}`);
+            values.push(updates.salesTargetsEnabled);
+        }
         if (updates.kitchenProductionEnabled !== undefined) {
             setClauses.push(`kitchen_production_enabled = $${paramIndex++}`);
             values.push(updates.kitchenProductionEnabled);

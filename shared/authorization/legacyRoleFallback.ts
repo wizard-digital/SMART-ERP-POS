@@ -30,6 +30,7 @@ export const LEGACY_MANAGER_MODULES = [
   'orders',
   'restaurant',
   'distribution',
+  'targets',
 ] as const;
 
 /** Explicit permission keys granted to legacy CASHIER role. */
@@ -58,6 +59,7 @@ export const LEGACY_CASHIER_PERMISSIONS = [
   'sales.reprint',
   'distribution.read',
   'distribution.create',
+  'targets.read',
 ] as const;
 
 /** Explicit permission keys granted to legacy STAFF role (beyond *.read). */
@@ -76,7 +78,9 @@ const LEGACY_ROLE_PERMISSIONS: Record<string, LegacyChecker> = {
     key !== 'restaurant.pay' &&
     LEGACY_MANAGER_MODULES.includes(key.split('.')[0] as (typeof LEGACY_MANAGER_MODULES)[number]),
   CASHIER: (key) => (LEGACY_CASHIER_PERMISSIONS as readonly string[]).includes(key),
-  STAFF: (key) => key.endsWith('.read') || (LEGACY_STAFF_EXTRA_PERMISSIONS as readonly string[]).includes(key),
+  STAFF: (key) =>
+    key.endsWith('.read') ||
+    (LEGACY_STAFF_EXTRA_PERMISSIONS as readonly string[]).includes(key),
 };
 
 /**

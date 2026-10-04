@@ -1,0 +1,52 @@
+{
+  "feature": "SALES_TARGETS_FEATURE_FLAG",
+  "provenAt": "2026-10-04T15:53:17.459Z",
+  "contract": "sales_targets_enabled DEFAULT FALSE; Settings toggle; nav/strip/routes/API gated; opt-in per tenant",
+  "gates": [
+    {
+      "id": "SQL_DEFAULT_OFF",
+      "ok": true,
+      "detail": "migration default FALSE"
+    },
+    {
+      "id": "SETTINGS_TOGGLE",
+      "ok": true,
+      "detail": "System Settings has Enable Sales Targets checkbox"
+    },
+    {
+      "id": "SETTINGS_INVALIDATE",
+      "ok": true,
+      "detail": "saving flag invalidates enabled query"
+    },
+    {
+      "id": "HOOK",
+      "ok": true,
+      "detail": "hook fetches enabled"
+    },
+    {
+      "id": "API_ENABLED",
+      "ok": true,
+      "detail": "api.salesTargets.getEnabled"
+    },
+    {
+      "id": "NAV_GATED",
+      "ok": true,
+      "detail": "Layout hides Sales Targets when flag off"
+    },
+    {
+      "id": "STRIP_GATED",
+      "ok": true,
+      "detail": "progress strip hidden when flag off"
+    },
+    {
+      "id": "ROUTE_GATED",
+      "ok": true,
+      "detail": "routes wrapped in SalesTargetsFeatureGate"
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0
+  }
+}

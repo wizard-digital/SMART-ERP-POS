@@ -1,0 +1,138 @@
+{
+  "feature": "SALES_TARGETS_UI_SSOT",
+  "provenAt": "2026-10-04T15:53:17.494Z",
+  "contract": "Sales Targets list/detail match AdaptivePage + Expenses patterns (Button, Badge, formatCurrency, ReportBackLink, touch targets, Dialog cancel)",
+  "browserHarness": "NOT_AVAILABLE — no Playwright/Cypress in client package; this is source+contract evidence",
+  "gates": [
+    {
+      "id": "ROUTE_LIST",
+      "ok": true,
+      "detail": "list route registered"
+    },
+    {
+      "id": "ROUTE_DETAIL",
+      "ok": true,
+      "detail": "detail route registered"
+    },
+    {
+      "id": "ROUTE_PERMS",
+      "ok": true,
+      "detail": "ProtectedRoute uses targets.* permissions (any-of)"
+    },
+    {
+      "id": "NAV_ITEM",
+      "ok": true,
+      "detail": "Layout nav Sales Targets present (manage/approve + tenant flag)"
+    },
+    {
+      "id": "LIST_ADAPTIVE",
+      "ok": true,
+      "detail": "SalesTargetsPage uses AdaptivePage"
+    },
+    {
+      "id": "LIST_TOOLBAR",
+      "ok": true,
+      "detail": "list uses AdaptiveToolbar"
+    },
+    {
+      "id": "LIST_BACK",
+      "ok": true,
+      "detail": "list uses ReportBackLink → /sales"
+    },
+    {
+      "id": "LIST_BUTTON",
+      "ok": true,
+      "detail": "list uses Button SSOT"
+    },
+    {
+      "id": "LIST_BADGE",
+      "ok": true,
+      "detail": "list uses Badge for status"
+    },
+    {
+      "id": "LIST_CURRENCY",
+      "ok": true,
+      "detail": "list uses formatCurrency (not ad-hoc formatMoney)"
+    },
+    {
+      "id": "LIST_KPI_SSOT",
+      "ok": true,
+      "detail": "list KPI strip uses adaptiveDashboard SSOT"
+    },
+    {
+      "id": "LIST_TOUCH",
+      "ok": true,
+      "detail": "list primary controls use touch-target token"
+    },
+    {
+      "id": "LIST_NO_WINDOW_PROMPT",
+      "ok": true,
+      "detail": "list has no window.prompt"
+    },
+    {
+      "id": "EXPENSES_BASELINE",
+      "ok": true,
+      "detail": "Expenses SSOT still AdaptivePage+Badge"
+    },
+    {
+      "id": "DETAIL_ADAPTIVE",
+      "ok": true,
+      "detail": "detail uses AdaptivePage"
+    },
+    {
+      "id": "DETAIL_BACK",
+      "ok": true,
+      "detail": "detail back → Sales Targets"
+    },
+    {
+      "id": "DETAIL_BUTTON",
+      "ok": true,
+      "detail": "detail uses Button"
+    },
+    {
+      "id": "DETAIL_BADGE",
+      "ok": true,
+      "detail": "detail status Badge"
+    },
+    {
+      "id": "DETAIL_CURRENCY",
+      "ok": true,
+      "detail": "detail uses formatCurrency"
+    },
+    {
+      "id": "DETAIL_KPI",
+      "ok": true,
+      "detail": "detail KPI strip SSOT"
+    },
+    {
+      "id": "DETAIL_CANCEL_DIALOG",
+      "ok": true,
+      "detail": "cancel uses Dialog (not window.prompt)"
+    },
+    {
+      "id": "DETAIL_ACTIONS",
+      "ok": true,
+      "detail": "approve/submit action hooks present"
+    },
+    {
+      "id": "DETAIL_TOUCH",
+      "ok": true,
+      "detail": "detail actions use touch-target token"
+    },
+    {
+      "id": "LIST_MANAGE_GATE",
+      "ok": true,
+      "detail": "create gated on targets.manage"
+    },
+    {
+      "id": "DETAIL_APPROVE_GATE",
+      "ok": true,
+      "detail": "approve gated on targets.approve"
+    }
+  ],
+  "summary": {
+    "total": 25,
+    "passed": 25,
+    "failed": 0
+  }
+}

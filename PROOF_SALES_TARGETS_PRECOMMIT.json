@@ -1,0 +1,25 @@
+{
+  "feature": "SALES_TARGETS_PRECOMMIT",
+  "provenAt": "2026-10-04T15:53:30.000Z",
+  "verdict": "READY_TO_COMMIT",
+  "suites": {
+    "server_jest_sales_targets": { "files": 7, "tests": 25, "failed": 0 },
+    "client_vitest_sales_targets_evidence": { "files": 3, "tests": 12, "failed": 0 }
+  },
+  "proofArtifacts": {
+    "PROOF_SALES_TARGETS_SSOT_NO_DUPLICATE": { "passed": 16, "failed": 0 },
+    "PROOF_SALES_TARGETS_INTEGRITY_GURU": { "passed": 30, "failed": 0 },
+    "PROOF_SALES_TARGETS_FEATURE_FLAG": { "passed": 8, "failed": 0 },
+    "PROOF_SALES_TARGETS_PROGRESS_EMBED": { "passed": 15, "failed": 0 },
+    "PROOF_SALES_TARGETS_UI_SSOT": { "passed": 25, "failed": 0 }
+  },
+  "gateTotals": { "passed": 94, "failed": 0 },
+  "browserHarness": "NOT_AVAILABLE",
+  "migrationsRequired": ["631_sales_targets.sql", "632_sales_targets_enabled.sql", "633_sales_targets_general_team.sql", "634_sales_targets_no_duplicate_ssot.sql"],
+  "notes": [
+    "Achievement SSOT server-only; no client revenue math",
+    "Opt-in flag default off",
+    "Scopes: INDIVIDUAL | GENERAL | TEAM",
+    "Advisory-locked live overlap; CI unique team names"
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "feature": "SALES_TARGETS_SSOT_NO_DUPLICATE",
+  "provenAt": "2026-10-04T15:53:01.741Z",
+  "contract": "No stored achievement; scope shape CHECK; CI unique teams; membership PK; advisory-locked live overlap; GENERAL/TEAM/INDIVIDUAL cashier filters; progress=detail SSOT; no client revenue math; no double-penalty returns",
+  "gates": [
+    {
+      "id": "NO_STORED_ACHIEVED",
+      "ok": true,
+      "detail": "no achieved_amount column"
+    },
+    {
+      "id": "SCOPE_SHAPE",
+      "ok": true,
+      "detail": "DB CHECK scope shape"
+    },
+    {
+      "id": "TEAM_NAME_CI",
+      "ok": true,
+      "detail": "case-insensitive unique team names"
+    },
+    {
+      "id": "MEMBER_PK",
+      "ok": true,
+      "detail": "team membership PK blocks duplicate members"
+    },
+    {
+      "id": "ADVISORY_LOCK",
+      "ok": true,
+      "detail": "overlap checks take advisory xact lock"
+    },
+    {
+      "id": "OVERLAP_ALL_SCOPES",
+      "ok": true,
+      "detail": "live overlap enforced for all scopes"
+    },
+    {
+      "id": "TEAM_DEDUP",
+      "ok": true,
+      "detail": "team members deduped; duplicate names mapped"
+    },
+    {
+      "id": "GENERAL_SHAPE_GUARD",
+      "ok": true,
+      "detail": "GENERAL rejects salesperson/team mass-shape"
+    },
+    {
+      "id": "ACH_SSOT_SINGLE",
+      "ok": true,
+      "detail": "achievement SSOT server-only; strip no revenue math"
+    },
+    {
+      "id": "PROGRESS_USES_SSOT",
+      "ok": true,
+      "detail": "progress uses same calculateTargetAchievement as detail"
+    },
+    {
+      "id": "REPO_FILTER_MODES",
+      "ok": true,
+      "detail": "GENERAL=all cashiers; TEAM/INDIVIDUAL=explicit ids"
+    },
+    {
+      "id": "FILTER_INDIVIDUAL",
+      "ok": true,
+      "detail": "INDIVIDUAL filter is single id"
+    },
+    {
+      "id": "FILTER_GENERAL",
+      "ok": true,
+      "detail": "GENERAL filter is ALL cashiers"
+    },
+    {
+      "id": "NET_ONCE",
+      "ok": true,
+      "detail": "single sale nets 100"
+    },
+    {
+      "id": "NET_NO_DOUBLE_PENALTY",
+      "ok": true,
+      "detail": "VOIDED_BY_RETURN + refund = 0 (not -100)"
+    },
+    {
+      "id": "VOID_EXCLUDED",
+      "ok": true,
+      "detail": "VOID excluded from achievement"
+    }
+  ],
+  "summary": {
+    "total": 16,
+    "passed": 16,
+    "failed": 0
+  }
+}

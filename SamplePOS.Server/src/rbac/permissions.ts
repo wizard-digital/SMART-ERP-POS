@@ -119,6 +119,7 @@ export const PERMISSIONS: Record<string, Permission> = {
     'Post or correct customer/supplier cutover opening balances (admin assigns to accountants)',
   ),
 
+
   REPORTS_READ: p('reports.read', 'reports', 'read', 'Access reports dashboard'),
   REPORTS_CREATE: p('reports.create', 'reports', 'create', 'Create custom reports'),
   REPORTS_EXPORT: p('reports.export', 'reports', 'export', 'Export reports to CSV/PDF'),
@@ -260,6 +261,15 @@ export const PERMISSIONS: Record<string, Permission> = {
   ),
 
   // Expenses Module
+  TARGETS_READ: p('targets.read', 'targets', 'read', 'View sales targets and achievement'),
+  TARGETS_MANAGE: p(
+    'targets.manage',
+    'targets',
+    'manage',
+    'Create, edit, submit, amend, cancel, and close sales targets',
+  ),
+  TARGETS_APPROVE: p('targets.approve', 'targets', 'approve', 'Approve pending sales targets'),
+
   EXPENSES_READ: p('expenses.read', 'expenses', 'read', 'View expenses and expense summaries'),
   EXPENSES_CREATE: p('expenses.create', 'expenses', 'create', 'Create expense entries and claims'),
   EXPENSES_UPDATE: p('expenses.update', 'expenses', 'update', 'Modify expense records'),

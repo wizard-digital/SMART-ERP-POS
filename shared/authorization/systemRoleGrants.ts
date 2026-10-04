@@ -93,6 +93,7 @@ export const SYSTEM_CASHIER_PERMISSION_KEYS = [
   'reports.sales_view',
   'expenses.read',
   'expenses.create',
+  'targets.read',
 ] as const;
 
 /**

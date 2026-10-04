@@ -73,6 +73,9 @@ export interface SystemSettings {
     /** Restaurant module FOH/KOT (default false — retail unchanged) */
     restaurantModeEnabled: boolean;
 
+    /** Sales Targets module (default false — tenants opt in) */
+    salesTargetsEnabled: boolean;
+
     /** ADR-005 Kitchen Production Batch cook-to-stock (default false) */
     kitchenProductionEnabled: boolean;
 
@@ -143,6 +146,7 @@ export interface SystemSettingsDbRow {
     is_multistore_enabled: boolean;
     treasury_document_enabled?: boolean;
     restaurant_mode_enabled?: boolean;
+    sales_targets_enabled?: boolean;
     kitchen_production_enabled?: boolean;
     loss_quarantine_document_enabled?: boolean;
     transfer_policy_require_approval_all: boolean;
@@ -198,6 +202,7 @@ export interface UpdateSystemSettingsDto {
     isMultistoreEnabled?: boolean;
     treasuryDocumentEnabled?: boolean;
     restaurantModeEnabled?: boolean;
+    salesTargetsEnabled?: boolean;
     kitchenProductionEnabled?: boolean;
     lossQuarantineDocumentEnabled?: boolean;
     transferPolicyRequireApprovalAll?: boolean;
@@ -254,6 +259,7 @@ export function normalizeSystemSettings(dbRow: SystemSettingsDbRow): SystemSetti
         isMultistoreEnabled: dbRow.is_multistore_enabled ?? false,
         treasuryDocumentEnabled: dbRow.treasury_document_enabled ?? false,
         restaurantModeEnabled: dbRow.restaurant_mode_enabled ?? false,
+        salesTargetsEnabled: dbRow.sales_targets_enabled ?? false,
         kitchenProductionEnabled: dbRow.kitchen_production_enabled ?? false,
         lossQuarantineDocumentEnabled: dbRow.loss_quarantine_document_enabled ?? false,
         transferPolicyRequireApprovalAll: dbRow.transfer_policy_require_approval_all ?? true,

@@ -1,0 +1,15 @@
+{
+  "name": "pos_forensic_st_tpl_murhusdq",
+  "source": "pos_template",
+  "alreadyApplied": true,
+  "migrateExit": 0,
+  "migrateStdoutTail": "✅ Database is up to date. No pending migrations.\n",
+  "migrateStderrTail": "",
+  "migration631": "631_sales_targets.sql",
+  "table": "sales_targets",
+  "columnCount": 21,
+  "status": "PASS",
+  "secondMigrateExit": 0,
+  "secondMigrateTail": "✅ Database is up to date. No pending migrations.\n",
+  "dropped": true
+}
