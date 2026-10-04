@@ -13,7 +13,12 @@ type Db = Pool | PoolClient;
 
 /** Bank-grade 2dp — same Money SSOT as achievement service (no ad-hoc Math.round). */
 function money(n: unknown): number {
-  return Money.toNumber(Money.round(n, 2));
+  if (n == null || n === '') return 0;
+  if (typeof n === 'number' || typeof n === 'string') {
+    return Money.toNumber(Money.round(n, 2));
+  }
+  // pg may return Decimal-like / stringable values
+  return Money.toNumber(Money.round(String(n), 2));
 }
 
 function mapRow(r: Record<string, unknown>): SalesTargetRow {

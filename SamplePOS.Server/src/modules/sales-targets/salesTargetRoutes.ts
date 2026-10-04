@@ -223,11 +223,16 @@ router.patch(
         details: parsed.error.flatten(),
       });
     }
+    const { salespersonId, teamId: _teamId, ...rest } = parsed.data;
     const data = await salesTargetService.updateDraft(
       poolOf(req),
       await actorOf(req),
       req.params.id,
-      parsed.data,
+      {
+        ...rest,
+        // Service/repo accept string | undefined; Zod allows null to clear omission
+        salespersonId: salespersonId ?? undefined,
+      },
     );
     res.json({ success: true, data });
   }),
