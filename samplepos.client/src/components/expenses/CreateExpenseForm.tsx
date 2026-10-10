@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { CreateExpenseSchema } from '@shared/zod/expense';
 import {
   CreateExpenseData,
-  PAYMENT_METHODS,
   Expense,
 } from '@shared/types/expense';
 import { useCreateExpense, useExpenseCategories, useExpenseStaffOptions } from '../../hooks/useExpenses';
@@ -195,34 +194,6 @@ export const CreateExpenseForm: React.FC<CreateExpenseFormProps> = ({ onSuccess,
                 />
                 {errors.category && (
                   <p className="text-xs text-red-600 mt-0.5">{errors.category.message}</p>
-                )}
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <Label className="text-sm font-medium">Payment Method *</Label>
-                <Controller
-                  name="paymentMethod"
-                  control={control}
-                  render={({ field }) => (
-                    <Select value={field.value ?? ''} onValueChange={field.onChange}>
-                      <SelectTrigger
-                        className={errors.paymentMethod ? 'border-red-500 h-9' : 'h-9'}
-                      >
-                        <SelectValue placeholder="Select method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(PAYMENT_METHODS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                />
-                {errors.paymentMethod && (
-                  <p className="text-xs text-red-600 mt-0.5">{errors.paymentMethod.message}</p>
                 )}
               </div>
 

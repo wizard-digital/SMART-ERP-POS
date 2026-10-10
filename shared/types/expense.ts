@@ -67,7 +67,8 @@ export interface Expense {
   employeeId?: string | null;
   employeeName?: string | null;
   receiptNumber?: string; // Optional receipt/invoice number
-  paymentMethod: PaymentMethod;
+  /** Set when marked paid (or legacy create). Null/undefined while unpaid voucher. */
+  paymentMethod?: PaymentMethod | null;
   status: ExpenseStatus;
   receiptRequired: boolean;
   notes?: string;
@@ -110,7 +111,8 @@ export interface CreateExpenseData {
   vendor?: string;
   /** Link staff payout to HR employee for audit (required for ALLOWANCE). */
   employeeId?: string | null;
-  paymentMethod: PaymentMethod;
+  /** Optional at prepare; set at mark-paid from pay-from account. */
+  paymentMethod?: PaymentMethod;
   receiptRequired?: boolean;
   notes?: string;
   documentIds?: string[]; // UUIDs of uploaded documents to associate

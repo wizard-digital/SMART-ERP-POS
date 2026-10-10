@@ -80,7 +80,8 @@ export const CreateExpenseSchema = z.object({
   /** HR employee for audit (who received/claimed). Not payroll. */
   employeeId: z.string().uuid('Invalid employee ID').optional().nullable(),
 
-  paymentMethod: PaymentMethodSchema,
+  // Optional at prepare — settlement method is chosen/derived when marking paid
+  paymentMethod: PaymentMethodSchema.optional(),
 
   receiptRequired: z.boolean().optional(),
 

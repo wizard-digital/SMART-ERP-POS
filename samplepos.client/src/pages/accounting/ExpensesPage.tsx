@@ -618,10 +618,14 @@ const ExpensesPage: React.FC = () => {
                   <p className="text-gray-900 font-medium">{selectedExpense.employeeName || '—'}</p>
                   <p className="text-[11px] text-gray-500">Audit link only — not payroll / NSSF</p>
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Payment Method</label>
-                  <p className="text-gray-900 font-medium">{selectedExpense.paymentMethod || '-'}</p>
-                </div>
+                {(selectedExpense.paymentMethod || selectedExpense.status === 'PAID') && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                      Paid via
+                    </label>
+                    <p className="text-gray-900 font-medium">{selectedExpense.paymentMethod || '—'}</p>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Created By</label>
                   <p className="text-gray-900 font-medium">{selectedExpense.createdByName || 'Unknown'}</p>

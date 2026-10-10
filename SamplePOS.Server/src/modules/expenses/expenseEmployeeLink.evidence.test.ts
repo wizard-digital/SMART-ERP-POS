@@ -106,13 +106,18 @@ describe('PROOF_EXPENSE_EMPLOYEE_AUDIT', () => {
       amount: 15000,
       expenseDate: '2026-08-13',
       category: 'TRAVEL',
-      paymentMethod: 'CASH',
     });
     gate(
       'zod_create',
       'travel_optional_employee',
       travel.employeeId == null || travel.employeeId === undefined,
       'TRAVEL without employee allowed (optional audit)'
+    );
+    gate(
+      'zod_create',
+      'payment_method_optional_at_prepare',
+      travel.paymentMethod === undefined,
+      'paymentMethod not required on create (set at mark-paid)'
     );
   });
 

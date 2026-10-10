@@ -18,7 +18,8 @@ export interface Expense {
   /** HR employee who received/claimed — audit only, not payroll. */
   employeeId?: string | null;
   employeeName?: string | null;
-  paymentMethod: PaymentMethod;
+  /** Null until mark-paid (or legacy rows that stored create-time method). */
+  paymentMethod?: PaymentMethod | null;
   receiptNumber?: string;
   referenceNumber?: string;
   status: ExpenseStatus;

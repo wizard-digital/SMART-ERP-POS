@@ -16,6 +16,29 @@ import {
   buildBusinessNotificationPayload,
   expenseDetailLabel,
 } from '../modules/notifications/businessNotificationPayload.js';
+import type { PaymentMethod } from '../types/expense.js';
+
+/** Derive tender metadata from the liquidity account used at mark-paid (not prepare-time). */
+export function paymentMethodFromLiquidityAccount(
+  accountCode?: string | null,
+  systemAccountTag?: string | null
+): PaymentMethod {
+  const tag = String(systemAccountTag || '').toUpperCase();
+  const code = String(accountCode || '').trim();
+  if (tag === 'CASH' || tag === 'PETTY_CASH' || code === '1010' || code === '1012') {
+    return 'CASH';
+  }
+  if (tag === 'MOBILE_MONEY' || tag === 'AIRTEL_MONEY' || code === '1040') {
+    return 'MOBILE_MONEY';
+  }
+  if (tag === 'CARD' || code === '1020') {
+    return 'CARD';
+  }
+  if (tag === 'CHEQUE') {
+    return 'CHEQUE';
+  }
+  return 'BANK_TRANSFER';
+}
 
 /**
  * Get expenses with filtering and pagination
@@ -438,6 +461,10 @@ export const markExpensePaid = async (
       }
     }
 
+    let resolvedPaymentAccountCode: string | undefined;
+    let resolvedPaymentMethod: PaymentMethod =
+      existingExpense.paymentMethod || 'BANK_TRANSFER';
+
     if (paymentAccountId) {
       const acctCheck = await dbPool.query(
         `SELECT "AccountCode", "AccountName", "AllowedSources", "SystemAccountTag"
@@ -479,6 +506,11 @@ export const markExpensePaid = async (
           },
         );
       }
+      resolvedPaymentAccountCode = acct.AccountCode;
+      resolvedPaymentMethod = paymentMethodFromLiquidityAccount(
+        acct.AccountCode,
+        acct.SystemAccountTag
+      );
     }
 
     const updateData = {
@@ -492,6 +524,8 @@ export const markExpensePaid = async (
       // Set payment status and account for GL trigger
       payment_status: 'PAID' as const,
       payment_account_id: paymentAccountId || null,
+      // Settlement metadata — derived from pay-from account (not prepare-time guess)
+      payment_method: resolvedPaymentMethod,
     };
 
     // ============================================================
@@ -504,16 +538,7 @@ export const markExpensePaid = async (
       // ── GL POSTING inside transaction ──────────────────────────
       // DR AP (2100) / CR Cash or Bank — only if approval credited AP
       // (if expense was paid at approval, approval GL already credited Cash)
-      let paymentAccountCode: string | undefined;
-      if (paymentAccountId) {
-        const acctResult = await client.query(
-          'SELECT "AccountCode" FROM accounts WHERE "Id" = $1',
-          [paymentAccountId]
-        );
-        if (acctResult.rows.length > 0) {
-          paymentAccountCode = acctResult.rows[0].AccountCode;
-        }
-      }
+      const paymentAccountCode = resolvedPaymentAccountCode;
 
       const paymentDate = paymentData.paymentDate || getBusinessDate();
 
@@ -549,7 +574,7 @@ export const markExpensePaid = async (
             id,
             existingExpense.expenseNumber,
             existingExpense.amount,
-            existingExpense.paymentMethod || 'BANK_TRANSFER',
+            resolvedPaymentMethod,
             updateData.paid_at?.split('T')[0] || getBusinessDate(),
             {
               paymentAccountCode,
