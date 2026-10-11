@@ -196,7 +196,14 @@ const distributionApi = {
     depositAllocations: Array<{ depositId: string; amount: number }>;
     cashPayment?: { amount: number; paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'BANK_TRANSFER'; referenceNumber?: string };
     notes?: string;
-  }): Promise<{ clearingNumbers: string[]; receiptNumber?: string; totalCleared: number }> {
+  }): Promise<{
+    clearingNumbers: string[];
+    receiptNumber?: string;
+    totalCleared: number;
+    changeGiven?: number;
+    cashTendered?: number;
+    cashApplied?: number;
+  }> {
     const res = await apiClient.post('/distribution/clearing', data);
     return res.data.data;
   },
@@ -209,6 +216,15 @@ const distributionApi = {
 
   async reconfirmBackorders(productId: string): Promise<{ confirmed: number }> {
     const res = await apiClient.post('/distribution/backorders/reconfirm', { productId });
+    return res.data.data;
+  },
+
+  async reconfirmSalesOrder(id: string): Promise<{
+    confirmedUnits: number;
+    order: SalesOrder;
+    lines: SalesOrderLine[];
+  }> {
+    const res = await apiClient.post(`/distribution/sales-orders/${id}/reconfirm`);
     return res.data.data;
   },
 

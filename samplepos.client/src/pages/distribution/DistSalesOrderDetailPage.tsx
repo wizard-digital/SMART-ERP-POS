@@ -5,7 +5,7 @@
  *   Order Lines → Create Delivery → Invoices → Payment
  * No need to navigate to separate pages.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -17,6 +17,7 @@ import distributionApi, {
   type DepositInfo,
 } from '../../api/distribution';
 import { formatCurrency } from '../../utils/currency';
+import { computeInvoiceTender } from '../../utils/invoiceTenderChange';
 
 type TabKey = 'lines' | 'deliveries' | 'invoices' | 'payment';
 
@@ -76,6 +77,8 @@ export default function DistSalesOrderDetailPage() {
   const [deliveryNotes, setDeliveryNotes] = useState('');
 
   const openLines = lines.filter(l => (l.confirmedQty - l.deliveredQty) > 0);
+  const backorderLines = lines.filter(l => l.orderedQty > l.confirmedQty + 0.0001);
+  const blockedByBackorder = openLines.length === 0 && backorderLines.length > 0;
 
   const initDelivery = useCallback(() => {
     const qtys: Record<string, number> = {};
@@ -92,6 +95,31 @@ export default function DistSalesOrderDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['dist-invoices', id] });
     queryClient.invalidateQueries({ queryKey: ['dist-sales-orders'] });
   }, [queryClient, id]);
+
+  const reconfirmMutation = useMutation({
+    mutationFn: () => distributionApi.reconfirmSalesOrder(id!),
+    onSuccess: (result) => {
+      const deliverable = result.lines.reduce(
+        (sum, l) => sum + Math.max(0, l.confirmedQty - l.deliveredQty),
+        0,
+      );
+      if (deliverable > 0) {
+        toast.success(`Stock confirmed for delivery (${deliverable} unit(s)). Create Delivery is available.`);
+      } else {
+        toast.error(
+          'No sellable stock at the shop/outlet issue store. Receive or transfer stock there, then refresh.',
+        );
+      }
+      queryClient.setQueryData(['dist-sales-order', id], {
+        order: result.order,
+        lines: result.lines,
+      });
+      invalidateAll();
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) => {
+      toast.error(err.response?.data?.error ?? 'Failed to refresh confirmation');
+    },
+  });
 
   const deliveryMutation = useMutation({
     mutationFn: () =>
@@ -135,9 +163,17 @@ export default function DistSalesOrderDetailPage() {
       });
     },
     onSuccess: (result) => {
-      toast.success(`Payment processed — ${formatCurrency(result.totalCleared)} cleared`);
+      const change = Number(result.changeGiven ?? 0);
+      if (change > 0.009) {
+        toast.success(
+          `Took ${formatCurrency(result.totalCleared)} · Change ${formatCurrency(change)}`,
+        );
+      } else {
+        toast.success(`Payment posted — ${formatCurrency(result.totalCleared)} cleared`);
+      }
       invalidateAll();
       queryClient.invalidateQueries({ queryKey: ['dist-clearing', order?.customerId] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setSelectedInvoiceId('');
       setDepositAllocations({});
       setCashAmount(0);
@@ -153,6 +189,21 @@ export default function DistSalesOrderDetailPage() {
   const openInvoices = invoices.filter(inv => inv.amountDue > 0);
   const totalPaid = invoices.reduce((s, inv) => s + inv.amountPaid, 0);
   const totalDue = invoices.reduce((s, inv) => s + inv.amountDue, 0);
+  const selectedInvoice = openInvoices.find((inv) => inv.id === selectedInvoiceId);
+  const depositRequested = useMemo(
+    () => Object.values(depositAllocations).reduce((s, a) => s + (Number(a) || 0), 0),
+    [depositAllocations],
+  );
+  const tenderPreview = useMemo(
+    () =>
+      computeInvoiceTender({
+        invoiceDue: selectedInvoice?.amountDue ?? 0,
+        depositRequested,
+        cashTendered: cashAmount,
+        paymentMethod,
+      }),
+    [selectedInvoice?.amountDue, depositRequested, cashAmount, paymentMethod],
+  );
 
   const steps = [
     { label: 'Order', done: true },
@@ -188,10 +239,20 @@ export default function DistSalesOrderDetailPage() {
               </span>
             </h1>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {['OPEN', 'PARTIALLY_DELIVERED'].includes(order.status) && (
               <button onClick={() => navigate(`/distribution/sales-orders/${id}/edit`)} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
                 ✎ Edit Order
+              </button>
+            )}
+            {backorderLines.length > 0 && ['OPEN', 'PARTIALLY_DELIVERED'].includes(order.status) && (
+              <button
+                type="button"
+                onClick={() => reconfirmMutation.mutate()}
+                disabled={reconfirmMutation.isPending}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50"
+              >
+                {reconfirmMutation.isPending ? 'Checking stock…' : '↻ Refresh confirmation'}
               </button>
             )}
             {openLines.length > 0 && !showDelivery && (
@@ -202,8 +263,23 @@ export default function DistSalesOrderDetailPage() {
           </div>
         </div>
 
+        {blockedByBackorder && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-semibold">Cannot Create Delivery yet — nothing is confirmed from stock</p>
+            <p className="mt-1">
+              Confirmed qty comes from inventory ATP (active batches minus qty already reserved on open sales orders).
+              Both lines on this order are full backorders because there is no free stock.
+            </p>
+            <ol className="mt-2 list-decimal list-inside space-y-0.5 text-amber-800">
+              <li>Receive stock via Inventory / Goods Receipt (GRN) for these products.</li>
+              <li>Click <strong>Refresh confirmation</strong> so ATP can raise Confirmed qty.</li>
+              <li>Then <strong>Create Delivery</strong> posts delivery + customer invoice (AR).</li>
+            </ol>
+          </div>
+        )}
+
         {/* ─── Summary Cards ───────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <div className="bg-white border rounded-lg p-3">
             <p className="text-xs text-gray-500">Customer</p>
             <p className="font-medium text-sm truncate">{order.customerName}</p>
@@ -215,11 +291,20 @@ export default function DistSalesOrderDetailPage() {
           <div className="bg-white border rounded-lg p-3">
             <p className="text-xs text-gray-500">Order Total</p>
             <p className="font-bold text-sm">{formatCurrency(order.totalAmount)}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">Ordered × price</p>
           </div>
           <div className="bg-white border rounded-lg p-3">
-            <p className="text-xs text-gray-500">Amount Due</p>
+            <p className="text-xs text-gray-500">Confirmed Value</p>
+            <p className="font-bold text-sm">{formatCurrency(order.totalConfirmed)}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">ATP reserved</p>
+          </div>
+          <div className="bg-white border rounded-lg p-3">
+            <p className="text-xs text-gray-500">Invoice Due</p>
             <p className={`font-bold text-sm ${totalDue > 0 ? 'text-red-600' : 'text-green-600'}`}>
               {formatCurrency(totalDue)}
+            </p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              {invoices.length === 0 ? 'No invoices yet' : 'Open AR on invoices'}
             </p>
           </div>
         </div>
@@ -614,6 +699,9 @@ export default function DistSalesOrderDetailPage() {
                 {/* Select invoice */}
                 <div className="bg-white border rounded-lg p-4 space-y-3">
                   <h3 className="text-sm font-semibold text-gray-700">Select Invoice to Pay</h3>
+                  <p className="text-xs text-gray-500">
+                    Posts through customer invoice AR (same as Customers → Receive Payment). Deposit uses customer deposit balance; cash/card/MoMo/bank use the AR open-item engine.
+                  </p>
                   <div className="space-y-2">
                     {openInvoices.map(inv => (
                       <label
@@ -644,6 +732,7 @@ export default function DistSalesOrderDetailPage() {
                     {clearingData && clearingData.deposits.filter((d: DepositInfo) => d.remainingAmount > 0).length > 0 && (
                       <div className="bg-white border rounded-lg p-4 space-y-3">
                         <h3 className="text-sm font-semibold text-gray-700">Apply Customer Deposits</h3>
+                        <p className="text-xs text-gray-500">Total entered is applied FIFO from customer deposits (same as Customer Center).</p>
                         {clearingData.deposits.filter((d: DepositInfo) => d.remainingAmount > 0).map((dep: DepositInfo) => (
                           <div key={dep.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                             <div className="flex-1 min-w-0">
@@ -667,12 +756,14 @@ export default function DistSalesOrderDetailPage() {
                       </div>
                     )}
 
-                    {/* Direct payment */}
+                    {/* Direct payment — POS-style tender */}
                     <div className="bg-white border rounded-lg p-4 space-y-3">
                       <h3 className="text-sm font-semibold text-gray-700">Direct Payment</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
-                          <label className="text-xs text-gray-500">Amount</label>
+                          <label className="text-xs text-gray-500">
+                            {paymentMethod === 'CASH' ? 'Tendered' : 'Amount'}
+                          </label>
                           <input
                             type="number"
                             min={0}
@@ -681,6 +772,19 @@ export default function DistSalesOrderDetailPage() {
                             className="w-full border rounded px-3 py-1.5 text-sm mt-0.5"
                             placeholder="0"
                           />
+                          {paymentMethod === 'CASH' && (
+                            <button
+                              type="button"
+                              className="mt-1 text-xs text-blue-600 hover:underline"
+                              onClick={() =>
+                                setCashAmount(
+                                  Math.max(0, (selectedInvoice?.amountDue ?? 0) - depositRequested),
+                                )
+                              }
+                            >
+                              Exact due
+                            </button>
+                          )}
                         </div>
                         <div>
                           <label className="text-xs text-gray-500">Method</label>
@@ -718,13 +822,39 @@ export default function DistSalesOrderDetailPage() {
                       </div>
                     </div>
 
+                    {/* POS-style take / change */}
+                    <div className="bg-gray-50 border rounded-lg p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs text-gray-500">Invoice due</p>
+                        <p className="font-semibold">{formatCurrency(selectedInvoice?.amountDue ?? 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Take (post to AR)</p>
+                        <p className="font-semibold text-blue-700">{formatCurrency(tenderPreview.totalApplied)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Change</p>
+                        <p className={`font-bold ${tenderPreview.changeGiven > 0 ? 'text-green-700' : 'text-gray-700'}`}>
+                          {formatCurrency(tenderPreview.changeGiven)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Left on invoice</p>
+                        <p className="font-semibold">{formatCurrency(tenderPreview.remainingDue)}</p>
+                      </div>
+                    </div>
+
                     {/* Submit */}
                     <button
                       onClick={() => clearingMutation.mutate()}
-                      disabled={clearingMutation.isPending || (!cashAmount && Object.values(depositAllocations).every(a => !a))}
+                      disabled={clearingMutation.isPending || tenderPreview.totalApplied <= 0}
                       className="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40"
                     >
-                      {clearingMutation.isPending ? 'Processing Payment…' : 'Process Payment'}
+                      {clearingMutation.isPending
+                        ? 'Processing Payment…'
+                        : tenderPreview.changeGiven > 0
+                          ? `Take ${formatCurrency(tenderPreview.totalApplied)} · Change ${formatCurrency(tenderPreview.changeGiven)}`
+                          : `Process Payment ${formatCurrency(tenderPreview.totalApplied)}`}
                     </button>
                   </>
                 )}

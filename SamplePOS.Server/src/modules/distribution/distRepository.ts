@@ -9,6 +9,10 @@ import { Pool, PoolClient } from 'pg';
 import Decimal from 'decimal.js';
 import { Money } from '../../utils/money.js';
 import { getBusinessYear, getBusinessDate } from '../../utils/dateRange.js';
+import { deductStockFEFO as sharedDeductStockFEFO } from '../../utils/fefoDeduction.js';
+import { isMultistoreEnabled } from '../inventory/warehouse/multistoreSettings.js';
+import { warehouseSaleDeductionService } from '../inventory/warehouse/warehouseSaleDeductionService.js';
+import { storeLocationRepository } from '../inventory/warehouse/storeLocationRepository.js';
 
 export type DbConn = Pool | PoolClient;
 
@@ -139,6 +143,20 @@ async function generateNumber(
   return `${prefix}-${year}-${String(next).padStart(4, '0')}`;
 }
 
+// ─── Issue store (ATP + delivery must use the same location) ──
+
+/**
+ * Distribution ships from the same sellable store GRN/POS land on:
+ * active POS SELLING first, else default MAIN receiving.
+ * Never promise global batch qty that MAIN cannot deduct.
+ */
+export async function resolveDistributionIssueStoreId(conn: DbConn): Promise<string | null> {
+  const selling = await storeLocationRepository.getActivePosSellingStore(conn);
+  if (selling?.id) return selling.id;
+  const main = await storeLocationRepository.getDefaultReceivingStore(conn);
+  return main?.id ?? null;
+}
+
 // ─── ATP (Available-to-Promise) ─────────────────────────────
 
 export async function getAtpForProducts(
@@ -146,7 +164,61 @@ export async function getAtpForProducts(
 ): Promise<AtpRow[]> {
   if (productIds.length === 0) return [];
   const placeholders = productIds.map((_, i) => `$${i + 1}`).join(',');
-  const result = await conn.query(`
+  // Reserved = undelivered confirmed qty on open DSOs (cannot double-promise).
+  const reservedJoin = `
+    LEFT JOIN (
+      SELECT sol.product_id, SUM(sol.confirmed_qty - sol.delivered_qty) AS qty
+      FROM dist_sales_order_lines sol
+      JOIN dist_sales_orders so ON so.id = sol.sales_order_id
+      WHERE so.status IN ('OPEN', 'PARTIALLY_DELIVERED')
+      GROUP BY sol.product_id
+    ) reserved ON reserved.product_id = p.id`;
+
+  if (await isMultistoreEnabled(conn)) {
+    const issueStoreId = await resolveDistributionIssueStoreId(conn);
+    if (issueStoreId) {
+      // Same sellable formula as loadStoreSelectableLots at the issue store.
+      const result = await conn.query(
+        `
+        SELECT
+          p.id AS product_id,
+          p.name AS product_name,
+          p.sku,
+          COALESCE(onhand.qty, 0) AS on_hand,
+          COALESCE(reserved.qty, 0) AS reserved,
+          COALESCE(onhand.qty, 0) - COALESCE(reserved.qty, 0) AS atp
+        FROM products p
+        LEFT JOIN (
+          SELECT
+            pl.product_id,
+            SUM(GREATEST(
+              ib_bal.quantity_on_hand - ib_bal.quantity_reserved - ib_bal.quantity_committed,
+              0
+            )) AS qty
+          FROM inventory_balances ib_bal
+          INNER JOIN product_lots pl ON pl.id = ib_bal.product_lot_id
+          INNER JOIN inventory_batches ib ON ib.id = pl.inventory_batch_id
+          INNER JOIN store_locations sl ON sl.id = ib_bal.store_location_id
+          WHERE ib_bal.store_location_id = $${productIds.length + 1}
+            AND NOT ib_bal.blocked
+            AND sl.store_type IN ('MAIN', 'SELLING')
+            AND COALESCE(pl.status::text, 'ACTIVE') = 'ACTIVE'
+            AND COALESCE(ib.status::text, 'ACTIVE') = 'ACTIVE'
+            AND (ib.expiry_date IS NULL OR ib.expiry_date > CURRENT_DATE)
+          GROUP BY pl.product_id
+        ) onhand ON onhand.product_id = p.id
+        ${reservedJoin}
+        WHERE p.id IN (${placeholders})
+        `,
+        [...productIds, issueStoreId],
+      );
+      return result.rows;
+    }
+  }
+
+  // Legacy single-store: ACTIVE batch subledger.
+  const result = await conn.query(
+    `
     SELECT
       p.id AS product_id,
       p.name AS product_name,
@@ -155,17 +227,16 @@ export async function getAtpForProducts(
       COALESCE(reserved.qty, 0) AS reserved,
       COALESCE(SUM(ib.remaining_quantity), 0) - COALESCE(reserved.qty, 0) AS atp
     FROM products p
-    LEFT JOIN inventory_batches ib ON ib.product_id = p.id AND ib.remaining_quantity > 0
-    LEFT JOIN (
-      SELECT sol.product_id, SUM(sol.confirmed_qty - sol.delivered_qty) AS qty
-      FROM dist_sales_order_lines sol
-      JOIN dist_sales_orders so ON so.id = sol.sales_order_id
-      WHERE so.status IN ('OPEN', 'PARTIALLY_DELIVERED')
-      GROUP BY sol.product_id
-    ) reserved ON reserved.product_id = p.id
+    LEFT JOIN inventory_batches ib
+      ON ib.product_id = p.id
+     AND ib.remaining_quantity > 0
+     AND ib.status = 'ACTIVE'
+    ${reservedJoin}
     WHERE p.id IN (${placeholders})
     GROUP BY p.id, p.name, p.sku, reserved.qty
-  `, productIds);
+    `,
+    productIds,
+  );
   return result.rows;
 }
 
@@ -195,7 +266,9 @@ export async function addSalesOrderLine(
   }
 ): Promise<void> {
   const openQty = data.orderedQty - data.confirmedQty;
-  const lineTotal = Money.toNumber(Money.parseDb(String(data.confirmedQty * data.unitPrice)));
+  // Order commercial value = ordered × price (ATP/backorder lives in confirmed_qty).
+  // Delivery / invoice / AR remain on delivered qty × price elsewhere.
+  const lineTotal = Money.toNumber(Money.lineTotal(data.orderedQty, data.unitPrice));
   await conn.query(`
     INSERT INTO dist_sales_order_lines
       (sales_order_id, product_id, ordered_qty, confirmed_qty, delivered_qty, open_qty, unit_price, line_total)
@@ -209,7 +282,7 @@ export async function getSalesOrder(conn: DbConn, id: string): Promise<SalesOrde
       so.*,
       c.name AS customer_name,
       c.credit_limit,
-      COALESCE(SUM(sol.line_total), 0) AS total_amount,
+      COALESCE(SUM(sol.ordered_qty * sol.unit_price), 0) AS total_amount,
       COALESCE(SUM(sol.confirmed_qty * sol.unit_price), 0) AS total_confirmed,
       COALESCE(SUM(sol.delivered_qty * sol.unit_price), 0) AS total_delivered
     FROM dist_sales_orders so
@@ -227,7 +300,7 @@ export async function getSalesOrderByNumber(conn: DbConn, orderNumber: string): 
       so.*,
       c.name AS customer_name,
       c.credit_limit,
-      COALESCE(SUM(sol.line_total), 0) AS total_amount,
+      COALESCE(SUM(sol.ordered_qty * sol.unit_price), 0) AS total_amount,
       COALESCE(SUM(sol.confirmed_qty * sol.unit_price), 0) AS total_confirmed,
       COALESCE(SUM(sol.delivered_qty * sol.unit_price), 0) AS total_delivered
     FROM dist_sales_orders so
@@ -242,7 +315,16 @@ export async function getSalesOrderByNumber(conn: DbConn, orderNumber: string): 
 export async function getSalesOrderLines(conn: DbConn, salesOrderId: string): Promise<SalesOrderLineDbRow[]> {
   const result = await conn.query(`
     SELECT
-      sol.*,
+      sol.id,
+      sol.sales_order_id,
+      sol.product_id,
+      sol.ordered_qty,
+      sol.confirmed_qty,
+      sol.delivered_qty,
+      sol.open_qty,
+      sol.unit_price,
+      (sol.ordered_qty * sol.unit_price) AS line_total,
+      sol.created_at,
       p.name AS product_name,
       p.sku
     FROM dist_sales_order_lines sol
@@ -276,7 +358,7 @@ export async function listSalesOrders(
       so.*,
       c.name AS customer_name,
       c.credit_limit,
-      COALESCE(SUM(sol.line_total), 0) AS total_amount,
+      COALESCE(SUM(sol.ordered_qty * sol.unit_price), 0) AS total_amount,
       COALESCE(SUM(sol.confirmed_qty * sol.unit_price), 0) AS total_confirmed,
       COALESCE(SUM(sol.delivered_qty * sol.unit_price), 0) AS total_delivered
     FROM dist_sales_orders so
@@ -525,35 +607,13 @@ export async function getOpenDistInvoicesForCustomer(conn: DbConn, customerId: s
   return result.rows;
 }
 
+/**
+ * @deprecated Settlement SSOT is invoiceRepository.recalcInvoice / getInvoiceSettlement
+ * (invoice_payments + legacy dist rows). Kept as a thin adapter for any remaining callers.
+ */
 export async function recalcDistInvoice(conn: DbConn, invoiceId: string): Promise<void> {
-  // Recalculate from actual receipts + clearings
-  await conn.query(`
-    UPDATE invoices
-    SET amount_paid = COALESCE((
-      SELECT SUM(amount) FROM dist_receipts WHERE invoice_id = $1
-    ), 0) + COALESCE((
-      SELECT SUM(amount) FROM dist_down_payment_clearings WHERE invoice_id = $1
-    ), 0),
-    amount_due = total_amount - COALESCE((
-      SELECT SUM(amount) FROM dist_receipts WHERE invoice_id = $1
-    ), 0) - COALESCE((
-      SELECT SUM(amount) FROM dist_down_payment_clearings WHERE invoice_id = $1
-    ), 0),
-    status = CASE
-      WHEN total_amount <= COALESCE((
-        SELECT SUM(amount) FROM dist_receipts WHERE invoice_id = $1
-      ), 0) + COALESCE((
-        SELECT SUM(amount) FROM dist_down_payment_clearings WHERE invoice_id = $1
-      ), 0) THEN 'PAID'
-      WHEN COALESCE((
-        SELECT SUM(amount) FROM dist_receipts WHERE invoice_id = $1
-      ), 0) + COALESCE((
-        SELECT SUM(amount) FROM dist_down_payment_clearings WHERE invoice_id = $1
-      ), 0) > 0 THEN 'PARTIALLY_PAID'
-      ELSE 'UNPAID'
-    END
-    WHERE id = $1
-  `, [invoiceId]);
+  const { invoiceRepository } = await import('../invoices/invoiceRepository.js');
+  await invoiceRepository.recalcInvoice(conn, invoiceId);
 }
 
 // ─── Receipts ───────────────────────────────────────────────
@@ -625,11 +685,7 @@ export async function getCustomerOutstandingAR(conn: DbConn, customerId: string)
   return Money.toNumber(Money.parseDb(result.rows[0].outstanding));
 }
 
-// ─── Stock Deduction (FEFO) — delegates to shared utility ───
-
-import { deductStockFEFO as sharedDeductStockFEFO } from '../../utils/fefoDeduction.js';
-import { isMultistoreEnabled } from '../inventory/warehouse/multistoreSettings.js';
-import { warehouseSaleDeductionService } from '../inventory/warehouse/warehouseSaleDeductionService.js';
+// ─── Stock Deduction (FEFO) — same store as ATP ─────────────
 
 export async function deductStockFEFO(
   conn: DbConn,
@@ -639,7 +695,9 @@ export async function deductStockFEFO(
   createdBy: string
 ): Promise<{ totalCost: number }> {
   if (await isMultistoreEnabled(conn)) {
-    const mainStoreId = await warehouseSaleDeductionService.resolveMainStoreId(conn as PoolClient);
+    const issueStoreId =
+      (await resolveDistributionIssueStoreId(conn)) ||
+      (await warehouseSaleDeductionService.resolveMainStoreId(conn as PoolClient));
     const pResult = await conn.query<{ name: string }>(
       'SELECT name FROM products WHERE id = $1',
       [productId],
@@ -647,7 +705,7 @@ export async function deductStockFEFO(
     const productName = pResult.rows[0]?.name ?? productId;
 
     const deductResult = await warehouseSaleDeductionService.deductAtStore(conn as PoolClient, {
-      storeLocationId: mainStoreId,
+      storeLocationId: issueStoreId,
       productId,
       productName,
       baseQty: Money.parse(quantity),
@@ -687,10 +745,13 @@ export async function getSalesOrdersWithOpenLines(
   }
   const result = await conn.query(`
     SELECT
-      so.id AS order_id, so.order_number,
-      c.name AS customer_name,
-      sol.id AS line_id, sol.product_id,
-      p.name AS product_name, sol.open_qty
+      so.id AS "orderId",
+      so.order_number AS "orderNumber",
+      c.name AS "customerName",
+      sol.id AS "lineId",
+      sol.product_id AS "productId",
+      p.name AS "productName",
+      sol.open_qty AS "openQty"
     FROM dist_sales_order_lines sol
     JOIN dist_sales_orders so ON so.id = sol.sales_order_id
     JOIN customers c ON c.id = so.customer_id
@@ -726,7 +787,7 @@ export async function updateSalesOrderLine(
   data: { orderedQty: number; unitPrice: number; confirmedQty: number }
 ): Promise<void> {
   const openQty = data.orderedQty - data.confirmedQty;
-  const lineTotal = data.confirmedQty * data.unitPrice;
+  const lineTotal = Money.toNumber(Money.lineTotal(data.orderedQty, data.unitPrice));
   await conn.query(`
     UPDATE dist_sales_order_lines
     SET ordered_qty = $1, unit_price = $2, confirmed_qty = $3,

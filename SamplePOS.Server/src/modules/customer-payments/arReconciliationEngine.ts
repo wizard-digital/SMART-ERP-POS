@@ -15,7 +15,10 @@ export type ArQueryContext = { asOfDate?: string };
 
 export const AR_INACTIVE_INVOICE_STATUSES = ['CANCELLED', 'VOIDED', 'DRAFT'] as const;
 
-export const AR_OPEN_DOCUMENT_TYPES = ['INVOICE', 'OPENING_BALANCE'] as const;
+/** Open AR documents: POS invoices, opening balances, and distribution deliveries. */
+export const AR_OPEN_DOCUMENT_TYPES = ['INVOICE', 'OPENING_BALANCE', 'DIST_INVOICE'] as const;
+
+export const AR_OPEN_DOCUMENT_TYPE_IN_SQL = `'INVOICE', 'OPENING_BALANCE', 'DIST_INVOICE'`;
 
 export const AR_PAYMENT_STATUSES = ['POSTED', 'PARTIALLY_ALLOCATED', 'FULLY_ALLOCATED'] as const;
 
@@ -107,7 +110,7 @@ export async function computeArOpenItemSubledger(
       SELECT SUM(i.amount_due) AS inv_due
       FROM invoices i
       WHERE i.customer_id = c.id
-        AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+        AND COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
         AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
         ${invoiceAsOfFilter(ctx)}
     ) inv ON TRUE

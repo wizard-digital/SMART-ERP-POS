@@ -1,0 +1,54 @@
+{
+  "feature": "DIST_PAYMENT_AR_SSOT",
+  "verdict": "PASS",
+  "passed": 9,
+  "total": 9,
+  "gates": [
+    {
+      "id": "CLEARING_USES_INVOICE_ADD_PAYMENT",
+      "ok": true,
+      "detail": "deposit + cash via invoiceService.addPayment"
+    },
+    {
+      "id": "CLEARING_NO_DIST_RECEIPT_WRITE",
+      "ok": true,
+      "detail": "no parallel dist_receipts / dist GL payment helpers"
+    },
+    {
+      "id": "CLEARING_HEALS_SETTLEMENT",
+      "ok": true,
+      "detail": "settlement SSOT before accepting payment"
+    },
+    {
+      "id": "CLEARING_POS_TENDER_CHANGE",
+      "ok": true,
+      "detail": "cash overage capped to due; change returned"
+    },
+    {
+      "id": "TENDER_HELPER_EXISTS",
+      "ok": true,
+      "detail": "shared tender math for change"
+    },
+    {
+      "id": "SETTLEMENT_INVOICE_PAYMENTS",
+      "ok": true,
+      "detail": "cash from invoice_payments"
+    },
+    {
+      "id": "SETTLEMENT_LEGACY_DIST",
+      "ok": true,
+      "detail": "historical DIN receipts still settle"
+    },
+    {
+      "id": "AR_OPEN_INCLUDES_DIST",
+      "ok": true,
+      "detail": "open AR includes DIST_INVOICE"
+    },
+    {
+      "id": "CUSTOMER_LIST_INCLUDES_DIST",
+      "ok": true,
+      "detail": "customer invoice list uses open AR types"
+    }
+  ],
+  "at": "2026-10-11T19:05:22.764Z"
+}

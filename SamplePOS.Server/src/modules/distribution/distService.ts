@@ -21,8 +21,6 @@ import * as repo from './distRepository.js';
 import { AccountingCore } from '../../services/accountingCore.js';
 import {
   recordCustomerInvoiceToGL,
-  recordInvoicePaymentToGL,
-  recordDownPaymentClearingToGL,
   AccountCodes,
 } from '../../services/glEntryService.js';
 import { UnitOfWork } from '../../db/unitOfWork.js';
@@ -135,7 +133,8 @@ function normalizeSOLine(row: repo.SalesOrderLineDbRow): SalesOrderLine {
     deliveredQty: Money.toNumber(Money.parseDb(row.delivered_qty)),
     openQty: Money.toNumber(Money.parseDb(row.open_qty)),
     unitPrice: Money.toNumber(Money.parseDb(row.unit_price)),
-    lineTotal: Money.toNumber(Money.parseDb(row.line_total)),
+    // SSOT: commercial line value is always ordered × price (never confirmed × price).
+    lineTotal: Money.toNumber(Money.lineTotal(row.ordered_qty, row.unit_price)),
   };
 }
 
@@ -612,6 +611,54 @@ export async function reconfirmBackorders(pool: Pool, productId: string): Promis
   return confirmed;
 }
 
+/**
+ * Recalculate confirmed qty on this SO from current ATP (same store as delivery).
+ * Can raise or lower confirmed (never below delivered). Fixes over-promise when
+ * ATP used to count global batches while delivery deducted at another store.
+ */
+export async function reconfirmSalesOrder(
+  pool: Pool,
+  salesOrderId: string,
+): Promise<{ confirmedUnits: number; order: SalesOrder; lines: SalesOrderLine[] }> {
+  const order = await repo.getSalesOrder(pool, salesOrderId);
+  if (!order) throw new NotFoundError('Sales order not found');
+  if (order.status === 'CLOSED' || order.status === 'CANCELLED') {
+    throw new BusinessError('Cannot reconfirm a closed/cancelled order', 'ERR_DIST_001');
+  }
+
+  const soLines = await repo.getSalesOrderLines(pool, salesOrderId);
+  const productIds = [...new Set(soLines.map((l) => l.product_id))];
+  const atpRows = await repo.getAtpForProducts(pool, productIds);
+  const atpMap = new Map(atpRows.map((r) => [r.product_id, Money.toNumber(Money.parseDb(r.atp))]));
+
+  let confirmedDelta = 0;
+  await UnitOfWork.run(pool, async (client) => {
+    for (const line of soLines) {
+      const ordered = Money.toNumber(Money.parseDb(line.ordered_qty));
+      const delivered = Money.toNumber(Money.parseDb(line.delivered_qty));
+      const currentConfirmed = Money.toNumber(Money.parseDb(line.confirmed_qty));
+      const atp = atpMap.get(line.product_id) ?? 0;
+      // ATP already subtracts this line's undelivered confirmed — add it back for this line.
+      const availableForLine = atp + (currentConfirmed - delivered);
+      let newConfirmed = Math.min(ordered, Math.max(0, availableForLine));
+      newConfirmed = Math.max(newConfirmed, delivered);
+      if (Math.abs(newConfirmed - currentConfirmed) > 0.0001) {
+        await repo.reserveConfirmedQty(client, line.id, newConfirmed);
+        const delta = newConfirmed - currentConfirmed;
+        confirmedDelta += delta;
+        atpMap.set(line.product_id, atp - delta);
+      }
+    }
+  });
+
+  const refreshed = await getSalesOrder(pool, salesOrderId);
+  return {
+    confirmedUnits: Math.max(0, confirmedDelta),
+    order: refreshed.order,
+    lines: refreshed.lines,
+  };
+}
+
 // ─── 4. Clearing / Payment ──────────────────────────────────
 
 export interface ClearingInput {
@@ -627,147 +674,128 @@ export interface ClearingInput {
   clearedBy: string;
 }
 
+/**
+ * Distribution payment shortcut → customer invoice AR SSOT.
+ * POS-style tender: cash overage is change; only amount due is posted to AR.
+ */
 export async function processClearing(
   pool: Pool, input: ClearingInput
-): Promise<{ clearingNumbers: string[]; receiptNumber?: string; totalCleared: number }> {
-  const businessDate = getBusinessDate();
-
-  // Validate invoice
+): Promise<{
+  clearingNumbers: string[];
+  receiptNumber?: string;
+  totalCleared: number;
+  changeGiven: number;
+  cashTendered: number;
+  cashApplied: number;
+}> {
   const invoice = await repo.getDistInvoice(pool, input.invoiceId);
   if (!invoice) throw new NotFoundError('Invoice not found');
   if (invoice.customer_id !== input.customerId) {
     throw new BusinessError('Invoice does not belong to this customer', 'ERR_DIST_CLR_001');
   }
-  const invoiceDue = Money.toNumber(Money.parseDb(invoice.amount_due));
+
+  const { invoiceRepository } = await import('../invoices/invoiceRepository.js');
+  await invoiceRepository.healSettlementDrift(pool, input.invoiceId);
+  const settlement = await invoiceRepository.getInvoiceSettlement(pool, input.invoiceId);
+  const invoiceDue = settlement
+    ? settlement.amountDue
+    : Money.toNumber(Money.parseDb(invoice.amount_due));
   if (invoiceDue <= 0) throw new BusinessError('Invoice is already paid', 'ERR_DIST_CLR_002');
 
-  // Calculate totals
-  let totalDeposit = new Decimal(0);
+  let depositRequested = new Decimal(0);
   for (const alloc of input.depositAllocations) {
     if (alloc.amount <= 0) throw new ValidationError('Deposit allocation amount must be positive');
-    totalDeposit = totalDeposit.plus(alloc.amount);
+    depositRequested = depositRequested.plus(alloc.amount);
   }
-  const cashAmount = input.cashPayment ? new Decimal(input.cashPayment.amount) : new Decimal(0);
-  if (input.cashPayment && cashAmount.lte(0)) throw new ValidationError('Cash amount must be positive');
-
-  const totalClearing = totalDeposit.plus(cashAmount);
-  if (totalClearing.greaterThan(invoiceDue + 0.01)) {
-    throw new BusinessError(
-      `Total clearing ${totalClearing.toFixed(2)} exceeds invoice balance ${invoiceDue.toFixed(2)}`,
-      'ERR_DIST_CLR_003'
-    );
-  }
+  const cashTendered = input.cashPayment ? new Decimal(input.cashPayment.amount) : new Decimal(0);
+  if (input.cashPayment && cashTendered.lte(0)) throw new ValidationError('Cash amount must be positive');
 
   if (input.depositAllocations.length === 0 && !input.cashPayment) {
     throw new ValidationError('At least one deposit allocation or cash payment is required');
   }
 
-  // Validate deposit balances
-  if (input.depositAllocations.length > 0) {
+  if (depositRequested.gt(0)) {
     const deposits = await repo.getOpenDepositsForCustomer(pool, input.customerId);
-    const depositMap = new Map(deposits.map(d => [d.id, d]));
+    const depositMap = new Map(deposits.map((d) => [d.id, d]));
     for (const alloc of input.depositAllocations) {
       const dep = depositMap.get(alloc.depositId);
-      if (!dep) throw new NotFoundError(`Deposit ${alloc.depositId} not found or exhausted`);
+      if (!dep) {
+        throw new NotFoundError(`Deposit ${alloc.depositId} not found or exhausted`);
+      }
       const available = Money.toNumber(Money.parseDb(dep.amount_available));
       if (available < alloc.amount - 0.01) {
         throw new BusinessError(
           `Deposit ${dep.deposit_number} has ${available.toFixed(2)} available, but ${alloc.amount} was requested`,
-          'ERR_DIST_CLR_004'
+          'ERR_DIST_CLR_004',
         );
       }
     }
+    // Application posts as one DEPOSIT payment (FIFO across customer deposits) — same as Customer Center.
   }
 
-  // Execute atomically
-  const clearings: Array<{ id: string; clearingNumber: string; depositId: string; depositNumber: string; amount: number }> = [];
-  let receiptId: string | undefined;
-  let receiptNumber: string | undefined;
+  const { computeInvoiceTender } = await import('./invoiceTenderChange.js');
+  const tender = computeInvoiceTender({
+    invoiceDue,
+    depositRequested: depositRequested.toNumber(),
+    cashTendered: cashTendered.toNumber(),
+    paymentMethod: input.cashPayment?.paymentMethod ?? 'CASH',
+  });
 
-  // Pre-fetch deposit numbers for GL
-  const deposits = input.depositAllocations.length > 0
-    ? await repo.getOpenDepositsForCustomer(pool, input.customerId)
-    : [];
-  const depositInfoMap = new Map(deposits.map(d => [d.id, d]));
+  if (tender.totalApplied <= 0.009) {
+    throw new ValidationError('Nothing to apply — enter deposit and/or tender amount');
+  }
 
-  await UnitOfWork.run(pool, async (client) => {
-    // Process deposit allocations
-    for (const alloc of input.depositAllocations) {
-      const { id: clId, clearingNumber } = await repo.createDistClearing(client, {
-        invoiceId: input.invoiceId,
-        downPaymentId: alloc.depositId,
-        customerId: input.customerId,
-        amount: alloc.amount,
-        clearedBy: input.clearedBy,
-        notes: input.notes,
-      });
-      await repo.reduceDepositBalance(client, alloc.depositId, alloc.amount);
-      const depInfo = depositInfoMap.get(alloc.depositId);
-      clearings.push({
-        id: clId,
-        clearingNumber,
-        depositId: alloc.depositId,
-        depositNumber: depInfo?.deposit_number ?? alloc.depositId,
-        amount: alloc.amount,
-      });
+  const { invoiceService } = await import('../invoices/invoiceService.js');
+  const receiptNumbers: string[] = [];
+  let lastReceipt: string | undefined;
+
+  if (tender.depositApplied > 0.009) {
+    const depositResult = await invoiceService.addPayment(pool, input.invoiceId, {
+      amount: tender.depositApplied,
+      paymentMethod: 'DEPOSIT',
+      notes: input.notes ?? null,
+      processedById: input.clearedBy,
+    });
+    const rn = String(depositResult.payment.receipt_number ?? '');
+    if (rn) {
+      receiptNumbers.push(rn);
+      lastReceipt = rn;
     }
+  }
 
-    // Process cash payment
-    if (input.cashPayment && cashAmount.gt(0)) {
-      const { id: rid, receiptNumber: rn } = await repo.createReceipt(client, {
-        invoiceId: input.invoiceId,
-        customerId: input.customerId,
-        amount: cashAmount.toNumber(),
-        paymentMethod: input.cashPayment.paymentMethod,
-        referenceNumber: input.cashPayment.referenceNumber,
-        receiptDate: businessDate,
-        notes: input.notes,
-        createdBy: input.clearedBy,
-      });
-      receiptId = rid;
-      receiptNumber = rn;
+  if (input.cashPayment && tender.cashApplied > 0.009) {
+    const cashResult = await invoiceService.addPayment(pool, input.invoiceId, {
+      amount: tender.cashApplied,
+      paymentMethod: input.cashPayment.paymentMethod,
+      referenceNumber: input.cashPayment.referenceNumber ?? null,
+      notes: input.notes ?? null,
+      processedById: input.clearedBy,
+    });
+    const rn = String(cashResult.payment.receipt_number ?? '');
+    if (rn) {
+      receiptNumbers.push(rn);
+      lastReceipt = rn;
     }
+  }
 
-    // Recalc invoice from documents
-    await repo.recalcDistInvoice(client, input.invoiceId);
-
-    // Sync customer balance & AR from invoices (SSOT)
-    const { syncCustomerBalanceFromInvoices } = await import('../../utils/customerBalanceSync.js');
-    await syncCustomerBalanceFromInvoices(client, input.customerId, 'DIST_CLEARING');
-
-    // GL entries — deposit clearing (one per allocation) — atomic with the clearing
-    for (const cl of clearings) {
-      await recordDownPaymentClearingToGL({
-        clearingId: cl.id,
-        clearingNumber: cl.clearingNumber,
-        clearingDate: businessDate,
-        amount: cl.amount,
-        depositNumber: cl.depositNumber,
-        invoiceNumber: invoice.invoice_number,
-        customerId: input.customerId,
-        customerName: '',
-      }, undefined, client);
-    }
-
-    // GL entry — cash/card/bank payment — atomic with the clearing
-    if (cashAmount.gt(0) && input.cashPayment && receiptNumber && receiptId) {
-      await recordInvoicePaymentToGL({
-        paymentId: receiptId,
-        receiptNumber,
-        paymentDate: businessDate,
-        amount: cashAmount.toNumber(),
-        paymentMethod: input.cashPayment.paymentMethod,
-        invoiceId: input.invoiceId,
-        invoiceNumber: invoice.invoice_number,
-        customerId: input.customerId,
-      }, undefined, client);
-    }
+  logger.info('Distribution clearing posted via invoice AR SSOT (POS tender)', {
+    invoiceId: input.invoiceId,
+    customerId: input.customerId,
+    invoiceDue,
+    cashTendered: cashTendered.toNumber(),
+    cashApplied: tender.cashApplied,
+    depositApplied: tender.depositApplied,
+    changeGiven: tender.changeGiven,
+    receipts: receiptNumbers,
   });
 
   return {
-    clearingNumbers: clearings.map(c => c.clearingNumber),
-    receiptNumber,
-    totalCleared: totalClearing.toNumber(),
+    clearingNumbers: receiptNumbers,
+    receiptNumber: lastReceipt,
+    totalCleared: tender.totalApplied,
+    changeGiven: tender.changeGiven,
+    cashTendered: cashTendered.toNumber(),
+    cashApplied: tender.cashApplied,
   };
 }
 
@@ -829,14 +857,23 @@ export async function getAtpForProducts(pool: Pool, productIds: string[]) {
 }
 
 export async function getClearingScreenData(pool: Pool, customerId: string) {
-  const [invoices, deposits] = await Promise.all([
+  const [rawInvoices, deposits] = await Promise.all([
     repo.getOpenDistInvoicesForCustomer(pool, customerId),
     repo.getOpenDepositsForCustomer(pool, customerId),
   ]);
+  const { invoiceRepository } = await import('../invoices/invoiceRepository.js');
+  const invoices = [];
+  for (const row of rawInvoices) {
+    await invoiceRepository.healSettlementDrift(pool, row.id);
+    const fresh = await repo.getDistInvoice(pool, row.id);
+    if (fresh && Money.toNumber(Money.parseDb(fresh.amount_due)) > 0.009) {
+      invoices.push(normalizeDistInvoice(fresh));
+    }
+  }
   const outstanding = await repo.getCustomerOutstandingAR(pool, customerId);
 
   return {
-    invoices: invoices.map(normalizeDistInvoice),
+    invoices,
     deposits: deposits.map(d => ({
       id: d.id,
       depositNumber: d.deposit_number,

@@ -1,0 +1,97 @@
+{
+  "feature": "DIST_SALES_ORDER_PROCEED_ATP_SSOT",
+  "verdict": "PASS",
+  "passed": 15,
+  "total": 15,
+  "gates": [
+    {
+      "id": "RESOLVE_ISSUE_STORE",
+      "ok": true,
+      "detail": "issue store = POS SELLING then MAIN"
+    },
+    {
+      "id": "ATP_STORE_SCOPED",
+      "ok": true,
+      "detail": "multistore ATP from issue-store balances"
+    },
+    {
+      "id": "DEDUCT_USES_ISSUE_STORE",
+      "ok": true,
+      "detail": "delivery deducts at same store as ATP"
+    },
+    {
+      "id": "ATP_RESERVES_CONFIRMED",
+      "ok": true,
+      "detail": "reserved = undelivered confirmed on open DSOs"
+    },
+    {
+      "id": "OPEN_LINES_CAMELCASE",
+      "ok": true,
+      "detail": "backorder rows expose openQty/orderId/lineId for reconfirm"
+    },
+    {
+      "id": "CREATE_USES_ATP",
+      "ok": true,
+      "detail": "createSalesOrder sets confirmed from ATP"
+    },
+    {
+      "id": "DELIVER_GATES_CONFIRMED",
+      "ok": true,
+      "detail": "cannot deliver above confirmed − delivered"
+    },
+    {
+      "id": "DELIVER_DEDUCTS_STOCK",
+      "ok": true,
+      "detail": "delivery deducts inventory at issue store (FEFO)"
+    },
+    {
+      "id": "DELIVER_CREATES_INVOICE",
+      "ok": true,
+      "detail": "delivery atomically creates AR invoice"
+    },
+    {
+      "id": "ROUTE_RECONFIRM_SO",
+      "ok": true,
+      "detail": "POST /sales-orders/:id/reconfirm"
+    },
+    {
+      "id": "SERVICE_RECONFIRM_SO",
+      "ok": true,
+      "detail": "reconfirmSalesOrder allocates ATP via FIFO backorder confirm"
+    },
+    {
+      "id": "UI_BLOCKED_BANNER",
+      "ok": true,
+      "detail": "banner when confirmed=0 but ordered>0"
+    },
+    {
+      "id": "UI_REFRESH_BTN",
+      "ok": true,
+      "detail": "Refresh confirmation control"
+    },
+    {
+      "id": "API_CLIENT_RECONFIRM",
+      "ok": true,
+      "detail": "client API wired"
+    },
+    {
+      "id": "CREATE_DELIVERY_NEEDS_CONFIRMED",
+      "ok": true,
+      "detail": "Create Delivery only when confirmed > delivered"
+    }
+  ],
+  "liveProbe": {
+    "order": "DSO-2026-0001",
+    "inventory_batches": 0,
+    "confirmed_qty": 0,
+    "reason": "ATP correctly zero — no ACTIVE stock; Create Delivery gated until GRN + reconfirm"
+  },
+  "connections": {
+    "inventory": "ATP from ACTIVE inventory_batches − reserved confirmed; delivery FEFO deduct",
+    "customers": "SO.customer_id; credit limit checked at delivery; clearing uses customer AR",
+    "accounting": "delivery creates dist invoice + AR; payment via clearing",
+    "delivery": "Create Delivery requires confirmed > delivered",
+    "users": "created_by on SO/delivery/invoice; RBAC distribution.* / delivery.* / accounting.*"
+  },
+  "at": "2026-10-11T19:05:23.282Z"
+}

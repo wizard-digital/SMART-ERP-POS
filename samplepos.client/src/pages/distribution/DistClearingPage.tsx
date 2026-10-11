@@ -1,8 +1,9 @@
 /**
  * Distribution Module — Clearing Page
  *
- * SAP-style manual clearing: select customer → pick invoices → allocate deposits/cash.
- * Never auto-clears.  User chooses deposit, cash, or mixed.
+ * Convenience entry for paying open distribution invoices.
+ * Posts through the same customer invoice AR SSOT as Customers → Receive Payment
+ * (not a parallel cash ledger). Never auto-clears.
  */
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +13,7 @@ import Layout from '../../components/Layout';
 import distributionApi, { type DistInvoice, type DepositInfo } from '../../api/distribution';
 import apiClient from '../../utils/api';
 import { formatCurrency } from '../../utils/currency';
+import { computeInvoiceTender } from '../../utils/invoiceTenderChange';
 
 type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'BANK_TRANSFER';
 
@@ -54,9 +56,17 @@ export default function DistClearingPage() {
 
   const selectedInvoice = invoices.find(i => i.id === selectedInvoiceId);
   const totalDeposit = useMemo(() => Object.values(depositAllocations).reduce((s, a) => s + a, 0), [depositAllocations]);
-  const totalClearing = totalDeposit + cashAmount;
   const invoiceDue = selectedInvoice?.amountDue ?? 0;
-  const remaining = invoiceDue - totalClearing;
+  const tenderPreview = useMemo(
+    () =>
+      computeInvoiceTender({
+        invoiceDue,
+        depositRequested: totalDeposit,
+        cashTendered: cashAmount,
+        paymentMethod: cashMethod,
+      }),
+    [invoiceDue, totalDeposit, cashAmount, cashMethod],
+  );
 
   // Reset allocations when invoice changes
   const selectInvoice = (invId: string) => {
@@ -77,12 +87,15 @@ export default function DistClearingPage() {
         notes: notes || undefined,
       }),
     onSuccess: (result) => {
-      const parts: string[] = [];
-      if (result.clearingNumbers.length > 0) parts.push(`Clearings: ${result.clearingNumbers.join(', ')}`);
-      if (result.receiptNumber) parts.push(`Receipt: ${result.receiptNumber}`);
-      toast.success(`Cleared ${formatCurrency(result.totalCleared)} — ${parts.join(' | ')}`);
+      const change = Number(result.changeGiven ?? 0);
+      const msg =
+        change > 0.009
+          ? `Took ${formatCurrency(result.totalCleared)} · Change ${formatCurrency(change)}`
+          : `Cleared ${formatCurrency(result.totalCleared)}`;
+      toast.success(msg);
       queryClient.invalidateQueries({ queryKey: ['dist-clearing-screen', customerId] });
       queryClient.invalidateQueries({ queryKey: ['dist-invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setSelectedInvoiceId('');
       setDepositAllocations({});
       setCashAmount(0);
@@ -95,7 +108,12 @@ export default function DistClearingPage() {
   return (
     <Layout>
       <div className="p-4 lg:p-6 space-y-4 max-w-6xl">
-        <h1 className="text-2xl font-bold text-gray-900">Invoice Clearing</h1>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Pay distribution invoices</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Same customer AR payment engine as <strong>Customers → Invoices → Receive Payment</strong>.
+          </p>
+        </div>
 
         {/* Customer selector */}
         {!customerId ? (
@@ -183,6 +201,7 @@ export default function DistClearingPage() {
                   {deposits.length > 0 && (
                     <div className="bg-white border rounded-lg p-4">
                       <h3 className="text-sm font-semibold text-gray-700 mb-2">Apply Deposits</h3>
+                      <p className="text-xs text-gray-500 mb-2">Total entered is applied FIFO from customer deposits (same as Customer Center).</p>
                       <div className="space-y-2">
                         {deposits.map((dep: DepositInfo) => (
                           <div key={dep.id} className="flex items-center gap-3">
@@ -213,7 +232,9 @@ export default function DistClearingPage() {
                     <h3 className="text-sm font-semibold text-gray-700 mb-2">Cash / Card Payment</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="text-xs text-gray-500">Amount</label>
+                        <label className="text-xs text-gray-500">
+                          {cashMethod === 'CASH' ? 'Tendered' : 'Amount'}
+                        </label>
                         <input
                           type="number"
                           step="1"
@@ -243,23 +264,36 @@ export default function DistClearingPage() {
                     <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes (optional)" className="w-full border rounded px-3 py-1.5 text-sm" />
                   </div>
 
-                  {/* Summary */}
+                  {/* Summary — POS-style take / change */}
                   <div className="bg-gray-50 border rounded-lg p-4">
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <span className="text-gray-500">Deposit allocation:</span><span className="text-right font-medium">{formatCurrency(totalDeposit)}</span>
-                      <span className="text-gray-500">Cash payment:</span><span className="text-right font-medium">{formatCurrency(cashAmount)}</span>
-                      <span className="text-gray-500 font-semibold">Total clearing:</span><span className="text-right font-bold">{formatCurrency(totalClearing)}</span>
-                      <span className="text-gray-500">Remaining due:</span>
-                      <span className={`text-right font-bold ${remaining > 0.01 ? 'text-red-600' : 'text-green-600'}`}>
-                        {formatCurrency(Math.max(0, remaining))}
+                      <span className="text-gray-500">Invoice due:</span>
+                      <span className="text-right font-medium">{formatCurrency(invoiceDue)}</span>
+                      <span className="text-gray-500">Deposit apply:</span>
+                      <span className="text-right font-medium">{formatCurrency(tenderPreview.depositApplied)}</span>
+                      <span className="text-gray-500">Tendered:</span>
+                      <span className="text-right font-medium">{formatCurrency(cashAmount)}</span>
+                      <span className="text-gray-500 font-semibold">Take (post to AR):</span>
+                      <span className="text-right font-bold text-blue-700">{formatCurrency(tenderPreview.totalApplied)}</span>
+                      <span className="text-gray-500">Change:</span>
+                      <span className={`text-right font-bold ${tenderPreview.changeGiven > 0 ? 'text-green-700' : ''}`}>
+                        {formatCurrency(tenderPreview.changeGiven)}
+                      </span>
+                      <span className="text-gray-500">Left on invoice:</span>
+                      <span className={`text-right font-bold ${tenderPreview.remainingDue > 0.01 ? 'text-red-600' : 'text-green-600'}`}>
+                        {formatCurrency(tenderPreview.remainingDue)}
                       </span>
                     </div>
                     <button
                       onClick={() => mutation.mutate()}
-                      disabled={totalClearing <= 0 || totalClearing > invoiceDue + 0.01 || mutation.isPending}
+                      disabled={tenderPreview.totalApplied <= 0 || mutation.isPending}
                       className="w-full mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-40 text-sm"
                     >
-                      {mutation.isPending ? 'Processing…' : `Clear ${formatCurrency(totalClearing)}`}
+                      {mutation.isPending
+                        ? 'Processing…'
+                        : tenderPreview.changeGiven > 0
+                          ? `Take ${formatCurrency(tenderPreview.totalApplied)} · Change ${formatCurrency(tenderPreview.changeGiven)}`
+                          : `Clear ${formatCurrency(tenderPreview.totalApplied)}`}
                     </button>
                   </div>
                 </>

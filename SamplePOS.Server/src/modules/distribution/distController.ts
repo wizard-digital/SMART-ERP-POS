@@ -206,6 +206,16 @@ export const distController = {
     res.json({ success: true, data: { confirmed }, message: `${confirmed} units reconfirmed` });
   }),
 
+  reconfirmSalesOrder: asyncHandler(async (req: Request, res: Response) => {
+    const pool: Pool = req.tenantPool || req.pool!;
+    const result = await distService.reconfirmSalesOrder(pool, req.params.id);
+    res.json({
+      success: true,
+      data: result,
+      message: 'Sales order confirmation refreshed from issue-store ATP',
+    });
+  }),
+
   // ─── Quotation Conversion ──────────────────────────────
 
   convertFromQuotation: asyncHandler(async (req: Request, res: Response) => {

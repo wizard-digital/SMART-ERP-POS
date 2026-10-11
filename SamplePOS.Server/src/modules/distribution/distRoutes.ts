@@ -20,6 +20,7 @@ router.post('/sales-orders', requirePermission('distribution.create'), distContr
 router.get('/sales-orders', requirePermission('distribution.read'), distController.listSalesOrders);
 router.get('/sales-orders/:id', requirePermission('distribution.read'), distController.getSalesOrder);
 router.put('/sales-orders/:id', requirePermission('distribution.update'), distController.editSalesOrder);
+router.post('/sales-orders/:id/reconfirm', requirePermission('distribution.update'), distController.reconfirmSalesOrder);
 
 // ─── Quotation Conversion (WHOLESALE → Distribution SO) ────
 router.post('/from-quotation/:quotationId', requirePermission('distribution.create'), distController.convertFromQuotation);

@@ -5,6 +5,7 @@ import { checkAccountingPeriodOpen } from '../../utils/periodGuard.js';
 import { getBusinessYear, getBusinessDate, formatDateBusiness } from '../../utils/dateRange.js';
 import { snapshotQuotationReferenceDetails } from '@shared/utils/quotationReferenceDetails.js';
 import { computeInvoiceSettlement } from './invoiceSettlement.js';
+import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
 
 // Normalize snake_case database columns to InvoiceRecord
 function normalizeInvoiceRow(row: Record<string, unknown>): InvoiceRecord {
@@ -337,8 +338,8 @@ export const invoiceRepository = {
     if (filters?.customerId) {
       where.push(`i.customer_id = $${idx++}`);
       values.push(filters.customerId);
-      // Customer AR list = sales + opening balance; CNs live in credit-debit-notes API
-      where.push(`COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')`);
+      // Customer AR list = sales + dist deliveries + opening balance; CNs live on Transactions
+      where.push(`COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})`);
     }
     if (filters?.status) {
       if (filters.status === 'OVERDUE') {
@@ -439,7 +440,7 @@ export const invoiceRepository = {
     const res = await pool.query(
       `SELECT
          i.total_amount,
-         COALESCE(pay.cash_paid, 0) AS cash_paid,
+         COALESCE(pay.cash_paid, 0) + COALESCE(legacy.legacy_paid, 0) AS cash_paid,
          COALESCE(cn.cn_amount, 0) AS cn_amount,
          COALESCE(dn.dn_amount, 0) AS dn_amount,
          COALESCE(wo.writeoff_amount, 0) AS writeoff_amount,
@@ -462,6 +463,17 @@ export const invoiceRepository = {
            )
          GROUP BY ip.invoice_id
        ) pay ON pay.invoice_id = i.id
+       LEFT JOIN (
+         /* Pre-SSOT distribution receipts/clearings — included so historical DIN settle correctly.
+            New distribution payments post only via invoice_payments / AR engine. */
+         SELECT invoice_id, SUM(amount) AS legacy_paid
+         FROM (
+           SELECT invoice_id, amount FROM dist_receipts WHERE invoice_id = $1
+           UNION ALL
+           SELECT invoice_id, amount FROM dist_down_payment_clearings WHERE invoice_id = $1
+         ) d
+         GROUP BY invoice_id
+       ) legacy ON legacy.invoice_id = i.id
        LEFT JOIN (
          SELECT reference_invoice_id, SUM(total_amount) AS cn_amount
          FROM invoices

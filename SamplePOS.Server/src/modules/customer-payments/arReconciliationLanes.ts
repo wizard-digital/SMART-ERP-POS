@@ -98,7 +98,7 @@ const INTEGRITY_CUSTOMER_SQL = `
       SELECT SUM(i.amount_due) AS inv_due
       FROM invoices i
       WHERE i.customer_id = c.id
-        AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+        AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE', 'DIST_INVOICE')
         AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
         AND i.issue_date::DATE <= $1::date
     ) inv ON TRUE
@@ -134,7 +134,7 @@ const CACHE_CUSTOMER_SQL = `
       SELECT SUM(i.amount_due) AS inv_due
       FROM invoices i
       WHERE i.customer_id = c.id
-        AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+        AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE', 'DIST_INVOICE')
         AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
         AND i.issue_date::DATE <= $1::date
     ) inv ON TRUE

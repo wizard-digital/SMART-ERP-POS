@@ -1,0 +1,90 @@
+{
+  "feature": "DIST_SALES_ORDER_TOTALS_SSOT",
+  "verdict": "PASS",
+  "passed": 15,
+  "total": 15,
+  "gates": [
+    {
+      "id": "LINE_ORDERED_10K",
+      "ok": true,
+      "detail": "line1=10000"
+    },
+    {
+      "id": "LINE_ORDERED_6K",
+      "ok": true,
+      "detail": "line2=6000"
+    },
+    {
+      "id": "ORDER_TOTAL_16K",
+      "ok": true,
+      "detail": "total=16000"
+    },
+    {
+      "id": "CONFIRMED_ZERO_VALUE",
+      "ok": true,
+      "detail": "confirmedValue=0"
+    },
+    {
+      "id": "ADD_ORDERED_LINE_TOTAL",
+      "ok": true,
+      "detail": "addSalesOrderLine uses orderedQty × unitPrice"
+    },
+    {
+      "id": "UPDATE_ORDERED_LINE_TOTAL",
+      "ok": true,
+      "detail": "updateSalesOrderLine uses orderedQty × unitPrice"
+    },
+    {
+      "id": "READ_TOTAL_ORDERED_SUM",
+      "ok": true,
+      "detail": "get/list SO total_amount from ordered_qty × unit_price"
+    },
+    {
+      "id": "READ_CONFIRMED_SEPARATE",
+      "ok": true,
+      "detail": "total_confirmed remains confirmed × price"
+    },
+    {
+      "id": "LINE_SELECT_ORDERED",
+      "ok": true,
+      "detail": "getSalesOrderLines returns ordered × price as line_total"
+    },
+    {
+      "id": "NORMALIZE_ORDERED",
+      "ok": true,
+      "detail": "normalizeSOLine recomputes ordered × price"
+    },
+    {
+      "id": "CREDIT_USES_DELIVERY",
+      "ok": true,
+      "detail": "credit check uses delivery qty × price, not SO ordered total"
+    },
+    {
+      "id": "DELIVERABLE_USES_CONFIRMED",
+      "ok": true,
+      "detail": "deliverable qty = confirmed − delivered"
+    },
+    {
+      "id": "UI_ORDER_TOTAL",
+      "ok": true,
+      "detail": "Order Total card"
+    },
+    {
+      "id": "UI_CONFIRMED_VALUE",
+      "ok": true,
+      "detail": "Confirmed Value card"
+    },
+    {
+      "id": "UI_INVOICE_DUE",
+      "ok": true,
+      "detail": "Invoice Due (not misleading Amount Due)"
+    }
+  ],
+  "incident": {
+    "order": "DSO-2026-0001",
+    "symptom": "Order Total / Line Total UGX 0.00 with Ordered=1 and Unit Price > 0 because Confirmed=0",
+    "rootCause": "line_total and total_amount used confirmedQty × unitPrice",
+    "fix": "commercial totals = orderedQty × unitPrice; confirmed/delivered/invoice remain separate"
+  },
+  "at": "2026-10-11T19:05:23.056Z"
+}
