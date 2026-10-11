@@ -749,6 +749,7 @@ export async function processClearing(
   const receiptNumbers: string[] = [];
   let lastReceipt: string | undefined;
 
+  let depositPosted = false;
   if (tender.depositApplied > 0.009) {
     const depositResult = await invoiceService.addPayment(pool, input.invoiceId, {
       amount: tender.depositApplied,
@@ -756,6 +757,7 @@ export async function processClearing(
       notes: input.notes ?? null,
       processedById: input.clearedBy,
     });
+    depositPosted = true;
     const rn = String(depositResult.payment.receipt_number ?? '');
     if (rn) {
       receiptNumbers.push(rn);
@@ -763,18 +765,36 @@ export async function processClearing(
     }
   }
 
+  // DEPOSIT cannot join the AR cash UnitOfWork (legacy path requires Pool).
+  // If cash fails after deposit posted, fail with an explicit recoverable message.
   if (input.cashPayment && tender.cashApplied > 0.009) {
-    const cashResult = await invoiceService.addPayment(pool, input.invoiceId, {
-      amount: tender.cashApplied,
-      paymentMethod: input.cashPayment.paymentMethod,
-      referenceNumber: input.cashPayment.referenceNumber ?? null,
-      notes: input.notes ?? null,
-      processedById: input.clearedBy,
-    });
-    const rn = String(cashResult.payment.receipt_number ?? '');
-    if (rn) {
-      receiptNumbers.push(rn);
-      lastReceipt = rn;
+    try {
+      const cashResult = await invoiceService.addPayment(pool, input.invoiceId, {
+        amount: tender.cashApplied,
+        paymentMethod: input.cashPayment.paymentMethod,
+        referenceNumber: input.cashPayment.referenceNumber ?? null,
+        notes: input.notes ?? null,
+        processedById: input.clearedBy,
+      });
+      const rn = String(cashResult.payment.receipt_number ?? '');
+      if (rn) {
+        receiptNumbers.push(rn);
+        lastReceipt = rn;
+      }
+    } catch (err) {
+      if (depositPosted) {
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new BusinessError(
+          `Deposit of ${tender.depositApplied.toFixed(2)} was applied, but the ${input.cashPayment.paymentMethod} payment failed: ${reason}. Retry the cash/card payment only (do not re-enter the deposit).`,
+          'ERR_DIST_CLR_005',
+          {
+            invoiceId: input.invoiceId,
+            depositApplied: tender.depositApplied,
+            cashAppliedAttempted: tender.cashApplied,
+          },
+        );
+      }
+      throw err;
     }
   }
 

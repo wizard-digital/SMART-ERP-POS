@@ -216,8 +216,17 @@ export default function DistClearingPage() {
                               step="1"
                               value={depositAllocations[dep.id] ?? 0}
                               onChange={e => {
-                                const val = Math.min(dep.remainingAmount, Math.max(0, Number(e.target.value)));
-                                setDepositAllocations(prev => ({ ...prev, [dep.id]: val }));
+                                const raw = Math.min(
+                                  dep.remainingAmount,
+                                  Math.max(0, Number(e.target.value) || 0),
+                                );
+                                setDepositAllocations((prev) => {
+                                  const others = Object.entries(prev)
+                                    .filter(([id]) => id !== dep.id)
+                                    .reduce((s, [, a]) => s + (Number(a) || 0), 0);
+                                  const capped = Math.min(raw, Math.max(0, invoiceDue - others));
+                                  return { ...prev, [dep.id]: capped };
+                                });
                               }}
                               className="w-28 border rounded px-2 py-1 text-sm text-right"
                             />

@@ -744,10 +744,20 @@ export default function DistSalesOrderDetailPage() {
                               min={0}
                               max={dep.remainingAmount}
                               value={depositAllocations[dep.id] ?? 0}
-                              onChange={e => setDepositAllocations(prev => ({
-                                ...prev,
-                                [dep.id]: Math.min(dep.remainingAmount, Math.max(0, Number(e.target.value))),
-                              }))}
+                              onChange={e => {
+                                const raw = Math.min(
+                                  dep.remainingAmount,
+                                  Math.max(0, Number(e.target.value) || 0),
+                                );
+                                const due = selectedInvoice?.amountDue ?? 0;
+                                setDepositAllocations((prev) => {
+                                  const others = Object.entries(prev)
+                                    .filter(([id]) => id !== dep.id)
+                                    .reduce((s, [, a]) => s + (Number(a) || 0), 0);
+                                  const capped = Math.min(raw, Math.max(0, due - others));
+                                  return { ...prev, [dep.id]: capped };
+                                });
+                              }}
                               className="w-28 border rounded px-2 py-1.5 text-sm text-right"
                               placeholder="0"
                             />

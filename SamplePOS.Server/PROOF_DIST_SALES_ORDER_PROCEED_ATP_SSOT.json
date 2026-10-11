@@ -93,5 +93,5 @@
     "delivery": "Create Delivery requires confirmed > delivered",
     "users": "created_by on SO/delivery/invoice; RBAC distribution.* / delivery.* / accounting.*"
   },
-  "at": "2026-10-11T19:05:23.282Z"
+  "at": "2026-10-11T19:37:31.688Z"
 }

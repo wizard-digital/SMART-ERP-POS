@@ -61,7 +61,7 @@ describe('PROOF: dist payment AR SSOT', () => {
     );
   });
 
-  it('invoice tender helper caps cash like POS', () => {
+  it('invoice tender helper caps cash like POS', async () => {
     const tenderSrc = readFileSync(
       path.join(serverRoot, 'src/modules/distribution/invoiceTenderChange.ts'),
       'utf8',
@@ -71,6 +71,59 @@ describe('PROOF: dist payment AR SSOT', () => {
       tenderSrc.includes('export function computeInvoiceTender') &&
         tenderSrc.includes("=== 'CASH'"),
       'shared tender math for change',
+    );
+
+    const { computeInvoiceTender } = await import('./invoiceTenderChange.js');
+    const cashBig = computeInvoiceTender({
+      invoiceDue: 2200,
+      depositRequested: 0,
+      cashTendered: 50000,
+      paymentMethod: 'CASH',
+    });
+    gate(
+      'TENDER_CASH_CHANGE',
+      cashBig.cashApplied === 2200 && cashBig.changeGiven === 47800 && cashBig.remainingDue === 0,
+      '50k cash on 2200 due → take 2200 change 47800',
+    );
+    const cardBig = computeInvoiceTender({
+      invoiceDue: 2200,
+      depositRequested: 0,
+      cashTendered: 50000,
+      paymentMethod: 'CARD',
+    });
+    gate(
+      'TENDER_CARD_NO_CHANGE',
+      cardBig.cashApplied === 2200 && cardBig.changeGiven === 0,
+      'card over due posts due only, no change',
+    );
+    const withDep = computeInvoiceTender({
+      invoiceDue: 4200,
+      depositRequested: 2000,
+      cashTendered: 10000,
+      paymentMethod: 'CASH',
+    });
+    gate(
+      'TENDER_DEPOSIT_THEN_CASH',
+      withDep.depositApplied === 2000 &&
+        withDep.cashApplied === 2200 &&
+        withDep.changeGiven === 7800,
+      'deposit then cash caps at due',
+    );
+
+    const svc = readFileSync(
+      path.join(serverRoot, 'src/modules/distribution/distService.ts'),
+      'utf8',
+    );
+    const clearing = svc.slice(
+      svc.indexOf('export async function processClearing'),
+      svc.indexOf('// ─── Read Operations'),
+    );
+    gate(
+      'CLEARING_PARTIAL_CASH_FAIL_SAFE',
+      clearing.includes('ERR_DIST_CLR_005') &&
+        clearing.includes('Deposit of') &&
+        clearing.includes('Retry the cash/card payment only'),
+      'deposit+cash: cash failure after deposit is explicit/recoverable',
     );
   });
 

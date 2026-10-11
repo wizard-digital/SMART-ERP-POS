@@ -1,8 +1,8 @@
 {
   "feature": "DIST_PAYMENT_AR_SSOT",
   "verdict": "PASS",
-  "passed": 9,
-  "total": 9,
+  "passed": 13,
+  "total": 13,
   "gates": [
     {
       "id": "CLEARING_USES_INVOICE_ADD_PAYMENT",
@@ -30,6 +30,26 @@
       "detail": "shared tender math for change"
     },
     {
+      "id": "TENDER_CASH_CHANGE",
+      "ok": true,
+      "detail": "50k cash on 2200 due → take 2200 change 47800"
+    },
+    {
+      "id": "TENDER_CARD_NO_CHANGE",
+      "ok": true,
+      "detail": "card over due posts due only, no change"
+    },
+    {
+      "id": "TENDER_DEPOSIT_THEN_CASH",
+      "ok": true,
+      "detail": "deposit then cash caps at due"
+    },
+    {
+      "id": "CLEARING_PARTIAL_CASH_FAIL_SAFE",
+      "ok": true,
+      "detail": "deposit+cash: cash failure after deposit is explicit/recoverable"
+    },
+    {
       "id": "SETTLEMENT_INVOICE_PAYMENTS",
       "ok": true,
       "detail": "cash from invoice_payments"
@@ -50,5 +70,5 @@
       "detail": "customer invoice list uses open AR types"
     }
   ],
-  "at": "2026-10-11T19:05:22.764Z"
+  "at": "2026-10-11T19:37:31.009Z"
 }

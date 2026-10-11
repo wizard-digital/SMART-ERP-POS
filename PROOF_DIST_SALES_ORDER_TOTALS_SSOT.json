@@ -86,5 +86,5 @@
     "rootCause": "line_total and total_amount used confirmedQty × unitPrice",
     "fix": "commercial totals = orderedQty × unitPrice; confirmed/delivered/invoice remain separate"
   },
-  "at": "2026-10-11T19:05:23.056Z"
+  "at": "2026-10-11T19:37:31.377Z"
 }

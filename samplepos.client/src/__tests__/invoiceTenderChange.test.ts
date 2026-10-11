@@ -37,4 +37,16 @@ describe('computeInvoiceTender (POS-style AR)', () => {
     expect(r.cashApplied).toBe(2200);
     expect(r.changeGiven).toBe(7800);
   });
+
+  it('deposit request above due is capped (no over-apply)', () => {
+    const r = computeInvoiceTender({
+      invoiceDue: 1000,
+      depositRequested: 5000,
+      cashTendered: 0,
+      paymentMethod: 'CASH',
+    });
+    expect(r.depositApplied).toBe(1000);
+    expect(r.totalApplied).toBe(1000);
+    expect(r.remainingDue).toBe(0);
+  });
 });
