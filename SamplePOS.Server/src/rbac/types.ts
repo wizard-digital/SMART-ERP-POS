@@ -21,6 +21,7 @@ export type PermissionModule =
   | 'distribution'
   | 'corrections'
   | 'kitchen'
+  | 'ownership'
   | 'targets';
 
 export type PermissionAction =
@@ -55,7 +56,10 @@ export type PermissionAction =
   | 'period_manage'
   | 'chart_manage'
   | 'reprint'
-  | 'tax_override';
+  | 'tax_override'
+  | 'issue'
+  | 'transfer'
+  | 'dividend_approve';
 
 export interface Permission {
   key: string;

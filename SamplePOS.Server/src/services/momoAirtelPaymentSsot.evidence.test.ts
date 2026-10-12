@@ -20,8 +20,8 @@ function read(rel: string): string {
 }
 
 describe('MoMo / Airtel — no tenant mismatch, no missing columns', () => {
-  it('CURRENT_SCHEMA_VERSION is 628 with column heal + anchors', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(628);
+  it('CURRENT_SCHEMA_VERSION is 636 with column heal + anchors', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(636);
     const sql627 = readFileSync(join(sharedSql, '627_tenant_banking_momo_column_ssot.sql'), 'utf8');
     expect(sql627).toContain('ADD COLUMN IF NOT EXISTS');
     expect(sql627).toContain('gl_transaction_id');

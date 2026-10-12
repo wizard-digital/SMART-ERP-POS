@@ -119,6 +119,16 @@ export const PERMISSIONS: Record<string, Permission> = {
     'Post or correct customer/supplier cutover opening balances (admin assigns to accountants)',
   ),
 
+  OWNERSHIP_READ: p('ownership.read', 'ownership', 'read', 'View ownership register, holdings, dividends, and shareholder loans'),
+  OWNERSHIP_MANAGE: p('ownership.manage', 'ownership', 'manage', 'Set legal form and maintain shareholders'),
+  OWNERSHIP_ISSUE: p('ownership.issue', 'ownership', 'issue', 'Issue company shares'),
+  OWNERSHIP_TRANSFER: p('ownership.transfer', 'ownership', 'transfer', 'Record a private share transfer'),
+  OWNERSHIP_DIVIDEND_APPROVE: p(
+    'ownership.dividend_approve',
+    'ownership',
+    'dividend_approve',
+    'Approve or declare a dividend',
+  ),
 
   REPORTS_READ: p('reports.read', 'reports', 'read', 'Access reports dashboard'),
   REPORTS_CREATE: p('reports.create', 'reports', 'create', 'Create custom reports'),

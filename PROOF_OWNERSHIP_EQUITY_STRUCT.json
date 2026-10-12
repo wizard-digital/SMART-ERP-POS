@@ -1,0 +1,89 @@
+{
+  "feature": "OWNERSHIP_EQUITY_STRUCT",
+  "verdict": "PASS",
+  "passed": 16,
+  "total": 16,
+  "gates": [
+    {
+      "id": "SCHEMA_636",
+      "ok": true,
+      "detail": "schemaVersion=636"
+    },
+    {
+      "id": "ADR_APPROVED",
+      "ok": true,
+      "detail": "ADR approved"
+    },
+    {
+      "id": "SQL_636",
+      "ok": true,
+      "detail": "636 present, 629 absent"
+    },
+    {
+      "id": "SQL_NO_RENAME",
+      "ok": true,
+      "detail": "no 3200 rename"
+    },
+    {
+      "id": "SQL_ACCOUNTS",
+      "ok": true,
+      "detail": "3400/2450/2600"
+    },
+    {
+      "id": "SQL_NO_TRIGGER",
+      "ok": true,
+      "detail": "no cost-layer trigger"
+    },
+    {
+      "id": "SERVER_MOUNT",
+      "ok": true,
+      "detail": "API mounted"
+    },
+    {
+      "id": "RBAC",
+      "ok": true,
+      "detail": "rbac keys"
+    },
+    {
+      "id": "GOV_SOURCE",
+      "ok": true,
+      "detail": "posting source"
+    },
+    {
+      "id": "UI_ROUTE",
+      "ok": true,
+      "detail": "App route"
+    },
+    {
+      "id": "UI_NAV",
+      "ok": true,
+      "detail": "Accounting nav"
+    },
+    {
+      "id": "NO_DIRECT_LEDGER",
+      "ok": true,
+      "detail": "AccountingCore only"
+    },
+    {
+      "id": "ISSUE_NEEDS_POST",
+      "ok": true,
+      "detail": "issue+post"
+    },
+    {
+      "id": "TRANSFER_NO_POST",
+      "ok": true,
+      "detail": "transfer no accounting.post"
+    },
+    {
+      "id": "DOMAIN_BLOCKS_3200",
+      "ok": true,
+      "detail": "blocked consideration includes equity"
+    },
+    {
+      "id": "STABLE_SORT",
+      "ok": true,
+      "detail": "stable event order"
+    }
+  ],
+  "at": "2026-10-12T02:15:08.700Z"
+}

@@ -88,8 +88,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(decision).toBe('copy');
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–634 MoMo/banking and sales targets SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(634);
+  it('CURRENT_SCHEMA_VERSION matches 621–636 MoMo/banking/targets/expense/ownership SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(636);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -137,7 +137,19 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     const targetsDupSql = fs.readFileSync(path.join(sqlDir, '634_sales_targets_no_duplicate_ssot.sql'), 'utf8');
     expect(targetsDupSql).toContain('uq_sales_target_teams_name_ci');
     expect(targetsDupSql).toContain('SELECT 634');
-
+    const expensePmSql = fs.readFileSync(path.join(sqlDir, '635_expense_payment_method_optional.sql'), 'utf8');
+    expect(expensePmSql).toContain('SELECT 635');
+    const ownershipSql = fs.readFileSync(path.join(sqlDir, '636_ownership_equity.sql'), 'utf8');
+    expect(ownershipSql).toContain("'3400'");
+    expect(ownershipSql).toContain('Share Capital');
+    expect(ownershipSql).toContain('SOLE_PROPRIETOR');
+    expect(ownershipSql).not.toContain('CREATE TRIGGER trg_cost_layer');
+    expect(ownershipSql).not.toContain('CREATE OR REPLACE FUNCTION fn_post_cost_layer');
+    expect(ownershipSql).toContain('SELECT 636');
+    expect(ownershipSql).not.toContain("SET \"AccountName\" = 'Share Capital'");
+    expect(ownershipSql).toContain('3200 Owner Capital');
+    expect(ownershipSql).toContain('Not owner capital 3200');
+    expect(ownershipSql).not.toContain("WHERE \"AccountCode\" = '3200'"); // never retargets 3200 rows
     const sessionSql = fs.readFileSync(path.join(sqlDir, '620_pos_session_policy_ssot.sql'), 'utf8');
     expect(sessionSql).toMatch(/pg_constraint WHERE conname = 'chk_pos_session_policy'/);
     expect(sessionSql).not.toMatch(/^ALTER TABLE system_settings\s+ADD CONSTRAINT/m);

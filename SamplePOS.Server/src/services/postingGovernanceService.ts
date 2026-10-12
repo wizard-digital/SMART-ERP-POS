@@ -63,6 +63,7 @@ export type PostingSource =
     | 'AR_WRITEOFF_REVERSAL'    // Reversal of a posted AR write-off document
     | 'BANK_MANUAL'             // Manual bank register deposit/withdrawal (Banking module)
     | 'CASH_VARIANCE'           // Till Z variance OR employee till-shortage charge — may credit CASH 1010
+    | 'OWNERSHIP_EQUITY'        // Share issue, dividend, shareholder loan — ownership module only
 
 // =============================================================================
 // GOVERNANCE ACCOUNT SHAPE
@@ -289,11 +290,12 @@ export class PostingGovernanceService {
                         source !== 'TREASURY_PETTY_CASH' &&
                         source !== 'TREASURY_REVERSAL' &&
                         source !== 'BANK_MANUAL' &&
-                        source !== 'CASH_VARIANCE'
+                        source !== 'CASH_VARIANCE' &&
+                        source !== 'OWNERSHIP_EQUITY'
                     ) {
                         throw new PostingGovernanceError(
                             `Cannot credit Cash account ${account.accountCode} (${account.accountName}) from source '${source}'. ` +
-                            `Cash may only be credited by a bank deposit (PAYMENT_DEPOSIT), treasury document (TREASURY_*), manual bank withdrawal (BANK_MANUAL), supplier payment (SUPPLIER_PAYMENT), WHT remittance (WHT_REMITTANCE), VAT remittance (VAT_REMITTANCE), sale refund (SALES_REFUND), cash variance / till shortage charge (CASH_VARIANCE), or system correction.`,
+                            `Cash may only be credited by a bank deposit (PAYMENT_DEPOSIT), treasury document (TREASURY_*), manual bank withdrawal (BANK_MANUAL), supplier payment (SUPPLIER_PAYMENT), WHT remittance (WHT_REMITTANCE), VAT remittance (VAT_REMITTANCE), sale refund (SALES_REFUND), cash variance / till shortage charge (CASH_VARIANCE), ownership dividend or loan repayment (OWNERSHIP_EQUITY), or system correction.`,
                             'GOV_RULE_D_CASH_CREDIT',
                             { accountCode: account.accountCode, source }
                         );

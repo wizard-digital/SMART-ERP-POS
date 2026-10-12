@@ -40,7 +40,9 @@ declare module 'decimal.js' {
     // Checks
   isFinite(): boolean;
   isZero(): boolean;
-  abs(): Decimal;
+  isInteger(): boolean;
+    abs(): Decimal;
+    negated(): Decimal;
 
     // Formatting / conversion
     toDecimalPlaces(dp?: number, rm?: number): Decimal;

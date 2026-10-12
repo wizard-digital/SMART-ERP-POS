@@ -171,6 +171,7 @@ const JeApprovalPage = lazyWithRetry(() => import('./pages/accounting/JeApproval
 const PaymentProgramPage = lazyWithRetry(() => import('./pages/accounting/PaymentProgramPage'));
 const MultiCurrencyPage = lazyWithRetry(() => import('./pages/accounting/MultiCurrencyPage'));
 const FiscalYearClosePage = lazyWithRetry(() => import('./pages/accounting/FiscalYearClosePage'));
+const OwnershipEquityPage = lazyWithRetry(() => import('./pages/accounting/OwnershipEquityPage'));
 const GLReconciliationPage = lazyWithRetry(() => import('./pages/accounting/GLReconciliationPage'));
 const TaxEnginePage = lazyWithRetry(() => import('./pages/accounting/TaxEnginePage'));
 const CurrencyRevaluationPage = lazyWithRetry(() => import('./pages/accounting/CurrencyRevaluationPage'));
@@ -1217,6 +1218,19 @@ function App() {
                   />
 
                   {/* Enterprise Accounting */}
+
+                  <Route
+                    path="/accounting/ownership"
+                    element={
+                      <ProtectedRoute requiredPermissions={['ownership.read']} requiredFeature="accounting">
+                        <AccountingLayout>
+                          <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+                            <OwnershipEquityPage />
+                          </Suspense>
+                        </AccountingLayout>
+                      </ProtectedRoute>
+                    }
+                  />
 
                   <Route
                     path="/accounting/fiscal-year-close"

@@ -31,6 +31,7 @@ export default function AccountingLayout({ children }: AccountingLayoutProps) {
   const canManageAccounting = useBackendPermission('accounting.manage');
   const canReadAccounting = useBackendPermission('accounting.read');
   const canReadBanking = useBackendPermission('banking.read');
+  const canReadOwnership = useBackendPermission('ownership.read');
   const showDiagnosticsNav = canManageAccounting || canReadAccounting;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Overview', 'ERP Controls', 'Advanced Accounting']));
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -233,6 +234,16 @@ export default function AccountingLayout({ children }: AccountingLayoutProps) {
     {
       name: 'Enterprise Accounting',
       items: [
+        ...(canReadOwnership
+          ? [
+              {
+                name: 'Ownership & Equity',
+                path: '/accounting/ownership',
+                icon: <Landmark className="h-4 w-4" />,
+                description: 'Legal form, owner capital, and company shares',
+              },
+            ]
+          : []),
         {
           name: 'Fiscal Year Close',
           path: '/accounting/fiscal-year-close',
@@ -286,7 +297,7 @@ export default function AccountingLayout({ children }: AccountingLayoutProps) {
       }));
     }
     return groups;
-  }, [showDiagnosticsNav]);
+  }, [showDiagnosticsNav, canReadOwnership]);
 
   const visibleNavGroups = useMemo(() => {
     if (canReadBanking) return navGroups;

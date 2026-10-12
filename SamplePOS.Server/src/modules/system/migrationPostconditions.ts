@@ -27,6 +27,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '626_bank_mirror_no_duplicate_ssot.sql',
     '627_tenant_banking_momo_column_ssot.sql',
     '628_drop_ledger_reference_unique_ssot.sql',
+    '636_ownership_equity.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -385,6 +386,23 @@ export async function verifyMigrationPostcondition(
                 momoOk.rows[0]?.ok === true &&
                 idxOk.rows[0]?.ok === true
             );
+        }
+        case '636_ownership_equity.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT (
+                    EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'shareholders')
+                    AND EXISTS (SELECT 1 FROM information_schema.columns
+                                WHERE table_name = 'system_settings' AND column_name = 'legal_form')
+                    AND EXISTS (SELECT 1 FROM accounts WHERE "AccountCode" = '3400' AND "AccountName" = 'Share Capital' AND "IsPostingAccount" = TRUE)
+                    AND EXISTS (SELECT 1 FROM accounts WHERE "AccountCode" = '3200' AND "AccountName" = 'Owner Capital')
+                    AND EXISTS (SELECT 1 FROM accounts WHERE "AccountCode" = '3300' AND "AccountName" = 'Owner Drawings')
+                    AND EXISTS (SELECT 1 FROM accounts WHERE "AccountCode" = '3100' AND "AccountName" = 'Retained Earnings')
+                    AND EXISTS (SELECT 1 FROM accounts WHERE "AccountCode" = '3000' AND "IsPostingAccount" = FALSE)
+                    AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'trg_cost_layer_gl_failsafe')
+                    AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'fn_post_cost_layer_to_gl')
+                 ) AS ok`,
+            );
+            return rows[0]?.ok === true;
         }
         case '628_drop_ledger_reference_unique_ssot.sql': {
             const { rows } = await pool.query<{ ok: boolean }>(
