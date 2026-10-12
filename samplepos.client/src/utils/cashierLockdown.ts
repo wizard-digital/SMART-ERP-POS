@@ -93,6 +93,8 @@ export function isCashierAllowedPath(
   if (pathname === '/orders-queue') return true;
   if (/^\/orders\/[^/]+\/pay$/.test(pathname)) return true;
   if (pathname === '/my/quick-login') return true;
+  // Own password / 2FA. Not the rest of /settings.
+  if (pathname === '/settings/security') return true;
 
   // Align path allowlist with default Cashier grant set (ticks already in matrix).
   if (

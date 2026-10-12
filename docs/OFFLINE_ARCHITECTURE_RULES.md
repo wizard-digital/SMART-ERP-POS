@@ -7,6 +7,14 @@
 
 The offline system is an **immutable event journal**, not a mutable queue. This is the same model used by SAP S/4HANA and Odoo. Events are appended once and never modified or deleted. The UI and server both derive state by replaying events.
 
+## Shell integrity (non-negotiable)
+
+- **Login, POS, and Quick Login** are eager modules — offline must not fail because a Vite/HTTP chunk could not be fetched.
+- Chunk / SW misses are **typed** (`OfflineIntegrityCode` / `error_code`) and **logged** — never empty 503 bodies, never silent `catch {}`.
+- While online after auth, `CriticalOfflineWarmup` prefetches critical route chunks (orders, customers, products, stock, sales, restaurant FOH, security settings).
+- Offline ErrorBoundary recovery uses cached restaurant mode: `/restaurant` for restaurant tenants, `/pos` otherwise — never bounce restaurant staff to retail POS.
+- See `PROOF_OFFLINE_INTEGRITY_SHELL.md`.
+
 ---
 
 ## Storage Contract

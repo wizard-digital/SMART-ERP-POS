@@ -71,6 +71,7 @@ export function isWaiterAllowedPath(pathname: string): boolean {
   }
   if (pathname === '/customers' || pathname.startsWith('/customers/')) return true;
   if (pathname === '/my/quick-login') return true;
+  if (pathname === '/settings/security') return true;
   if (pathname === '/login') return true;
   return false;
 }

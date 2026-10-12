@@ -11,16 +11,23 @@ import QuickLoginSettings from './QuickLoginSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Shield, AlertTriangle, Key, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { usePasswordExpiry } from '../../hooks/usePasswordPolicy';
+import { useMustChangePassword, usePasswordExpiry } from '../../hooks/usePasswordPolicy';
 import Layout from '../../components/Layout';
 
 export default function SecuritySettingsPage() {
     const location = useLocation();
     const [showSetupAlert, setShowSetupAlert] = useState(false);
     const { data: expiryStatus } = usePasswordExpiry();
+    const { data: mustChange } = useMustChangePassword();
+
+    const routeReason = (location.state as { reason?: 'expired' | 'first_login' | null } | null)?.reason;
+    const passwordReason = mustChange?.reason || routeReason || null;
+    const passwordRequired =
+        mustChange?.mustChange === true ||
+        (location.state as { mustChangePassword?: boolean } | null)?.mustChangePassword === true;
 
     useEffect(() => {
-        // Check if we were redirected here with a message to set up 2FA
+        // Check if we were redirected here with a message to set up 2FA / change password
         if (location.state?.message) {
             setShowSetupAlert(true);
         }
@@ -46,7 +53,9 @@ export default function SecuritySettingsPage() {
                         <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                         <div>
                             <p className="font-medium text-amber-800 dark:text-amber-200">
-                                Two-Factor Authentication Required
+                                {(location.state as { mustChangePassword?: boolean } | null)?.mustChangePassword
+                                    ? 'Password change required'
+                                    : 'Two-Factor Authentication Required'}
                             </p>
                             <p className="text-sm text-amber-700 dark:text-amber-300">
                                 {location.state?.message || 'Your role requires 2FA. Please set it up to continue using all features.'}
@@ -76,7 +85,9 @@ export default function SecuritySettingsPage() {
                                 Password
                                 {expiryStatus?.showWarning && (
                                     <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                                        Expires in {expiryStatus.daysUntilExpiry} days
+                                        {expiryStatus.expired || (expiryStatus.daysUntilExpiry ?? 0) <= 0
+                                            ? 'Expired'
+                                            : `Expires in ${expiryStatus.daysUntilExpiry} days`}
                                     </span>
                                 )}
                             </CardTitle>
@@ -85,7 +96,10 @@ export default function SecuritySettingsPage() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <ChangePasswordForm />
+                            <ChangePasswordForm
+                                required={passwordRequired}
+                                reason={passwordReason}
+                            />
                         </CardContent>
                     </Card>
 

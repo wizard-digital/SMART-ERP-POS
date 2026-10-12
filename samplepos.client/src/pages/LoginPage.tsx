@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { resolvePostLoginPath } from '../utils/cashierLockdown';
-import { api } from '../utils/api';
+import { api, apiClient } from '../utils/api';
 import { TwoFactorVerifyModal } from '../components/auth/TwoFactorVerifyModal';
 import type { UserRole } from '../types';
 import { Shield, Eye, EyeOff, Loader2, AlertCircle, Store, WifiOff, Fingerprint } from 'lucide-react';
@@ -22,6 +22,20 @@ import {
   beginOfflineLoginSession,
 } from '../lib/offlineLoginCredentials';
 import { appendNotificationQuery, locationFromState, notificationIdFromPath } from '../lib/notificationNavigation';
+
+type MustChangeReason = 'expired' | 'first_login' | null;
+
+function softMustChangeFromLoginPayload(data: {
+  passwordExpiry?: { expired: boolean; daysUntilExpiry: number | null };
+  mustChangePassword?: { mustChange: boolean; reason: MustChangeReason };
+}): { mustChange: boolean; reason: MustChangeReason } {
+  const mustChange =
+    data.mustChangePassword?.mustChange === true || data.passwordExpiry?.expired === true;
+  const reason =
+    data.mustChangePassword?.reason ||
+    (data.passwordExpiry?.expired ? 'expired' : null);
+  return { mustChange, reason };
+}
 
 function readCachedPermissionKeys(): string[] {
   try {
@@ -57,6 +71,8 @@ interface LoginResponseData {
   accessToken?: string;
   refreshToken?: string;
   expiresIn?: number;
+  passwordExpiry?: { expired: boolean; daysUntilExpiry: number | null };
+  mustChangePassword?: { mustChange: boolean; reason: 'expired' | 'first_login' | null };
 }
 
 export default function LoginPage() {
@@ -191,8 +207,15 @@ export default function LoginPage() {
           await login(user, accessToken || token, refreshToken, expiresIn);
           // Cache for offline login
           await cacheLoginCredential(email, password, user);
+          const setupMust = softMustChangeFromLoginPayload(loginData);
           navigate('/settings/security', {
-            state: { message: '2FA setup is required for your role. Please set it up now.' }
+            replace: true,
+            state: {
+              message: '2FA setup is required for your role. Please set it up now.',
+              ...(setupMust.mustChange
+                ? { mustChangePassword: true, reason: setupMust.reason }
+                : {}),
+            },
           });
           return;
         }
@@ -201,6 +224,24 @@ export default function LoginPage() {
         await login(user, accessToken || token, refreshToken, expiresIn);
         // Cache for offline login
         await cacheLoginCredential(email, password, user);
+
+        // Soft redirect — do not hard-block the API (that would brick POS/FOH).
+        const { mustChange, reason } = softMustChangeFromLoginPayload(loginData);
+        if (mustChange) {
+          navigate('/settings/security', {
+            replace: true,
+            state: {
+              mustChangePassword: true,
+              reason,
+              message:
+                reason === 'first_login'
+                  ? 'Please set a secure password before continuing.'
+                  : 'Your password has expired. Please change it now.',
+            },
+          });
+          return;
+        }
+
         navigate(appendNotificationQuery(await resolveHomeAfterAuth(user.role, from), nid), { replace: true });
       } else {
         setError(response.data.error || 'Login failed');
@@ -258,6 +299,8 @@ export default function LoginPage() {
     accessToken?: string;
     refreshToken?: string;
     expiresIn?: number;
+    passwordExpiry?: { expired: boolean; daysUntilExpiry: number | null };
+    mustChangePassword?: { mustChange: boolean; reason: MustChangeReason };
   }): Promise<void> => {
     const token = data.accessToken || data.token;
 
@@ -283,6 +326,43 @@ export default function LoginPage() {
         console.error('[Auth] Offline credential cache failed after 2FA:', cacheErr);
       });
     }
+
+    // Soft redirect SSOT with password login — 2FA verify returns expiry fields;
+    // fall back to GET must-change if an older server omitted them.
+    let { mustChange, reason } = softMustChangeFromLoginPayload(data);
+    if (!mustChange && data.mustChangePassword === undefined && data.passwordExpiry === undefined) {
+      try {
+        const res = await apiClient.get<{
+          success?: boolean;
+          data?: { mustChange?: boolean; reason?: MustChangeReason };
+        }>('auth/password/must-change');
+        if (res.data?.data?.mustChange === true) {
+          mustChange = true;
+          reason = res.data.data.reason ?? null;
+        }
+      } catch (mustErr) {
+        console.warn(
+          '[Auth] Post-2FA must-change check failed (continuing to home):',
+          mustErr instanceof Error ? mustErr.message : mustErr,
+        );
+      }
+    }
+
+    if (mustChange) {
+      navigate('/settings/security', {
+        replace: true,
+        state: {
+          mustChangePassword: true,
+          reason,
+          message:
+            reason === 'first_login'
+              ? 'Please set a secure password before continuing.'
+              : 'Your password has expired. Please change it now.',
+        },
+      });
+      return;
+    }
+
     navigate(appendNotificationQuery(await resolveHomeAfterAuth(authUser.role, from), nid), { replace: true });
   };
 

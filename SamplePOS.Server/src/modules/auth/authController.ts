@@ -95,6 +95,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
           expiresIn: tokenPair.expiresIn,
           requires2FASetup: true,
           passwordExpiry: result.passwordExpiry,
+          mustChangePassword: result.mustChangePassword,
         },
         message: 'Login successful. 2FA setup is required for your role.',
       });
@@ -157,6 +158,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
         refreshToken: tokenPair.refreshToken,
         expiresIn: tokenPair.expiresIn,
         passwordExpiry: result.passwordExpiry,
+        mustChangePassword: result.mustChangePassword,
       },
       message: 'Login successful',
     });

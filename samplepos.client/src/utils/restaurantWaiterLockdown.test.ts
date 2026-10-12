@@ -57,6 +57,8 @@ describe('restaurantWaiterLockdown', () => {
     expect(isWaiterAllowedPath('/restaurant/recipes')).toBe(false);
     expect(isWaiterAllowedPath('/restaurant/order-tags')).toBe(false);
     expect(isWaiterAllowedPath('/dashboard')).toBe(false);
+    expect(isWaiterAllowedPath('/settings/security')).toBe(true);
+    expect(isWaiterAllowedPath('/settings')).toBe(false);
   });
 
   it('waiter nav is FOH only — no kitchen/config', () => {

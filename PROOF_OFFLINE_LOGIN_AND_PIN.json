@@ -1,10 +1,10 @@
 {
   "proof": "OFFLINE_LOGIN_AND_PIN",
-  "date": "2026-08-16T07:49:35.591Z",
+  "date": "2026-10-12T00:29:59.811Z",
   "verdict": "PASS",
-  "pass": 63,
+  "pass": 65,
   "fail": 0,
-  "total": 63,
+  "total": 65,
   "gates": [
     {
       "id": "OFF_CACHE_OK",
@@ -39,7 +39,7 @@
     {
       "id": "OFF_TOKEN_PREFIX",
       "ok": true,
-      "detail": "offline-session-1786866575346-54dba1f8ff"
+      "detail": "offline-session-1791764999695-cc1f29a295"
     },
     {
       "id": "OFF_ISO_TOKEN_NEW",
@@ -185,6 +185,16 @@
       "id": "PATH_MY_QL",
       "ok": true,
       "detail": "/my/quick-login PIN setup"
+    },
+    {
+      "id": "PATH_SECURITY",
+      "ok": true,
+      "detail": "/settings/security password/2FA stay"
+    },
+    {
+      "id": "PATH_SETTINGS_NOT",
+      "ok": true,
+      "detail": "/settings must hard-nav"
     },
     {
       "id": "PATH_POS",

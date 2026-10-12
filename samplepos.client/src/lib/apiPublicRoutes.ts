@@ -52,6 +52,20 @@ export function isPublicApiRoute(url: string | undefined, method?: string): bool
     return true;
   }
 
+  // Password policy helpers used before / during change-password forms
+  if (
+    (path === 'auth/password/policy' || path.startsWith('auth/password/policy?')) &&
+    m === 'GET'
+  ) {
+    return true;
+  }
+  if (
+    (path === 'auth/password/validate' || path.startsWith('auth/password/validate?')) &&
+    m === 'POST'
+  ) {
+    return true;
+  }
+
   for (const { segment, methods } of PUBLIC_QUICK_LOGIN) {
     if ((path === segment || path.startsWith(`${segment}?`)) && methods.includes(m)) {
       return true;

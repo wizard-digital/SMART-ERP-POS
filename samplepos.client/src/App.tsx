@@ -15,6 +15,13 @@ import { useRestaurantModeForRouting } from './hooks/useRestaurantEnabled';
 import { RestaurantModeBoot } from './components/auth/RestaurantModeBoot';
 import { appendNotificationQuery } from './lib/notificationNavigation';
 import NotificationDeepLink from './components/notifications/NotificationDeepLink';
+import {
+  createOfflineModuleError,
+  isChunkOrNetworkLoadError,
+  isLikelyOffline,
+} from './lib/chunkLoadError';
+import { OfflineIntegrityCode } from './lib/offlineIntegrity';
+import CriticalOfflineWarmup from './components/CriticalOfflineWarmup';
 
 // Layouts stay static (small, shared across routes)
 import Layout from './components/Layout';
@@ -24,23 +31,42 @@ import { StoreNetworkSection } from './components/inventory/StoreNetworkSection'
 import AccountingLayout from './components/AccountingLayout';
 
 /**
- * Lazy-load wrapper that auto-reloads the page on stale chunk errors.
- * After a deployment, Vite's hashed filenames change. If the browser still
- * has the old index cached, it tries to fetch removed chunk files → 404.
- * This wrapper catches that and does a single hard reload.
+ * Critical offline shell — eager so POS / login never depend on a network chunk
+ * fetch when the device goes offline (enterprise integrity).
+ */
+import LoginPage from './pages/LoginPage';
+import POSPage from './pages/pos/POSPage';
+import QuickLoginScreen from './pages/pos/QuickLoginScreen';
+
+/**
+ * Lazy-load wrapper:
+ * - Offline / DEV network chunk failures → typed OfflineModuleError (cause preserved)
+ * - Production stale chunks after deploy → single hard reload
  */
 function lazyWithRetry(factory: () => Promise<{ default: React.ComponentType }>) {
   return lazy(() =>
     factory().catch((err: unknown) => {
-      const alreadyReloaded = sessionStorage.getItem('chunk_reload');
-      if (!alreadyReloaded) {
-        sessionStorage.setItem('chunk_reload', '1');
-        window.location.reload();
-        // Return a never-resolving promise so React doesn't render the error
-        return new Promise(() => { });
+      const offline = isLikelyOffline();
+      const chunkFail = isChunkOrNetworkLoadError(err);
+
+      if (offline) {
+        throw createOfflineModuleError(err, OfflineIntegrityCode.CHUNK_LOAD_OFFLINE);
       }
-      // Already reloaded once — let ErrorBoundary handle it
-      sessionStorage.removeItem('chunk_reload');
+      if (chunkFail && import.meta.env.DEV) {
+        throw createOfflineModuleError(err, OfflineIntegrityCode.CHUNK_LOAD_DEV);
+      }
+
+      if (chunkFail) {
+        const alreadyReloaded = sessionStorage.getItem('chunk_reload');
+        if (!alreadyReloaded) {
+          sessionStorage.setItem('chunk_reload', '1');
+          window.location.reload();
+          return new Promise(() => { });
+        }
+        sessionStorage.removeItem('chunk_reload');
+        throw createOfflineModuleError(err, OfflineIntegrityCode.CHUNK_LOAD_STALE_AFTER_RELOAD);
+      }
+
       throw err;
     })
   );
@@ -51,10 +77,8 @@ if (sessionStorage.getItem('chunk_reload')) {
   sessionStorage.removeItem('chunk_reload');
 }
 
-// Lazy-loaded pages — each becomes its own chunk
-const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
+// Lazy-loaded pages — each becomes its own chunk (warmed while online via CriticalOfflineWarmup)
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
-const POSPage = lazyWithRetry(() => import('./pages/pos/POSPage'));
 const CustomersPage = lazyWithRetry(() => import('./pages/CustomersPage'));
 const CustomerDetailPage = lazyWithRetry(() => import('./pages/customers/CustomerDetailPage'));
 const SuppliersPage = lazyWithRetry(() => import('./pages/SuppliersPage'));
@@ -186,7 +210,6 @@ const PriceGroupsPage = lazyWithRetry(() => import('./pages/pricing/PriceGroupsP
 const PriceRulesPage = lazyWithRetry(() => import('./pages/pricing/PriceRulesPage'));
 const CategoriesPage = lazyWithRetry(() => import('./pages/pricing/CategoriesPage'));
 const PricePreviewPage = lazyWithRetry(() => import('./pages/pricing/PricePreviewPage'));
-const QuickLoginScreen = lazyWithRetry(() => import('./pages/pos/QuickLoginScreen'));
 const MyQuickLoginPage = lazyWithRetry(() => import('./pages/settings/MyQuickLoginPage'));
 const DownPaymentClearingPage = lazyWithRetry(() => import('./pages/accounting/DownPaymentClearingPage'));
 
@@ -258,6 +281,7 @@ function TenantAppServices() {
     <>
       <BusinessDateSync />
       <OfflineAutoSync />
+      <CriticalOfflineWarmup />
       <NotificationDeepLink />
     </>
   );
@@ -1193,6 +1217,7 @@ function App() {
                   />
 
                   {/* Enterprise Accounting */}
+
                   <Route
                     path="/accounting/fiscal-year-close"
                     element={
@@ -1308,7 +1333,7 @@ function App() {
                   <Route
                     path="/settings/security"
                     element={
-                      <ProtectedRoute requiredPermissions={['system.read']}>
+                      <ProtectedRoute>
                         <SecuritySettingsPage />
                       </ProtectedRoute>
                     }

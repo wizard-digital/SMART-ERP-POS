@@ -17,6 +17,12 @@ describe('cashierLockdown', () => {
     expect(isCashierAllowedPath('/orders/123/pay')).toBe(true);
   });
 
+  it('allows own password page without opening the rest of settings', () => {
+    expect(isCashierAllowedPath('/settings/security')).toBe(true);
+    expect(isCashierAllowedPath('/settings')).toBe(false);
+    expect(isCashierAllowedPath('/settings/security', { restaurantEnabled: true })).toBe(true);
+  });
+
   it('allows inventory browse but keeps warehouse routes blocked', () => {
     expect(isCashierAllowedPath('/inventory')).toBe(true);
     expect(isCashierAllowedPath('/inventory/stock-levels')).toBe(true);

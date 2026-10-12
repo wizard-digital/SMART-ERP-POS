@@ -11,7 +11,7 @@
  * already queues those locally and syncs on reconnect.
  */
 
-const CACHE_VERSION = 'v12';
+const CACHE_VERSION = 'v14';
 const STATIC_CACHE = `pos-static-${CACHE_VERSION}`;
 const API_CACHE = `pos-api-${CACHE_VERSION}`;
 const APP_SHELL_CACHE = `pos-shell-${CACHE_VERSION}`;
@@ -121,14 +121,18 @@ async function networkFirstApi(request) {
     }
     return response;
   } catch (err) {
-    // Network failed — serve from cache
     const cached = await caches.match(request);
     if (cached) {
       return cached;
     }
-    // Return empty JSON response so the app doesn't crash
+    console.warn('[OFFLINE_INTEGRITY_SW_API_MISS]', request.url, err);
     return new Response(
-      JSON.stringify({ success: false, error: 'Offline — serving cached data', data: null }),
+      JSON.stringify({
+        success: false,
+        error: 'Offline — no cached API response for this request',
+        error_code: 'OFFLINE_INTEGRITY_SW_API_MISS',
+        data: null,
+      }),
       { status: 503, headers: { 'Content-Type': 'application/json' } }
     );
   }
@@ -147,8 +151,15 @@ async function cacheFirstStatic(request) {
     }
     return response;
   } catch (err) {
-    // Static asset unavailable — return empty response
-    return new Response('', { status: 503 });
+    console.warn('[OFFLINE_INTEGRITY_SW_STATIC_MISS]', request.url, err);
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Offline — static asset not in cache',
+        error_code: 'OFFLINE_INTEGRITY_SW_STATIC_MISS',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 }
 
@@ -162,19 +173,24 @@ async function networkFirstNavigation(request) {
     }
     return response;
   } catch (err) {
-    // Try cached version of any navigated page (SPA — index.html)
+    console.warn('[OFFLINE_INTEGRITY_SW_NAV_FALLBACK]', request.url, err);
     const cached = await caches.match(request);
     if (cached) return cached;
 
-    // Try the root index (SPA fallback)
     const rootCached = await caches.match('./');
     if (rootCached) return rootCached;
 
-    // Last resort: offline page
     const offlinePage = await caches.match('./offline.html');
     if (offlinePage) return offlinePage;
 
-    return new Response('Offline', { status: 503 });
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Offline — no app shell in cache',
+        error_code: 'OFFLINE_INTEGRITY_SW_NAV_FALLBACK',
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 }
 
@@ -214,7 +230,7 @@ async function prewarmApiCache(routes) {
         cache.put(route, response);
       }
     } catch (err) {
-      // Silently skip routes that fail
+      console.warn('[OFFLINE_INTEGRITY_SW_API_MISS] prewarm failed', route, err);
     }
   }
 }

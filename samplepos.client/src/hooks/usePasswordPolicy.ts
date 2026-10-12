@@ -1,17 +1,19 @@
 /**
  * Password Policy API hooks
- * 
+ *
  * Provides React Query hooks for password management:
  * - Policy requirements
  * - Password validation
  * - Password change
  * - Expiry status
+ *
+ * Uses the shared apiClient so tenant headers, token refresh, and
+ * 401 handling match the rest of the app (never raw axios + stale token).
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
-
-const API_BASE = '/api/auth/password';
+import { apiClient } from '../utils/api';
+import { getAccessToken } from './useTokenRefresh';
 
 export interface PasswordPolicy {
     requirements: {
@@ -42,10 +44,19 @@ export interface PasswordExpiryStatus {
     showWarning: boolean;
 }
 
+export interface MustChangePasswordStatus {
+    mustChange: boolean;
+    reason: 'expired' | 'first_login' | null;
+}
+
 export interface ChangePasswordData {
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;
+}
+
+function hasSessionToken(): boolean {
+    return !!(getAccessToken() || localStorage.getItem('auth_token'));
 }
 
 /**
@@ -55,7 +66,7 @@ export function usePasswordPolicy() {
     return useQuery({
         queryKey: ['password-policy'],
         queryFn: async (): Promise<PasswordPolicy> => {
-            const response = await axios.get(`${API_BASE}/policy`);
+            const response = await apiClient.get('auth/password/policy');
             return response.data.data;
         },
         staleTime: 1000 * 60 * 60, // Cache for 1 hour - policy rarely changes
@@ -68,7 +79,7 @@ export function usePasswordPolicy() {
 export function useValidatePassword() {
     return useMutation({
         mutationFn: async (password: string): Promise<PasswordValidation> => {
-            const response = await axios.post(`${API_BASE}/validate`, { password });
+            const response = await apiClient.post('auth/password/validate', { password });
             return response.data.data;
         },
     });
@@ -81,14 +92,11 @@ export function usePasswordExpiry() {
     return useQuery({
         queryKey: ['password-expiry'],
         queryFn: async (): Promise<PasswordExpiryStatus> => {
-            const token = localStorage.getItem('auth_token');
-            const response = await axios.get(`${API_BASE}/expiry`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await apiClient.get('auth/password/expiry');
             return response.data.data;
         },
         retry: false,
-        enabled: !!localStorage.getItem('auth_token'),
+        enabled: hasSessionToken(),
     });
 }
 
@@ -98,15 +106,12 @@ export function usePasswordExpiry() {
 export function useMustChangePassword() {
     return useQuery({
         queryKey: ['must-change-password'],
-        queryFn: async (): Promise<{ mustChange: boolean; reason: 'expired' | 'first_login' | null }> => {
-            const token = localStorage.getItem('auth_token');
-            const response = await axios.get(`${API_BASE}/must-change`, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+        queryFn: async (): Promise<MustChangePasswordStatus> => {
+            const response = await apiClient.get('auth/password/must-change');
             return response.data.data;
         },
         retry: false,
-        enabled: !!localStorage.getItem('auth_token'),
+        enabled: hasSessionToken(),
     });
 }
 
@@ -118,10 +123,7 @@ export function useChangePassword() {
 
     return useMutation({
         mutationFn: async (data: ChangePasswordData): Promise<void> => {
-            const token = localStorage.getItem('auth_token');
-            await axios.post(`${API_BASE}/change`, data, {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            await apiClient.post('auth/password/change', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['password-expiry'] });

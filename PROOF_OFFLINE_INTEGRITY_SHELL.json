@@ -1,0 +1,145 @@
+{
+  "feature": "OFFLINE_INTEGRITY_SHELL",
+  "verdict": "PASS",
+  "passed": 23,
+  "total": 23,
+  "gates": [
+    {
+      "id": "EAGER_LOGIN",
+      "ok": true,
+      "detail": "LoginPage static import"
+    },
+    {
+      "id": "EAGER_POS",
+      "ok": true,
+      "detail": "POSPage static import"
+    },
+    {
+      "id": "EAGER_QUICK_LOGIN",
+      "ok": true,
+      "detail": "QuickLoginScreen static import"
+    },
+    {
+      "id": "WARMUP_MOUNTED",
+      "ok": true,
+      "detail": "CriticalOfflineWarmup mounted for authenticated sessions"
+    },
+    {
+      "id": "LAZY_RETRY_USES_INTEGRITY_CODES",
+      "ok": true,
+      "detail": "lazyWithRetry maps failures to OfflineIntegrityCode"
+    },
+    {
+      "id": "BOUNDARY_OFFLINE_UI",
+      "ok": true,
+      "detail": "ErrorBoundary offline card + integrity report"
+    },
+    {
+      "id": "BOUNDARY_RESTAURANT_AWARE_RECOVERY",
+      "ok": true,
+      "detail": "ErrorBoundary recovery uses restaurant-aware home (not hard-coded /pos)"
+    },
+    {
+      "id": "RECOVERY_HOME_SSOT",
+      "ok": true,
+      "detail": "offlineRecoveryHome: restaurant → /restaurant, else /pos"
+    },
+    {
+      "id": "DOCS_SHELL_INTEGRITY",
+      "ok": true,
+      "detail": "OFFLINE_ARCHITECTURE_RULES documents shell integrity"
+    },
+    {
+      "id": "WARMUP_USES_SSOT",
+      "ok": true,
+      "detail": "warmup only when authenticated + online"
+    },
+    {
+      "id": "SW_CODE_API",
+      "ok": true,
+      "detail": "API miss logged + coded"
+    },
+    {
+      "id": "SW_CODE_STATIC",
+      "ok": true,
+      "detail": "static miss coded"
+    },
+    {
+      "id": "SW_CODE_NAV",
+      "ok": true,
+      "detail": "nav fallback coded"
+    },
+    {
+      "id": "SW_NO_SILENT_EMPTY",
+      "ok": true,
+      "detail": "no empty 503 swallow"
+    },
+    {
+      "id": "TYPED_ERROR",
+      "ok": true,
+      "detail": "OFFLINE_MODULE_LOAD name"
+    },
+    {
+      "id": "CAUSE_PRESERVED",
+      "ok": true,
+      "detail": "Error.cause attached"
+    },
+    {
+      "id": "EVENT_LOGGED",
+      "ok": true,
+      "detail": "memory integrity log has CHUNK_LOAD_OFFLINE"
+    },
+    {
+      "id": "RECOVERY_RUNTIME",
+      "ok": true,
+      "detail": "restaurant flag drives recovery path"
+    },
+    {
+      "id": "EVENT_HAS_CODE",
+      "ok": true,
+      "detail": "structured event"
+    },
+    {
+      "id": "WARM_LIST_ORDERS",
+      "ok": true,
+      "detail": "warmup covers orders/customers/products/stock/sales/restaurant/security"
+    },
+    {
+      "id": "WARM_REPORTS_FAILURE",
+      "ok": true,
+      "detail": "per-module warmup failure is reported"
+    },
+    {
+      "id": "WARM_RETURNS_SHAPE",
+      "ok": true,
+      "detail": "warmCriticalOfflineModules returns { ok, failed }"
+    },
+    {
+      "id": "WARM_EXPORT",
+      "ok": true,
+      "detail": "warmCriticalOfflineModules exported"
+    }
+  ],
+  "consistency": {
+    "eagerShell": [
+      "LoginPage",
+      "POSPage",
+      "QuickLoginScreen"
+    ],
+    "warmupModules": [
+      "orders-queue",
+      "customers",
+      "products",
+      "stock-levels",
+      "sales",
+      "restaurant-pos",
+      "security-settings"
+    ],
+    "swCodes": [
+      "OFFLINE_INTEGRITY_SW_API_MISS",
+      "OFFLINE_INTEGRITY_SW_STATIC_MISS",
+      "OFFLINE_INTEGRITY_SW_NAV_FALLBACK"
+    ]
+  },
+  "at": "2026-10-12T00:29:58.332Z"
+}

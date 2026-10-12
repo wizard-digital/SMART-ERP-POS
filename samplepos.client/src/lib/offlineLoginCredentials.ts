@@ -265,6 +265,7 @@ export function offlineCredentialsSurvivesClearTokens(keysRemoved: string[]): bo
  * forceLogout / peer LOGOUT must stop on auth recovery surfaces so
  * /login (offline password) and /quick-login (PIN) remain usable.
  * Includes `/my/quick-login` (cashier/waiter PIN setup) — same recovery family.
+ * Includes `/settings/security` so expired-password / 2FA setup is not interrupted.
  */
 export function isAuthRecoveryPath(pathname: string): boolean {
   const path = pathname || '';
@@ -272,6 +273,7 @@ export function isAuthRecoveryPath(pathname: string): boolean {
   if (path.startsWith('/platform')) return true;
   // Any quick-login surface: /quick-login, /quick-login/*, /my/quick-login
   if (/(^|\/)quick-login(\/|$)/.test(path)) return true;
+  if (path === '/settings/security') return true;
   return false;
 }
 

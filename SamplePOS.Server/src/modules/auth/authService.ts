@@ -74,7 +74,12 @@ export interface AuthResponse {
 export async function authenticateUser(
   pool: Pool,
   credentials: LoginCredentials
-): Promise<AuthResponse & { passwordExpiry?: { expired: boolean; daysUntilExpiry: number | null } }> {
+): Promise<
+  AuthResponse & {
+    passwordExpiry?: { expired: boolean; daysUntilExpiry: number | null };
+    mustChangePassword?: { mustChange: boolean; reason: 'expired' | 'first_login' | null };
+  }
+> {
   // Validate input (basic validation - TODO: restore schema validation)
   if (!credentials.email || !credentials.password) {
     throw new Error('Email and password are required');
@@ -141,8 +146,9 @@ export async function authenticateUser(
   // Successful login - reset failed attempts (must use tenant pool)
   await passwordPolicy.resetFailedLoginAttempts(user.id, pool);
 
-  // Check password expiry
+  // Check password expiry / forced change (tenant pool)
   const expiryStatus = await passwordPolicy.getPasswordExpiryStatus(user.id, pool);
+  const mustChangePassword = await passwordPolicy.mustChangePassword(user.id, pool);
 
   // Generate JWT token
   const token = generateToken(user);
@@ -159,6 +165,7 @@ export async function authenticateUser(
       expired: expiryStatus.expired,
       daysUntilExpiry: expiryStatus.daysUntilExpiry,
     },
+    mustChangePassword,
   };
 }
 

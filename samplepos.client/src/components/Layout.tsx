@@ -302,6 +302,13 @@ function LayoutChrome({ children }: LayoutProps) {
               >
                 {showLabels ? '🔑 Quick Login Setup' : '🔑'}
               </Link>
+              <Link
+                to="/settings/security"
+                className={`${showLabels ? 'w-full flex items-center gap-2' : 'w-10 justify-center flex'} mt-3 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors min-h-[var(--layout-touch-target)]`}
+                title={!showLabels && persistentNav ? 'Change password' : undefined}
+              >
+                {showLabels ? '🔒 Change password' : '🔒'}
+              </Link>
               <button
                 type="button"
                 onClick={handleLogout}

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { authenticate, authorize, generateToken } from '../../middleware/auth.js';
 import * as twoFactorService from './twoFactorService.js';
 import * as refreshTokenService from './refreshTokenService.js';
+import * as passwordPolicy from './passwordPolicyService.js';
 import { strictRateLimit } from '../../middleware/security.js';
 import logger from '../../utils/logger.js';
 import { pool as globalPool } from '../../db/pool.js';
@@ -143,6 +144,10 @@ router.post('/verify', strictRateLimit, asyncHandler(async (req, res) => {
         queryPool
     );
 
+    // Same soft-expiry payload as password login — client soft-redirects; no hard API brick.
+    const expiryStatus = await passwordPolicy.getPasswordExpiryStatus(userId, queryPool);
+    const mustChangePassword = await passwordPolicy.mustChangePassword(userId, queryPool);
+
     logger.info('2FA login verified, token issued', { userId, email: user.email });
 
     // Set refresh token as httpOnly cookie
@@ -170,6 +175,11 @@ router.post('/verify', strictRateLimit, asyncHandler(async (req, res) => {
             accessToken: tokenPair.accessToken,
             refreshToken: tokenPair.refreshToken,
             expiresIn: tokenPair.expiresIn,
+            passwordExpiry: {
+                expired: expiryStatus.expired,
+                daysUntilExpiry: expiryStatus.daysUntilExpiry,
+            },
+            mustChangePassword,
         },
         message: '2FA verification successful',
     });

@@ -1,8 +1,8 @@
 # PROOF: Offline login + PIN recovery
 
-- Date: 2026-08-16T07:49:35.591Z
+- Date: 2026-10-12T00:29:59.811Z
 - Runner: `npx vitest run src/__tests__/offline-login-and-pin.proof.test.ts`
-- Gates: 63/63 pass (0 fail)
+- Gates: 65/65 pass (0 fail)
 - Verdict: **PASS**
 
 ## Scope
@@ -22,7 +22,7 @@
 | OFF_EMAIL_CASE | PASS | cashier@shop.local |
 | OFF_MULTI | PASS | a=u-cashier-1 b=u-mgr |
 | OFF_EVICT | PASS | cache size=10 max=10 |
-| OFF_TOKEN_PREFIX | PASS | offline-session-1786866575346-54dba1f8ff |
+| OFF_TOKEN_PREFIX | PASS | offline-session-1791764999695-cc1f29a295 |
 | OFF_ISO_TOKEN_NEW | PASS | minted offline-session token |
 | OFF_ISO_NO_JWT | PASS | prior JWT stripped before login() |
 | OFF_ISO_NO_RT | PASS | prior RT stripped — prevents zombie refresh as user A |
@@ -52,6 +52,8 @@
 | PATH_QL | PASS | /quick-login |
 | PATH_QL_NEST | PASS | startsWith quick-login |
 | PATH_MY_QL | PASS | /my/quick-login PIN setup |
+| PATH_SECURITY | PASS | /settings/security password/2FA stay |
+| PATH_SETTINGS_NOT | PASS | /settings must hard-nav |
 | PATH_POS | PASS | /pos must hard-nav |
 | PATH_SALES | PASS | /sales must hard-nav |
 | FORCE_USES_RECOVERY | PASS | forceLogoutRedirect must skip redirect on recovery paths |

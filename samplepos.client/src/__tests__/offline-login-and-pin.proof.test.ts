@@ -336,6 +336,12 @@ describe('PROOF: PIN / quick-login public recovery', () => {
     gate('PATH_QL', isAuthRecoveryPath('/quick-login') === true, '/quick-login');
     gate('PATH_QL_NEST', isAuthRecoveryPath('/quick-login/device') === true, 'startsWith quick-login');
     gate('PATH_MY_QL', isAuthRecoveryPath('/my/quick-login') === true, '/my/quick-login PIN setup');
+    gate(
+      'PATH_SECURITY',
+      isAuthRecoveryPath('/settings/security') === true,
+      '/settings/security password/2FA stay',
+    );
+    gate('PATH_SETTINGS_NOT', isAuthRecoveryPath('/settings') === false, '/settings must hard-nav');
     gate('PATH_POS', isAuthRecoveryPath('/pos') === false, '/pos must hard-nav');
     gate('PATH_SALES', isAuthRecoveryPath('/sales') === false, '/sales must hard-nav');
   });
