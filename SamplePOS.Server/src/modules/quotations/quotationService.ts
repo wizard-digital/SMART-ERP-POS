@@ -41,6 +41,12 @@ import { NotFoundError, ValidationError, BusinessError, ConflictError } from '..
 import { DocumentTaxService } from '../../services/documentTaxService.js';
 import { createLogger } from '../../utils/logger.js';
 import { assertEditableQuotation, assertStatusChangeable } from './quotationGuards.js';
+import { assertSaleLineNotBelowAllocatedCost } from '../sales/saleBelowCostGuard.js';
+import {
+  allocatedCostPerSellingUnit,
+  previewProductLineAllocatedCost,
+} from '../sales/saleAllocatedCostPreview.js';
+import { Money } from '../../utils/money.js';
 
 const logger = createLogger('quotationService');
 
@@ -787,11 +793,58 @@ export const quotationService = {
         };
       });
 
+      // Same allocated-cost floor as salesService.createSale (saleAllocatedCostPreview SSOT).
+      // Quote unit_cost is not the floor.
+      const convertMultistore = await isMultistoreEnabled(client);
+      const convertSellingStoreId = convertMultistore
+        ? await warehouseSaleDeductionService.resolveSellingStoreId(client)
+        : null;
+      for (const item of saleItems) {
+        if (!item.productId || String(item.productId).startsWith('custom_')) continue;
+        const baseQty = item.uomSnapshot
+          ? new Decimal(item.uomSnapshot.baseQuantity)
+          : new Decimal(item.quantity);
+        const productCost = await client.query<{
+          min_days: string | number;
+          cost_price: string;
+          average_cost: string;
+        }>(
+          `SELECT COALESCE(p.min_days_before_expiry_sale, 0) AS min_days,
+                  COALESCE(p.cost_price, 0)::text AS cost_price,
+                  COALESCE(pv.average_cost, 0)::text AS average_cost
+             FROM products p
+             LEFT JOIN product_valuation pv ON pv.product_id = p.id
+            WHERE p.id = $1`,
+          [item.productId],
+        );
+        const minDays = parseInt(String(productCost.rows[0]?.min_days ?? '0'), 10);
+        const masterCost = Money.parseDb(String(productCost.rows[0]?.cost_price ?? '0'));
+        const averageCost = Money.parseDb(String(productCost.rows[0]?.average_cost ?? '0'));
+        const { totalCost: allocatedCost } = await previewProductLineAllocatedCost(client, {
+          productId: item.productId,
+          baseQty,
+          masterCost,
+          averageCost,
+          minDaysBeforeExpiry: minDays,
+          sellingStoreId: convertSellingStoreId,
+        });
+        const allocated = Money.toNumber(allocatedCost);
+        const costPerSelling = allocatedCostPerSellingUnit(allocatedCost, item.quantity);
+        assertSaleLineNotBelowAllocatedCost({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          lineRevenue: item.lineTotal,
+          totalAllocatedCost: allocated,
+          costPerSellingUnit: costPerSelling,
+          unitPrice: item.unitPrice,
+        });
+        item.costPrice = costPerSelling;
+        item.profit = parseFloat(new Decimal(item.lineTotal).minus(allocatedCost).toFixed(2));
+      }
+
       const totalAmount = parseFloat(quotation.total_amount);
       const totalCost = saleItems.reduce((sum, item) => {
-        if (item.uomSnapshot) {
-          return sum + item.uomSnapshot.baseUnitCost * item.uomSnapshot.baseQuantity;
-        }
         const cost = item.costPrice ? new Decimal(item.costPrice) : new Decimal(0);
         const qty = new Decimal(item.quantity);
         return sum + cost.times(qty).toNumber();
@@ -982,10 +1035,8 @@ export const quotationService = {
 
       const postedSaleItems = await salesRepository.addSaleItems(client, saleItemData);
 
-      const multistoreEnabled = await isMultistoreEnabled(client);
-      const sellingStoreId = multistoreEnabled
-        ? await warehouseSaleDeductionService.resolveSellingStoreId(client)
-        : null;
+      const multistoreEnabled = convertMultistore;
+      const sellingStoreId = convertSellingStoreId;
 
       // FEFO / multistore store deduction — base_quantity SSOT (Rule 2).
       // Movement numbers: doc_movement_number_seq only (never legacy MAX+1).

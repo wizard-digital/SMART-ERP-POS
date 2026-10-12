@@ -5,6 +5,53 @@ import { pool as globalPool } from '../../db/pool.js';
 import type pg from 'pg';
 import type { User, CreateUser, UpdateUser } from '../../../../shared/zod/user.js';
 import bcrypt from 'bcrypt';
+import { BusinessError } from '../../middleware/errorHandler.js';
+import { SYSTEM_USER_ID } from '../../utils/constants.js';
+
+/** Re-export SSOT — built-in account that owns history after a human login is removed. */
+export { SYSTEM_USER_ID };
+
+/**
+ * Rows that exist only for a login. Permanent delete removes them.
+ * Business documents (audit, treasury, reports) are not in this set.
+ */
+export const USER_DELETE_IDENTITY_TABLES = new Set([
+  'refresh_tokens',
+  'user_sessions',
+  'trusted_devices',
+  'notification_device_subscriptions',
+  'notification_user_preferences',
+  'notifications',
+  'quick_login_audit',
+  'rbac_user_roles',
+  'user_roles',
+  'user_permissions',
+]);
+
+export type UserFkReleaseAction = 'skip' | 'delete-rows' | 'set-null' | 'reassign';
+
+/** How a foreign key to users is cleared so DELETE FROM users can succeed. */
+export function userFkReleaseAction(
+  tableName: string,
+  notNull: boolean,
+  deleteAction: string,
+): UserFkReleaseAction {
+  if (deleteAction === 'c' || deleteAction === 'n') return 'skip';
+  if (USER_DELETE_IDENTITY_TABLES.has(tableName)) return 'delete-rows';
+  if (!notNull) return 'set-null';
+  return 'reassign';
+}
+
+function quoteIdent(ident: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(ident)) {
+    throw new BusinessError(
+      'Cannot delete this user because a database link uses an unexpected name.',
+      'ERR_USER_007',
+      { ident },
+    );
+  }
+  return `"${ident}"`;
+}
 
 /** Accept both Pool (normal queries) and PoolClient (inside transactions) */
 type DbClient = pg.Pool | pg.PoolClient;
@@ -227,18 +274,91 @@ export async function deleteUser(id: string, dbPool?: DbClient): Promise<boolean
   return result.rowCount !== null && result.rowCount > 0;
 }
 
+type UserFkRow = {
+  schema: string;
+  child: string;
+  col: string;
+  not_null: boolean;
+  deltype: string;
+};
+
 /**
- * Hard delete user (permanent deletion)
- * Only allowed if user has no associated data
+ * Drop login-only rows, clear optional links, and move required actor
+ * columns onto the built-in system user. Then delete the login.
+ */
+async function releaseAndDeleteUser(client: pg.PoolClient, id: string): Promise<boolean> {
+  if (id === SYSTEM_USER_ID) {
+    throw new BusinessError('The built-in system user cannot be deleted.', 'ERR_USER_007', { userId: id });
+  }
+
+  const fks = await client.query<UserFkRow>(
+    `SELECT n.nspname AS schema,
+            c.relname AS child,
+            a.attname AS col,
+            a.attnotnull AS not_null,
+            c2.confdeltype AS deltype
+       FROM pg_constraint c2
+       JOIN pg_class c ON c.oid = c2.conrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY (c2.conkey)
+      WHERE c2.contype = 'f'
+        AND c2.confrelid = 'public.users'::regclass
+        AND array_length(c2.conkey, 1) = 1`,
+  );
+
+  let systemChecked = false;
+  for (const fk of fks.rows) {
+    const action = userFkReleaseAction(fk.child, fk.not_null, fk.deltype);
+    if (action === 'skip') continue;
+    const qualified = `${quoteIdent(fk.schema)}.${quoteIdent(fk.child)}`;
+    const col = quoteIdent(fk.col);
+    if (action === 'delete-rows') {
+      await client.query(`DELETE FROM ${qualified} WHERE ${col} = $1`, [id]);
+      continue;
+    }
+    if (action === 'set-null') {
+      await client.query(`UPDATE ${qualified} SET ${col} = NULL WHERE ${col} = $1`, [id]);
+      continue;
+    }
+    if (!systemChecked) {
+      const system = await client.query(`SELECT 1 FROM users WHERE id = $1`, [SYSTEM_USER_ID]);
+      if ((system.rowCount ?? 0) === 0) {
+        throw new BusinessError(
+          'Cannot delete this user because required history has nowhere to go.',
+          'ERR_USER_007',
+          { userId: id, table: fk.child },
+        );
+      }
+      systemChecked = true;
+    }
+    await client.query(`UPDATE ${qualified} SET ${col} = $2 WHERE ${col} = $1`, [id, SYSTEM_USER_ID]);
+  }
+
+  const result = await client.query(`DELETE FROM users WHERE id = $1`, [id]);
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
+/**
+ * Hard delete user (permanent deletion).
+ * Login rows are removed. Required document actors move to the system user.
  */
 export async function hardDeleteUser(id: string, dbPool?: DbClient): Promise<boolean> {
   const pool = dbPool || globalPool;
-  const result = await pool.query(
-    `DELETE FROM users WHERE id = $1`,
-    [id]
-  );
-
-  return result.rowCount !== null && result.rowCount > 0;
+  if ('release' in pool) {
+    return releaseAndDeleteUser(pool, id);
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const deleted = await releaseAndDeleteUser(client, id);
+    await client.query('COMMIT');
+    return deleted;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**

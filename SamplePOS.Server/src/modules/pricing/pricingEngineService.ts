@@ -116,14 +116,20 @@ async function attachAllocatedIssueCost(
     const qty = new Decimal(baseQty);
     if (!qty.isFinite() || qty.lessThanOrEqualTo(0)) return price;
     try {
-        const preview = await previewFefoIssueCostForBaseQty(pool, productId, qty);
+        const minDaysRes = await pool.query<{ min_days: string }>(
+            `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days FROM products WHERE id = $1`,
+            [productId],
+        );
+        const minDaysBeforeExpiry = parseInt(minDaysRes.rows[0]?.min_days ?? '0', 10);
+        const issueOpts = { minDaysBeforeExpiry };
+        const preview = await previewFefoIssueCostForBaseQty(pool, productId, qty, 0, issueOpts);
         const covered = preview?.coveredQty;
         if (!covered || covered.lessThanOrEqualTo(0)) return price;
         const allocatedCostPerBase = Money.toNumber(Money.round(preview.totalCost.dividedBy(covered), 2));
         if (!(allocatedCostPerBase > 0)) return price;
         let allocatedLayers = price.atCostLayers;
         if (!allocatedLayers?.length) {
-            allocatedLayers = await previewFefoIssueLayers(pool, productId, qty);
+            allocatedLayers = await previewFefoIssueLayers(pool, productId, qty, 0, issueOpts);
         }
         return {
             ...price,

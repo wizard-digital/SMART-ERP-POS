@@ -13,7 +13,7 @@ import {
   assertPosSellableCoverageConsistent,
   POS_SELLABLE_TOLERANCE,
 } from './posSellableCoverage.js';
-import { assertWarehouseLayerConsistent } from '../../../services/warehouseInventoryCoupling.js';
+import { healAndAssertWarehouseLayer } from '../../../services/warehouseInventoryCoupling.js';
 import logger from '../../../utils/logger.js';
 
 export type DbConn = Pool | PoolClient;
@@ -24,14 +24,31 @@ export interface MultistoreSellableBackfillResult {
   unitsMovedMainToSelling: number;
   unitsSeededOnSelling: number;
   batchesProcessed: number;
+  batchesHealed?: number;
+  /**
+   * When softAssert is used (multistore enable), residual drift after heal is reported
+   * here instead of rolling back the enable toggle.
+   */
+  warnings?: string[];
 }
+
+export type EnsurePosSellableOptions = {
+  /**
+   * Enable path: do not throw on warehouse/POS coverage asserts.
+   * Operational repairs (scripts) keep hard fail (default).
+   */
+  softAssert?: boolean;
+};
 
 export const multistoreSellableBackfillService = {
   /**
    * Make POS catalog stock match sellable inventory_batches for this tenant.
    * Safe to re-run. Requires an open transaction when called from UnitOfWork.
    */
-  async ensurePosSellableFromBatches(conn: DbConn): Promise<MultistoreSellableBackfillResult> {
+  async ensurePosSellableFromBatches(
+    conn: DbConn,
+    options: EnsurePosSellableOptions = {},
+  ): Promise<MultistoreSellableBackfillResult> {
     await storeLocationRepository.ensureDefaultNetworkStores(conn);
 
     const selling = await storeLocationRepository.getActivePosSellingStore(conn);
@@ -46,6 +63,7 @@ export const multistoreSellableBackfillService = {
       unitsMovedMainToSelling: 0,
       unitsSeededOnSelling: 0,
       batchesProcessed: 0,
+      warnings: [],
     };
 
     const lots = await conn.query<{ id: string }>(
@@ -153,8 +171,35 @@ export const multistoreSellableBackfillService = {
       }
     }
 
-    await assertWarehouseLayerConsistent(conn as PoolClient, 'multistore-sellable-backfill');
-    await assertPosSellableCoverageConsistent(conn, 'multistore-sellable-backfill');
+    try {
+      // INV-002: snap store balances to batch economic qty, then assert (+ POS coverage).
+      const { healed } = await healAndAssertWarehouseLayer(
+        conn as PoolClient,
+        'multistore-sellable-backfill',
+      );
+      result.batchesHealed = healed;
+      await assertPosSellableCoverageConsistent(conn, 'multistore-sellable-backfill');
+    } catch (err: unknown) {
+      const raw = err instanceof Error ? err.message : String(err);
+      const message = raw.replace(/\s*Transaction rolled back\.?/i, '').trim();
+      if (!options.softAssert) {
+        throw err;
+      }
+      result.warnings = result.warnings ?? [];
+      result.warnings.push(message);
+      logger.warn(
+        'Multistore sellable backfill soft-assert: enable proceeds after heal attempt',
+        {
+          warning: message,
+          lotsCreated: result.lotsCreated,
+          balancesSeeded: result.balancesSeeded,
+          unitsMovedMainToSelling: result.unitsMovedMainToSelling,
+          unitsSeededOnSelling: result.unitsSeededOnSelling,
+          batchesProcessed: result.batchesProcessed,
+          batchesHealed: result.batchesHealed,
+        },
+      );
+    }
 
     logger.info('Multistore POS sellable backfill complete', result);
     return result;

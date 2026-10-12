@@ -5,6 +5,11 @@ import Layout from '../../components/Layout';
 import CustomerSelector from '../../components/pos/CustomerSelector';
 import { OpenRegisterDialog } from '../../components/cash-register';
 import { useCurrentSession } from '../../hooks/useCashRegister';
+import {
+  getPosSessionPolicyDefinition,
+  parsePosSessionPolicy,
+  posSessionRequiresOpenSession,
+} from '@shared/pos/posSessionPolicySsot';
 import { api } from '../../utils/api';
 import { formatCurrency } from '../../utils/currency';
 import { toast } from 'react-hot-toast';
@@ -145,8 +150,11 @@ export default function OrderPaymentPage() {
     posSessionPolicy,
     isLoading: isLoadingSession,
     isError: isSessionError,
+    refetch: refetchSession,
   } = useCurrentSession();
-  const sessionEnforced = posSessionPolicy !== 'DISABLED';
+  const sessionPolicy = parsePosSessionPolicy(posSessionPolicy);
+  const sessionPolicyDef = getPosSessionPolicyDefinition(sessionPolicy);
+  const sessionEnforced = posSessionRequiresOpenSession(sessionPolicy);
   const hasOpenRegister = !!currentSession;
   const [showOpenRegisterDialog, setShowOpenRegisterDialog] = useState(false);
 
@@ -498,9 +506,13 @@ export default function OrderPaymentPage() {
   const handleSubmitPayment = () => {
     if (!canCompleteSale || isSubmitting) return;
     // Same gate as Direct Sale POS — session policy requires an open register
-    if (sessionEnforced && !hasOpenRegister && !isSessionError) {
-      toast.error('Please open a cash register before completing this order');
-      setShowOpenRegisterDialog(true);
+    if (sessionEnforced && (isSessionError || !hasOpenRegister)) {
+      toast.error(
+        isSessionError
+          ? 'Could not verify cash register session. Sale was not posted.'
+          : 'Please open a cash register before completing this order'
+      );
+      if (!isSessionError) setShowOpenRegisterDialog(true);
       return;
     }
     setIsSubmitting(true);
@@ -971,19 +983,37 @@ export default function OrderPaymentPage() {
                   </div>
                 )}
 
-                {sessionEnforced && !isLoadingSession && !isSessionError && !hasOpenRegister && (
+                {sessionEnforced && !isLoadingSession && (isSessionError || !hasOpenRegister) && (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
-                    <p className="font-medium">Cash register required</p>
-                    <p className="text-xs text-amber-800">
-                      Open a register session before completing this queued order.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setShowOpenRegisterDialog(true)}
-                      className="w-full py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700"
-                    >
-                      Open Register
-                    </button>
+                    {isSessionError ? (
+                      <>
+                        <p className="font-medium">Could not verify register session</p>
+                        <p className="text-xs text-amber-800">
+                          Sales are blocked until the cash register session can be confirmed. The sale was not posted.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { void refetchSession(); }}
+                          className="w-full py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700"
+                        >
+                          Retry
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium">{sessionPolicyDef.cashierPromptTitle}</p>
+                        <p className="text-xs text-amber-800">
+                          {sessionPolicyDef.cashierPromptBody}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setShowOpenRegisterDialog(true)}
+                          className="w-full py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold hover:bg-amber-700"
+                        >
+                          {sessionPolicyDef.cashierPromptAction}
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -993,7 +1023,7 @@ export default function OrderPaymentPage() {
                   disabled={
                     !canCompleteSale ||
                     isSubmitting ||
-                    (sessionEnforced && !hasOpenRegister && !isSessionError)
+                    (sessionEnforced && (isSessionError || !hasOpenRegister))
                   }
                   className="w-full py-4 bg-green-600 text-white rounded-xl text-lg font-bold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >

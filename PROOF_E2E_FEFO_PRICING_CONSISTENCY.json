@@ -1,0 +1,54 @@
+{
+  "feature": "E2E_FEFO_PRICING_CONSISTENCY",
+  "verdict": "PASS",
+  "at": "2026-10-12T19:52:00.000Z",
+  "baseUrl": "http://localhost:3001",
+  "evidenceClass": "api+db-live",
+  "executed": [
+    {
+      "id": "FEFO_ALLOCATED_COST_E2E",
+      "runner": "node scripts/proof-fefo-allocated-cost-e2e-local.mjs",
+      "verdict": "PASS",
+      "passed": 6,
+      "total": 6,
+      "proven": "DB FEFO walk → POST /api/sales at floor 201 → below floor 400 BELOW_ALLOCATED_COST → apiMin equals dbFefo (1000)",
+      "artifact": "PROOF_FEFO_ALLOCATED_COST_E2E.json"
+    },
+    {
+      "id": "SALE_BELOW_COST_LIVE",
+      "runner": "npm run proof:sale-below-cost:local",
+      "verdict": "PASS",
+      "passed": 18,
+      "total": 18,
+      "proven": "Exact/above cost 201; below + walk-in blocked; BELOW_COST_BLOCKED and PRICE_EDIT audit rows"
+    },
+    {
+      "id": "POS_AT_COST_REPRICE_LIVE",
+      "runner": "npm run proof:pos-at-cost-reprice:local",
+      "verdict": "PASS",
+      "passed": 18,
+      "total": 18,
+      "proven": "Live bulk AT_COST + multi-UoM baseQuantity (CTN×24); FEFO unit 36000 vs stale catalog uom.cost"
+    },
+    {
+      "id": "POS_PRICING_GATE_LIVE",
+      "runner": "npm run proof:pos-pricing:local",
+      "verdict": "PASS",
+      "proven": "Server 59 + client 31 + split policy + reprice + layers + below-cost live packs"
+    }
+  ],
+  "notE2e": [
+    {
+      "id": "WIP_PRODUCTION_RELEVANT",
+      "runner": "node scripts/proof-wip-production-relevant.mjs",
+      "verdict": "PASS",
+      "passed": 4,
+      "total": 4,
+      "evidenceClass": "unit/structural — not browser/live tenant delete or multistore toggle"
+    },
+    {
+      "id": "AT_COST_FIFO_LAYERS_LIVE",
+      "note": "Live pack skipped multi-batch product (first FEFO batch alone covered qty 2); multi-layer blend covered by unit/Ozempic proofs, not live multi-batch sale"
+    }
+  ]
+}

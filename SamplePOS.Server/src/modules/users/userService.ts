@@ -9,8 +9,7 @@ import { UnitOfWork } from '../../db/unitOfWork.js';
 import { rbacRoleNameMapsToLegacyAdmin } from '../../../../shared/authorization/rbacAdminRole.js';
 import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 import * as notificationRepo from '../notifications/notificationRepository.js';
-
-const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
+import { SYSTEM_USER_ID } from '../../utils/constants.js';
 
 /**
  * Map RBAC role name to legacy users.role column value.
@@ -311,17 +310,9 @@ export async function deleteUser(
     throw new NotFoundError('User');
   }
 
-  // Check if user has associated data
-  const hasData = await userRepository.userHasData(id, pool);
-
   if (hardDelete) {
-    if (hasData) {
-      throw new BusinessError(
-        'Cannot permanently delete user with associated transactions. Please deactivate instead.',
-        'ERR_USER_004',
-        { userId: id, hasTransactions: true }
-      );
-    }
+    // Permanent delete releases FKs (login rows delete; required actors → system user).
+    // Do not gate on userHasData — that contradicted releaseAndDeleteUser SSOT.
     const success = await userRepository.hardDeleteUser(id, pool);
     if (!success) {
       throw new BusinessError('Failed to delete user', 'ERR_USER_005', { userId: id });

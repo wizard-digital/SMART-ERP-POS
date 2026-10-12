@@ -82,4 +82,23 @@ describe('POS session policy SSOT', () => {
     expect(pos).toContain('(!hasOpenRegister || isSessionError)');
     expect(pos).toContain('Could not verify register session');
   });
+
+  it('OrderPaymentPage matches POS: treat session fetch error as fail-closed when policy enforced', () => {
+    const orderPay = readSrc('pages/orders/OrderPaymentPage.tsx');
+    expect(orderPay).toContain('posSessionRequiresOpenSession');
+    expect(orderPay).toContain('parsePosSessionPolicy');
+    expect(orderPay).toContain('getPosSessionPolicyDefinition');
+    expect(orderPay).toContain('sessionPolicyDef.cashierPromptTitle');
+    expect(orderPay).toContain('sessionPolicyDef.cashierPromptBody');
+    expect(orderPay).toContain('sessionPolicyDef.cashierPromptAction');
+    // Fail-closed: session error blocks complete (same as POS overlay)
+    expect(orderPay).toContain('(isSessionError || !hasOpenRegister)');
+    expect(orderPay).toContain('Could not verify cash register session');
+    // Session-error UX matches POS: Retry, not Open Register
+    expect(orderPay).toContain('Could not verify register session');
+    expect(orderPay).toContain('refetchSession');
+    expect(orderPay).toContain('Retry');
+    // Must not keep the old "error means allow sale" gate
+    expect(orderPay).not.toContain('!hasOpenRegister && !isSessionError');
+  });
 });

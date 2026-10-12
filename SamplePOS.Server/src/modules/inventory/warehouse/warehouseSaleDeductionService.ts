@@ -5,10 +5,7 @@ import { Money } from '../../../utils/money.js';
 import { getBusinessDate } from '../../../utils/dateRange.js';
 import { syncProductQuantity } from '../../../utils/inventorySync.js';
 import { posProductSearchService } from './posProductSearchService.js';
-import {
-    previewMultistoreBalancesForAllocation,
-    type PosAllocationLockRow,
-} from './posAllocationLockRepository.js';
+import { previewMultistoreBalancesForAllocation } from './posAllocationLockRepository.js';
 import { storeLocationRepository } from './storeLocationRepository.js';
 import { lotService } from '../../inventory-lot/lotService.js';
 import { loadStoreSelectableLots } from '../../inventory-lot/postgresLotSelector.js';
@@ -90,13 +87,6 @@ async function insertStockMovement(
     );
 }
 
-function sumAllocationCost(rows: PosAllocationLockRow[]): Decimal {
-    return rows.reduce(
-        (sum, row) => sum.plus(new Decimal(row.quantityAvailable).times(row.costPrice)),
-        new Decimal(0),
-    );
-}
-
 export const warehouseSaleDeductionService = {
     async resolveSellingStoreId(client: PoolClient): Promise<string> {
         const storeId = await posProductSearchService.resolveActiveSellingStoreId(client);
@@ -130,32 +120,39 @@ export const warehouseSaleDeductionService = {
         }
     },
 
+    /**
+     * COGS preview at a store — same FEFO selectLots walk as deductAtStore.
+     * Shortfall is returned uncovered; saleAllocatedCostPreview pads once (SSOT).
+     */
     async previewSaleCostAtStore(
         client: PoolClient,
         storeLocationId: string,
         productId: string,
         baseQty: Decimal,
-        masterCostPerBase: Decimal,
+        _masterCostPerBase: Decimal,
     ): Promise<MultistoreSaleCostPreview> {
-        const plan = await previewMultistoreBalancesForAllocation(
-            client,
-            storeLocationId,
-            productId,
-            baseQty.toNumber(),
+        const minDaysRes = await client.query<{ min_days: string }>(
+            `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days FROM products WHERE id = $1`,
+            [productId],
         );
-
-        const covered = new Decimal(plan.allocatedQuantity);
-        const shortfall = baseQty.minus(covered);
-        let totalCost = sumAllocationCost(plan.rows);
-
-        if (shortfall.greaterThan(0.001)) {
-            totalCost = totalCost.plus(shortfall.times(masterCostPerBase));
-        }
-
+        const minDaysBeforeExpiry = parseInt(minDaysRes.rows[0]?.min_days ?? '0', 10);
+        const selectableLots = await loadStoreSelectableLots(
+            client,
+            productId,
+            storeLocationId,
+            { forUpdate: false, minDaysBeforeExpiry },
+        );
+        const plan = selectLots({
+            policy: 'FEFO',
+            lots: selectableLots,
+            quantity: baseQty.toNumber(),
+            businessDate: getBusinessDate(),
+            minDaysBeforeExpirySale: minDaysBeforeExpiry,
+        });
         return {
-            totalCost,
-            coveredQty: covered,
-            shortfall: shortfall.greaterThan(0) ? shortfall : new Decimal(0),
+            totalCost: new Decimal(plan.totalCost),
+            coveredQty: new Decimal(plan.totalAllocated),
+            shortfall: plan.shortfall > 0 ? new Decimal(plan.shortfall) : new Decimal(0),
         };
     },
 

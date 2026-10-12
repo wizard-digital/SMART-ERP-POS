@@ -1,8 +1,8 @@
 {
   "feature": "INV_POS_SELLABLE_COVERAGE",
   "verdict": "PASS",
-  "passed": 10,
-  "total": 10,
+  "passed": 11,
+  "total": 11,
   "gates": [
     {
       "id": "RESOLVE_DEFAULT_SELLING",
@@ -17,12 +17,17 @@
     {
       "id": "ENABLE_BACKFILL",
       "ok": true,
-      "detail": "Enabling multistore runs POS sellable backfill"
+      "detail": "Enabling multistore runs POS sellable backfill with softAssert"
     },
     {
       "id": "BACKFILL_MOVES_MAIN",
       "ok": true,
       "detail": "Backfill moves MAIN→SELLING and asserts INV-POS"
+    },
+    {
+      "id": "BACKFILL_SOFT_ASSERT",
+      "ok": true,
+      "detail": "softAssert reports warnings; hard path still throws"
     },
     {
       "id": "COVERAGE_REASONS",
@@ -55,5 +60,5 @@
       "detail": "Goods Receipt default destination is SELLING"
     }
   ],
-  "generatedAt": "2026-09-13T08:20:08.184Z"
+  "generatedAt": "2026-10-12T19:57:22.702Z"
 }

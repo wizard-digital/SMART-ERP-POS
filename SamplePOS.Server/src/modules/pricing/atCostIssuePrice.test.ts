@@ -28,7 +28,18 @@ describe('atCostIssuePrice', () => {
             if (sql.includes('product_uoms')) {
                 return { rows: [{ max_factor: '1' }] };
             }
-            return { rows };
+            // postgresLotSelector.loadGlobalSelectableLots needs identity columns for FEFO tie-break
+            return {
+                rows: rows.map((r, i) => ({
+                    id: r.id ?? `lot-${i + 1}`,
+                    batch_number: r.batch_number ?? `B${i + 1}`,
+                    product_id: 'product-1',
+                    received_date: r.received_date ?? '2026-01-01',
+                    created_at: r.created_at ?? '2026-01-01',
+                    expiry_date: r.expiry_date ?? null,
+                    ...r,
+                })),
+            };
         });
     }
 
@@ -58,7 +69,8 @@ describe('atCostIssuePrice', () => {
         };
 
         const result = await resolveAtCostPerBaseUnit(pool, 'product-1', 20, valuation);
-        expect(result.unitPricePerBase).toBe(118);
+        // 2350/20 = 117.5 at Money 2dp (FEFO layer total ÷ base qty)
+        expect(result.unitPricePerBase).toBe(117.5);
         expect(result.ruleName).toBe('At Cost (FIFO issue)');
     });
 
@@ -128,8 +140,26 @@ describe('atCostIssuePrice', () => {
             }
             return {
                 rows: [
-                    { remaining_quantity: '1', cost_price: '1600000' },
-                    { remaining_quantity: '2', cost_price: '1150000' },
+                    {
+                        id: 'l1',
+                        batch_number: 'A',
+                        product_id: 'ozempic',
+                        remaining_quantity: '1',
+                        cost_price: '1600000',
+                        expiry_date: null,
+                        received_date: '2026-01-01',
+                        created_at: '2026-01-01',
+                    },
+                    {
+                        id: 'l2',
+                        batch_number: 'B',
+                        product_id: 'ozempic',
+                        remaining_quantity: '2',
+                        cost_price: '1150000',
+                        expiry_date: null,
+                        received_date: '2026-01-02',
+                        created_at: '2026-01-02',
+                    },
                 ],
             };
         });
@@ -152,8 +182,26 @@ describe('atCostIssuePrice', () => {
             }
             return {
                 rows: [
-                    { remaining_quantity: '1', cost_price: '1600000' },
-                    { remaining_quantity: '2', cost_price: '1150000' },
+                    {
+                        id: 'l1',
+                        batch_number: 'A',
+                        product_id: 'ozempic',
+                        remaining_quantity: '1',
+                        cost_price: '1600000',
+                        expiry_date: null,
+                        received_date: '2026-01-01',
+                        created_at: '2026-01-01',
+                    },
+                    {
+                        id: 'l2',
+                        batch_number: 'B',
+                        product_id: 'ozempic',
+                        remaining_quantity: '2',
+                        cost_price: '1150000',
+                        expiry_date: null,
+                        received_date: '2026-01-02',
+                        created_at: '2026-01-02',
+                    },
                 ],
             };
         });
@@ -168,5 +216,31 @@ describe('atCostIssuePrice', () => {
         const result = await resolveAtCostWithLayers(pool, 'ozempic', 30, valuation);
         expect(result.unitPricePerBase).toBe(130000);
         expect(result.layers).toHaveLength(2);
+    });
+
+    it('FEFO tie-break uses lotNumber — same order as selectLots / consumeLot', async () => {
+        mockFefoOnly([
+            {
+                id: 'late',
+                batch_number: 'Z-LOT',
+                remaining_quantity: '1',
+                cost_price: '100',
+                expiry_date: '2099-06-01',
+                received_date: '2026-01-01',
+            },
+            {
+                id: 'early',
+                batch_number: 'A-LOT',
+                remaining_quantity: '1',
+                cost_price: '200',
+                expiry_date: '2099-06-01',
+                received_date: '2026-01-01',
+            },
+        ]);
+
+        const layers = await previewFefoIssueLayers(pool, 'product-1', new Decimal(1));
+        // Equal expiry+received → A-LOT before Z-LOT → cost 200 first
+        expect(layers).toHaveLength(1);
+        expect(layers[0].unitCostPerBase).toBe(200);
     });
 });

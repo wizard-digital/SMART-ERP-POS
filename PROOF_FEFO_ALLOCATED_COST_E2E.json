@@ -1,0 +1,40 @@
+{
+  "feature": "FEFO_ALLOCATED_COST_E2E",
+  "verdict": "PASS",
+  "passed": 6,
+  "total": 6,
+  "gates": [
+    {
+      "id": "LOGIN",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "id": "CASH_SESSION",
+      "ok": true,
+      "detail": "9b2a160b"
+    },
+    {
+      "id": "PRODUCT_WITH_FEFO_STOCK",
+      "ok": true,
+      "detail": "Abchlor eye drops fefoCost/1=1000"
+    },
+    {
+      "id": "SALE_AT_FEFO_FLOOR",
+      "ok": true,
+      "detail": "status=201"
+    },
+    {
+      "id": "SALE_BELOW_FEFO_BLOCKED",
+      "ok": true,
+      "detail": "status=400 code=BELOW_ALLOCATED_COST"
+    },
+    {
+      "id": "BLOCK_MIN_MATCHES_DB_FEFO",
+      "ok": true,
+      "detail": "apiMin=1000 dbFefo=1000"
+    }
+  ],
+  "evidenceClass": "api+db-live",
+  "at": "2026-10-12T19:56:57.003Z"
+}

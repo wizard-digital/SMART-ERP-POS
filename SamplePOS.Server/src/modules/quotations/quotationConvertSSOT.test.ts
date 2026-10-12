@@ -160,6 +160,24 @@ describe('quotationService.convertQuotationToSale — Sales SSOT routing (P0-A)'
     (mockClient.query as jest.Mock).mockImplementation(async (sql: unknown) => {
       const text = String(sql);
       if (text.includes("WHERE name = 'Each'")) return { rows: [{ id: 'uom-each' }] };
+      if (text.includes('min_days_before_expiry_sale') || text.includes('product_valuation')) {
+        return { rows: [{ min_days: 0, cost_price: '60', average_cost: '0' }] };
+      }
+      if (text.includes('FROM inventory_batches')) {
+        return {
+          rows: [{
+            id: 'batch-1',
+            batch_number: 'B1',
+            product_id: 'prod-uuid-1',
+            remaining_quantity: '10',
+            cost_price: '60',
+            expiry_date: '2099-01-01',
+            received_date: '2026-01-01',
+            created_at: '2026-01-01',
+          }],
+        };
+      }
+      if (text.includes('FROM product_uoms')) return { rows: [{ max_factor: '1' }] };
       if (text.includes('WHERE id = $1')) return { rows: [{ id: 'uom-base' }] };
       if (text.includes('FROM customers WHERE id = $1')) {
         return { rows: [{ credit_limit: 0, current_balance: 0 }] };
@@ -398,6 +416,44 @@ describe('quotationService.convertQuotationToSale — Sales SSOT routing (P0-A)'
 
     expect(SalesBusinessRules.validateProductActive).toHaveBeenCalledWith(mockClient, 'prod-uuid-1');
     expect(masterDataGuard.assertItemHasSellingPrice).toHaveBeenCalledWith(mockClient, 'prod-uuid-1');
+  });
+
+  it('rejects conversion when quote unit price is below FEFO allocated carrying', async () => {
+    mockQuotationRepo.getQuotationById.mockResolvedValue({
+      quotation: {
+        id: 'quote-uuid-1',
+        quote_number: 'QUOTE-2026-0001',
+        customer_id: 'cust-uuid-1',
+        customer_name: 'Test Customer',
+        fulfillment_mode: 'RETAIL',
+        valid_until: '2030-01-01',
+        subtotal: '10.00',
+        tax_amount: '0.00',
+        discount_amount: '0.00',
+        total_amount: '10.00',
+      },
+      items: [
+        {
+          product_id: 'prod-uuid-1',
+          description: 'Widget',
+          quantity: '10',
+          unit_price: '1.00',
+          unit_cost: '60.00',
+          uom_id: 'uom-base',
+          uom_name: 'Each',
+          line_total: '10.00',
+        },
+      ],
+    });
+
+    await expect(
+      quotationService.convertQuotationToSale(mockPool, 'quote-uuid-1', {
+        paymentOption: 'full',
+        depositMethod: 'CASH',
+        cashierId: 'cashier-uuid-1',
+      }),
+    ).rejects.toMatchObject({ errorCode: 'BELOW_ALLOCATED_COST' });
+    expect(mockSalesRepo.createSale).not.toHaveBeenCalled();
   });
 
   // ==========================================================================

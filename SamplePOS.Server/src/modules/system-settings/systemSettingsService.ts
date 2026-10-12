@@ -12,12 +12,14 @@ export interface MultistoreToggleResult {
     multistoreBootstrap?: {
         enabled: boolean;
         storesEnsured: boolean;
+        warnings?: string[];
         posSellableBackfill?: {
             lotsCreated: number;
             balancesSeeded: number;
             unitsMovedMainToSelling: number;
             unitsSeededOnSelling: number;
             batchesProcessed: number;
+            warnings?: string[];
         };
     };
 }
@@ -69,16 +71,23 @@ export const systemSettingsService = {
                 clearMultistoreSettingsCache();
                 if (updates.isMultistoreEnabled) {
                     await storeLocationRepository.ensureDefaultNetworkStores(client);
+                    // softAssert: residual drift after heal must not block enable (400 rollback).
                     const posSellableBackfill =
-                        await multistoreSellableBackfillService.ensurePosSellableFromBatches(client);
+                        await multistoreSellableBackfillService.ensurePosSellableFromBatches(client, {
+                            softAssert: true,
+                        });
                     multistoreBootstrap = {
                         enabled: true,
                         storesEnsured: true,
+                        warnings: posSellableBackfill.warnings?.length
+                            ? posSellableBackfill.warnings
+                            : undefined,
                         posSellableBackfill,
                     };
                     logger.info('Multistore enabled — store network + POS sellable backfill', {
                         updatedBy: userId,
                         posSellableBackfill,
+                        warnings: posSellableBackfill.warnings,
                     });
                 } else {
                     multistoreBootstrap = { enabled: false, storesEnsured: false };

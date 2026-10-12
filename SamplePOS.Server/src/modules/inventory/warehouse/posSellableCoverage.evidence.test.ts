@@ -61,14 +61,23 @@ describe('EVIDENCE — INV-POS sellable coverage SSOT', () => {
     gate(
       'ENABLE_BACKFILL',
       settings.includes('multistoreSellableBackfillService') &&
-        settings.includes('ensurePosSellableFromBatches'),
-      'Enabling multistore runs POS sellable backfill',
+        settings.includes('ensurePosSellableFromBatches') &&
+        settings.includes('softAssert: true'),
+      'Enabling multistore runs POS sellable backfill with softAssert',
     );
     gate(
       'BACKFILL_MOVES_MAIN',
       backfill.includes('moveLotQuantityBetweenStores') &&
         backfill.includes('assertPosSellableCoverageConsistent'),
       'Backfill moves MAIN→SELLING and asserts INV-POS',
+    );
+    gate(
+      'BACKFILL_SOFT_ASSERT',
+      backfill.includes('softAssert') &&
+        backfill.includes('healAndAssertWarehouseLayer') &&
+        backfill.includes('result.warnings') &&
+        /if \(!options\.softAssert\)[\s\S]{0,40}throw err/.test(backfill),
+      'softAssert reports warnings; hard path still throws',
     );
     gate(
       'COVERAGE_REASONS',

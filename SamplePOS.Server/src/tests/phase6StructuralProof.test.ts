@@ -134,11 +134,15 @@ describe('Inventory lot domain Step 8+ consumption gateway', () => {
     expect(svc).toContain('decrementMasterRemainingQuantity');
   });
 
-  it('atCostIssuePrice FEFO load uses postgresLotSelector', () => {
+  it('atCostIssuePrice FEFO load uses postgresLotSelector + selectLots', () => {
     const pricing = src('src/modules/pricing/atCostIssuePrice.ts');
+    expect(pricing).toContain('loadGlobalSelectableLots');
+    expect(pricing).toContain("policy: 'FEFO'");
+    expect(pricing).toContain('selectLots');
+    expect(pricing).not.toContain('FEFO_BATCH_QUERY');
     const fn = pricing.slice(
-      pricing.indexOf('async function loadSaleFefoBatchesForIssue'),
-      pricing.indexOf('async function loadNormalizedFefoBatches'),
+      pricing.indexOf('async function loadSelectableLotsForIssuePreview'),
+      pricing.indexOf('function allocateFefoIssue'),
     );
     expect(fn).toContain('loadGlobalSelectableLots');
     expect(fn).not.toMatch(/FROM inventory_batches[\s\S]*ORDER BY expiry_date/);
@@ -155,11 +159,13 @@ describe('Inventory lot domain Step 9 salesService migration', () => {
   it('legacy sale FEFO deduction uses LotService.consumeLot', () => {
     const svc = src('src/modules/sales/salesService.ts');
     const block = svc.slice(
-      svc.indexOf('// 2. PHYSICAL: Deduct from inventory batches using FEFO'),
+      svc.indexOf('// Map to accumulate actual FEFO batch deduction costs'),
       svc.indexOf('const trace = warehouseTraces.get(lineIdx)'),
     );
+    expect(block.length).toBeGreaterThan(100);
     expect(block).toContain('lotService.consumeLot');
     expect(block).toContain('loadGlobalSelectableLots');
+    expect(block).toContain("policy: 'FEFO'");
     expect(block).not.toMatch(/UPDATE inventory_batches[\s\S]*remaining_quantity -/);
     expect(block).not.toContain('loadSaleFefoBatchesForIssue');
   });

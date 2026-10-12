@@ -82,7 +82,7 @@ export async function loadGlobalSelectableLots(
      FROM inventory_batches
      WHERE product_id = $1 AND remaining_quantity > 0 AND status = 'ACTIVE'
        AND ${expiry.clause}
-     ORDER BY expiry_date ASC NULLS LAST, received_date ASC
+     ORDER BY expiry_date ASC NULLS LAST, received_date ASC, batch_number ASC
      ${lockSql}`,
     params,
   );

@@ -1,6 +1,10 @@
 /**
- * AT_COST unit price from the same FEFO/FIFO issue preview used for sale COGS.
- * Charge per base unit = total layer cost / base quantity (not master cost_price).
+ * AT_COST / allocated-issue cost from the same FEFO lot selection as sale deduction.
+ *
+ * Naming (do not conflate):
+ * - product_valuation.costing_method `FIFO` = use batch/layer carrying (vs AVCO/STANDARD).
+ * - Physical issue order is always SelectionPolicy `FEFO` (expiry → received → lotNumber),
+ *   matching lotService.consumeLot / salesService / warehouseSaleDeductionService.
  *
  * REGRESSION: atCostIssuePrice.test.ts + npm run test:at-cost-regression
  * CONTRACT: AT_COST_FIFO_INTEGRITY.md
@@ -9,7 +13,9 @@ import type { Pool, PoolClient } from 'pg';
 import Decimal from 'decimal.js';
 import { Money } from '../../utils/money.js';
 import logger from '../../utils/logger.js';
+import { getBusinessDate } from '../../utils/dateRange.js';
 import { loadGlobalSelectableLots } from '../inventory-lot/postgresLotSelector.js';
+import { selectLots, type SelectableLot } from '@shared/inventory-lot/index.js';
 
 export type CostingMethod = 'FIFO' | 'AVCO' | 'STANDARD';
 
@@ -20,7 +26,7 @@ export interface ProductValuationForAtCost {
     costingMethod: CostingMethod;
 }
 
-/** Same FEFO ordering as salesService physical deduction (must stay in sync). */
+/** Lot rows for issue preview — same shape after load as deduction selectors. */
 export interface SaleFefoBatchRow {
     id: string;
     remaining_quantity: string;
@@ -33,13 +39,6 @@ export interface LoadSaleFefoBatchesOptions {
     minDaysBeforeExpiry?: number;
     forUpdate?: boolean;
 }
-
-const FEFO_BATCH_QUERY = `
-    SELECT remaining_quantity, cost_price
-    FROM inventory_batches
-    WHERE product_id = $1 AND remaining_quantity > 0 AND status = 'ACTIVE'
-      AND (expiry_date IS NULL OR expiry_date > CURRENT_DATE)
-    ORDER BY expiry_date ASC NULLS LAST, received_date ASC`;
 
 const MAX_SELLING_FACTOR_QUERY = `
     SELECT COALESCE(MAX(pu.conversion_factor), 1)::text AS max_factor
@@ -110,8 +109,31 @@ async function getProductMaxSellingFactor(conn: Pool | PoolClient, productId: st
     return factor > 1 ? factor : 1;
 }
 
+function applyLegacyNormalizeToLots(
+    lots: SelectableLot[],
+    requestedBaseQty: Decimal,
+    sellingFactor: number,
+    masterCostPerBase: Decimal,
+): SelectableLot[] {
+    const normalized = normalizeLegacyFefoBatchRows(
+        lots.map((l) => ({
+            remaining_quantity: String(l.remainingQuantity),
+            cost_price: String(l.costPrice),
+        })),
+        requestedBaseQty,
+        sellingFactor,
+        masterCostPerBase,
+    );
+    return lots.map((lot, i) => ({
+        ...lot,
+        remainingQuantity: Number(normalized[i]?.remaining_quantity ?? lot.remainingQuantity),
+        costPrice: Number(normalized[i]?.cost_price ?? lot.costPrice),
+    }));
+}
+
 /**
- * Load FEFO batches for COGS preview and sale deduction — one code path for both.
+ * Load selectable lots for issue cost — same selector as sale deduction.
+ * No minDays=0 fallback (deduction has none). Order finalized by selectLots(FEFO).
  */
 export async function loadSaleFefoBatchesForIssue(
     conn: Pool | PoolClient,
@@ -121,65 +143,57 @@ export async function loadSaleFefoBatchesForIssue(
     options: LoadSaleFefoBatchesOptions = {},
 ): Promise<SaleFefoBatchRow[]> {
     const minDays = options.minDaysBeforeExpiry ?? 0;
-
-    let selectable = await loadGlobalSelectableLots(conn as PoolClient, productId, {
-        forUpdate: options.forUpdate,
-        minDaysBeforeExpiry: minDays,
-    });
-
-    if (!selectable.length && minDays > 0) {
-        selectable = await loadGlobalSelectableLots(conn as PoolClient, productId, {
-            forUpdate: options.forUpdate,
-            minDaysBeforeExpiry: 0,
-        });
-    }
-
-    const result = {
-        rows: selectable.map((lot) => ({
-            id: lot.lotId,
-            remaining_quantity: String(lot.remainingQuantity),
-            cost_price: String(lot.costPrice),
-            expiry_date: lot.expiryDate ?? null,
-        })),
-    };
-
-    const sellingFactor = await getProductMaxSellingFactor(conn, productId);
-    const normalized = normalizeLegacyFefoBatchRows(
-        result.rows.map((r) => ({
-            remaining_quantity: r.remaining_quantity,
-            cost_price: r.cost_price,
-        })),
-        requestedBaseQty,
-        sellingFactor,
-        masterCostPerBase,
-    );
-
-    return result.rows.map((r, i) => ({
-        id: r.id,
-        remaining_quantity: normalized[i]?.remaining_quantity ?? r.remaining_quantity,
-        cost_price: normalized[i]?.cost_price ?? r.cost_price,
-        expiry_date: r.expiry_date,
-    }));
-}
-
-async function loadNormalizedFefoBatches(
-    conn: Pool | PoolClient,
-    productId: string,
-    requestedBaseQty: Decimal,
-    masterCostPerBase: Decimal,
-    minDaysBeforeExpiry = 0,
-): Promise<FefoBatchRow[]> {
-    const rows = await loadSaleFefoBatchesForIssue(
+    const lots = await loadSelectableLotsForIssuePreview(
         conn,
         productId,
         requestedBaseQty,
         masterCostPerBase,
-        { minDaysBeforeExpiry, forUpdate: false },
+        { minDaysBeforeExpiry: minDays, forUpdate: options.forUpdate },
     );
-    return rows.map((r) => ({
-        remaining_quantity: r.remaining_quantity,
-        cost_price: r.cost_price,
+    return lots.map((lot) => ({
+        id: lot.lotId,
+        remaining_quantity: String(lot.remainingQuantity),
+        cost_price: String(lot.costPrice),
+        expiry_date: lot.expiryDate ?? null,
     }));
+}
+
+async function loadSelectableLotsForIssuePreview(
+    conn: Pool | PoolClient,
+    productId: string,
+    requestedBaseQty: Decimal,
+    masterCostPerBase: Decimal,
+    options: LoadSaleFefoBatchesOptions = {},
+): Promise<SelectableLot[]> {
+    const minDays = options.minDaysBeforeExpiry ?? 0;
+    const selectable = await loadGlobalSelectableLots(conn as PoolClient, productId, {
+        forUpdate: options.forUpdate,
+        minDaysBeforeExpiry: minDays,
+    });
+    const sellingFactor = await getProductMaxSellingFactor(conn, productId);
+    return applyLegacyNormalizeToLots(
+        selectable,
+        requestedBaseQty,
+        sellingFactor,
+        masterCostPerBase,
+    );
+}
+
+/**
+ * Single FEFO walk for COGS / AT_COST / below-cost — same selectLots policy as consumeLot.
+ */
+function allocateFefoIssue(
+    lots: SelectableLot[],
+    baseQty: Decimal,
+    minDaysBeforeExpiry: number,
+) {
+    return selectLots({
+        policy: 'FEFO',
+        lots,
+        quantity: baseQty.toNumber(),
+        businessDate: getBusinessDate(),
+        minDaysBeforeExpirySale: minDaysBeforeExpiry,
+    });
 }
 
 export interface FefoIssuePreview {
@@ -188,14 +202,14 @@ export interface FefoIssuePreview {
     shortfall: Decimal;
 }
 
-/** One FIFO/FEFO consumption segment at a single batch unit cost. */
+/** One FEFO consumption segment at a single batch unit cost. */
 export interface FefoIssueLayerSegment {
     baseQuantity: number;
     unitCostPerBase: number;
     totalCost: number;
 }
 
-/** Walk inventory_batches in FEFO order (same as salesService COGS preview). */
+/** Walk lots in FEFO order via selectLots (same as salesService physical deduction). */
 export async function previewFefoIssueCostForBaseQty(
     conn: Pool | PoolClient,
     productId: string,
@@ -206,35 +220,21 @@ export async function previewFefoIssueCostForBaseQty(
     const qty = baseQty instanceof Decimal ? baseQty : new Decimal(baseQty);
     const master =
       masterCostPerBase instanceof Decimal ? masterCostPerBase : new Decimal(masterCostPerBase);
-    const batchRows = await loadNormalizedFefoBatches(
-        conn,
-        productId,
-        qty,
-        master,
-        options.minDaysBeforeExpiry ?? 0,
-    );
-
-    let remainingForCost = qty;
-    let totalCost = new Decimal(0);
-
-    for (const b of batchRows) {
-        if (remainingForCost.lessThanOrEqualTo(0)) break;
-        const batchAvail = new Decimal(b.remaining_quantity);
-        const take = Decimal.min(remainingForCost, batchAvail);
-        totalCost = totalCost.plus(take.times(new Decimal(b.cost_price)));
-        remainingForCost = remainingForCost.minus(take);
-    }
-
-    const coveredQty = qty.minus(remainingForCost);
+    const minDays = options.minDaysBeforeExpiry ?? 0;
+    const lots = await loadSelectableLotsForIssuePreview(conn, productId, qty, master, {
+        minDaysBeforeExpiry: minDays,
+        forUpdate: options.forUpdate,
+    });
+    const plan = allocateFefoIssue(lots, qty, minDays);
     return {
-        totalCost,
-        coveredQty,
-        shortfall: remainingForCost.greaterThan(0) ? remainingForCost : new Decimal(0),
+        totalCost: new Decimal(plan.totalCost),
+        coveredQty: new Decimal(plan.totalAllocated),
+        shortfall: plan.shortfall > 0 ? new Decimal(plan.shortfall) : new Decimal(0),
     };
 }
 
 /**
- * FIFO/FEFO layer walk — one segment per batch cost consumed (e.g. 1@20000 + 1@18000).
+ * FEFO layer walk — one segment per batch cost consumed (e.g. 1@20000 + 1@18000).
  */
 export async function previewFefoIssueLayers(
     conn: Pool | PoolClient,
@@ -246,33 +246,19 @@ export async function previewFefoIssueLayers(
     const qty = baseQty instanceof Decimal ? baseQty : new Decimal(baseQty);
     const master =
       masterCostPerBase instanceof Decimal ? masterCostPerBase : new Decimal(masterCostPerBase);
-    const batchRows = await loadNormalizedFefoBatches(
-        conn,
-        productId,
-        qty,
-        master,
-        options.minDaysBeforeExpiry ?? 0,
-    );
-
-    const segments: FefoIssueLayerSegment[] = [];
-    let remainingForCost = qty;
-
-    for (const b of batchRows) {
-        if (remainingForCost.lessThanOrEqualTo(0)) break;
-        const batchAvail = new Decimal(b.remaining_quantity);
-        const take = Decimal.min(remainingForCost, batchAvail);
-        if (take.lessThanOrEqualTo(0)) continue;
-
-        const unitCost = new Decimal(b.cost_price);
-        segments.push({
-            baseQuantity: Money.toNumber(take),
-            unitCostPerBase: Money.toNumber(Money.round(unitCost)),
-            totalCost: Money.toNumber(Money.round(take.times(unitCost))),
-        });
-        remainingForCost = remainingForCost.minus(take);
-    }
-
-    return segments;
+    const minDays = options.minDaysBeforeExpiry ?? 0;
+    const lots = await loadSelectableLotsForIssuePreview(conn, productId, qty, master, {
+        minDaysBeforeExpiry: minDays,
+        forUpdate: options.forUpdate,
+    });
+    const plan = allocateFefoIssue(lots, qty, minDays);
+    return plan.layers.map((layer) => ({
+        baseQuantity: Money.toNumber(new Decimal(layer.quantity)),
+        unitCostPerBase: Money.toNumber(Money.round(new Decimal(layer.costPrice))),
+        totalCost: Money.toNumber(
+            Money.round(new Decimal(layer.quantity).times(layer.costPrice)),
+        ),
+    }));
 }
 
 function fallbackUnitCost(valuation: ProductValuationForAtCost): Decimal {
@@ -283,6 +269,7 @@ function fallbackUnitCost(valuation: ProductValuationForAtCost): Decimal {
 
 /**
  * Resolved AT_COST price per base unit for the requested base quantity.
+ * costing_method FIFO → FEFO layer walk; AVCO/STANDARD → average/master.
  */
 export async function resolveAtCostWithLayers(
     conn: Pool | PoolClient,
@@ -350,6 +337,7 @@ export async function resolveAtCostWithLayers(
 
     return {
         unitPricePerBase: perBase,
+        // Valuation method name (FIFO); physical walk is FEFO selectLots.
         ruleName: 'At Cost (FIFO issue)',
         layers: segments,
     };

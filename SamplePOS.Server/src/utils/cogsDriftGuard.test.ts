@@ -237,8 +237,8 @@ describe('reconcileSaleCostsToActualBatchDeduction', () => {
         expect(previewDrifts).toHaveLength(1);
         expect(previewDrifts[0].drift).toBe('10.00');
         expect(items[0].allocatedTotalCost).toBe(5210);
-        // 5210 / 3 → Money rounds per-selling unit to 1737 (UGX)
-        expect(items[0].costPrice).toBe(1737);
+        // 5210 / 3 → Money.round 2dp (UGX storage SSOT) = 1736.67 — not integer 1737
+        expect(items[0].costPrice).toBe(1736.67);
         expect(items[0].profit).toBe(990);
         expect(totalActualCost.toNumber()).toBe(5210);
 

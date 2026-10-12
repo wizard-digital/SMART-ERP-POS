@@ -1,11 +1,12 @@
 # PROOF_INV_POS_SELLABLE_COVERAGE
 
-Verdict: **PASS** (10/10)
+Verdict: **PASS** (11/11)
 
 - PASS `RESOLVE_DEFAULT_SELLING`: Implicit GR allocate prefers POS SELLING via shared resolver
 - PASS `OPENING_ALLOCATES`: Opening balance allocates to store balances under multistore
-- PASS `ENABLE_BACKFILL`: Enabling multistore runs POS sellable backfill
+- PASS `ENABLE_BACKFILL`: Enabling multistore runs POS sellable backfill with softAssert
 - PASS `BACKFILL_MOVES_MAIN`: Backfill moves MAIN→SELLING and asserts INV-POS
+- PASS `BACKFILL_SOFT_ASSERT`: softAssert reports warnings; hard path still throws
 - PASS `COVERAGE_REASONS`: INV-POS gap detector + quarantine reason + projection assert exist
 - PASS `PROJECTION_ALLOWS_QUARANTINE`: projection hard-fail is NO_LOT / SELLING_ZERO_NO_BALANCES only
 - PASS `COUPLING_WIRES_POS`: Warehouse coupling asserts POS projection gaps

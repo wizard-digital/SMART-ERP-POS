@@ -49,12 +49,15 @@ import { buildProductLineNotificationPayload } from '../notifications/businessNo
 import { assertQuoteConvertibleForPosSale } from './quoteConvertibilityGuard.js';
 import { assertSaleLineNotBelowAllocatedCost } from './saleBelowCostGuard.js';
 import {
+  allocatedCostPerSellingUnit,
+  previewProductLineAllocatedCost,
+} from './saleAllocatedCostPreview.js';
+import {
   posSessionRequiresParticipantToSell,
 } from '@shared/pos/posSessionPolicySsot.js';
 import { decideSaleSession } from '@shared/pos/posSessionEnforcement.js';
 import { recordSaleLinePriceEvent } from './salePriceAuditService.js';
 import {
-  previewFefoIssueCostForBaseQty,
   previewFefoIssueLayers,
   type ProductValuationForAtCost,
 } from '../pricing/atCostIssuePrice.js';
@@ -720,7 +723,7 @@ export const salesService = {
             itemCostDecimal = new Decimal(0);
             unitCost = 0;
           } else if (recipeLines?.length) {
-            // Phase 3: COGS preview = sum of ingredient FEFO costs
+            // Phase 3: COGS preview = sum of ingredient allocated costs (same SSOT helper)
             for (const rl of recipeLines) {
               const compVal = await client.query(
                 `SELECT COALESCE(pv.cost_price, 0) AS cost_price,
@@ -731,42 +734,22 @@ export const salesService = {
                 [rl.componentProductId],
               );
               const compMaster = Money.parseDb(String(compVal.rows[0]?.cost_price ?? '0'));
+              const compAvg = Money.parseDb(String(compVal.rows[0]?.average_cost ?? '0'));
               const compExpiry = await client.query(
                 `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days
                  FROM products WHERE id = $1`,
                 [rl.componentProductId],
               );
               const compMinDays = parseInt(compExpiry.rows[0]?.min_days ?? '0', 10);
-
-              if (multistoreEnabled && sellingStoreId) {
-                const storePreview = await warehouseSaleDeductionService.previewSaleCostAtStore(
-                  client,
-                  sellingStoreId,
-                  rl.componentProductId,
-                  rl.baseQty,
-                  compMaster,
-                );
-                itemCostDecimal = itemCostDecimal.plus(storePreview.totalCost);
-                if (storePreview.shortfall.greaterThan(0.001)) {
-                  const avgCost = Money.parseDb(String(compVal.rows[0]?.average_cost ?? '0'));
-                  const shortfallUnit = avgCost.greaterThan(0) ? avgCost : compMaster;
-                  itemCostDecimal = itemCostDecimal.plus(storePreview.shortfall.times(shortfallUnit));
-                }
-              } else {
-                const { totalCost: batchTotal, shortfall } = await previewFefoIssueCostForBaseQty(
-                  client,
-                  rl.componentProductId,
-                  rl.baseQty,
-                  compMaster,
-                  { minDaysBeforeExpiry: compMinDays },
-                );
-                itemCostDecimal = itemCostDecimal.plus(batchTotal);
-                if (shortfall.greaterThan(0.001)) {
-                  const avgCost = Money.parseDb(String(compVal.rows[0]?.average_cost ?? '0'));
-                  const shortfallUnit = avgCost.greaterThan(0) ? avgCost : compMaster;
-                  itemCostDecimal = itemCostDecimal.plus(shortfall.times(shortfallUnit));
-                }
-              }
+              const { totalCost: compTotal } = await previewProductLineAllocatedCost(client, {
+                productId: rl.componentProductId,
+                baseQty: rl.baseQty,
+                masterCost: compMaster,
+                averageCost: compAvg,
+                minDaysBeforeExpiry: compMinDays,
+                sellingStoreId: multistoreEnabled && sellingStoreId ? sellingStoreId : null,
+              });
+              itemCostDecimal = itemCostDecimal.plus(compTotal);
             }
             unitCost = baseQty.greaterThan(0)
               ? Money.toNumber(Money.round(itemCostDecimal.dividedBy(baseQty), 2))
@@ -776,63 +759,40 @@ export const salesService = {
               totalBatchCost: itemCostDecimal.toFixed(2),
               unitCostPerBase: unitCost,
             });
-          } else if (multistoreEnabled && sellingStoreId) {
-            const storePreview = await warehouseSaleDeductionService.previewSaleCostAtStore(
+          } else {
+            const { totalCost: allocatedTotal, shortfall } = await previewProductLineAllocatedCost(
               client,
-              sellingStoreId,
-              item.productId,
-              baseQty,
-              masterCostPerBase,
-            );
-            itemCostDecimal = storePreview.totalCost;
-            if (storePreview.shortfall.greaterThan(0.001)) {
-              const avgCost = Money.parseDb(productData.average_cost);
-              const costPriceDec = Money.parseDb(productData.cost_price);
-              const shortfallUnit = avgCost.greaterThan(0) ? avgCost : costPriceDec;
-              itemCostDecimal = itemCostDecimal.plus(storePreview.shortfall.times(shortfallUnit));
-              logger.warn('[COGS DRIFT RISK] Store FEFO insufficient for GL cost preview — shortfall priced at average/master', {
+              {
                 productId: item.productId,
-                productName: item.productName,
-                requestedBaseQty: baseQty.toFixed(4),
-                shortfall: storePreview.shortfall.toFixed(4),
-              });
+                baseQty,
+                masterCost: masterCostPerBase,
+                averageCost: Money.parseDb(productData.average_cost),
+                minDaysBeforeExpiry,
+                sellingStoreId: multistoreEnabled && sellingStoreId ? sellingStoreId : null,
+              },
+            );
+            itemCostDecimal = allocatedTotal;
+            if (shortfall.greaterThan(0.001)) {
+              logger.warn(
+                '[COGS DRIFT RISK] FEFO insufficient for GL cost preview — shortfall priced in allocated SSOT',
+                {
+                  productId: item.productId,
+                  productName: item.productName,
+                  requestedBaseQty: baseQty.toFixed(4),
+                  shortfall: shortfall.toFixed(4),
+                  multistore: Boolean(multistoreEnabled && sellingStoreId),
+                },
+              );
             }
             unitCost = baseQty.greaterThan(0)
               ? Money.toNumber(Money.round(itemCostDecimal.dividedBy(baseQty), 2))
               : 0;
-          } else {
-          const { totalCost: batchTotal, shortfall } = await previewFefoIssueCostForBaseQty(
-            client,
-            item.productId,
-            baseQty,
-            masterCostPerBase,
-            { minDaysBeforeExpiry },
-          );
-          itemCostDecimal = batchTotal;
-
-          if (shortfall.greaterThan(0.001)) {
-            const avgCost = Money.parseDb(productData.average_cost);
-            const costPriceDec = Money.parseDb(productData.cost_price);
-            const shortfallUnit = avgCost.greaterThan(0) ? avgCost : costPriceDec;
-            itemCostDecimal = itemCostDecimal.plus(shortfall.times(shortfallUnit));
-            logger.warn('[COGS DRIFT RISK] FEFO batches insufficient for GL cost preview — shortfall priced at average/master', {
-              productId: item.productId,
-              productName: item.productName,
-              requestedBaseQty: baseQty.toFixed(4),
-              shortfall: shortfall.toFixed(4),
+            logger.info(`Allocated FEFO cost for product ${item.productId}`, {
+              method: costingMethod,
+              baseQty: baseQty.toNumber(),
+              totalBatchCost: itemCostDecimal.toFixed(2),
+              unitCostPerBase: unitCost,
             });
-          }
-
-          unitCost = baseQty.greaterThan(0)
-            ? Money.toNumber(Money.round(itemCostDecimal.dividedBy(baseQty), 2))
-            : 0;
-
-          logger.info(`Batch-derived FEFO cost for product ${item.productId}`, {
-            method: costingMethod,
-            baseQty: baseQty.toNumber(),
-            totalBatchCost: itemCostDecimal.toFixed(2),
-            unitCostPerBase: unitCost,
-          });
           }
         } catch (error: unknown) {
           if (isServiceNoRecipe) {
@@ -853,9 +813,7 @@ export const salesService = {
         }
 
         const itemCost = itemCostDecimal;
-        const costPerSellingUnit = Money.toNumber(
-          Money.round(itemCost.dividedBy(new Decimal(item.quantity)), 2),
-        );
+        const costPerSellingUnit = allocatedCostPerSellingUnit(itemCost, item.quantity);
 
         let fefoLayersForError: Array<{ baseQuantity: number; unitCostPerBase: number; totalCost: number }> = [];
         if (!multistoreEnabled || !sellingStoreId) {
