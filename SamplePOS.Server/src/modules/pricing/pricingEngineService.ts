@@ -42,6 +42,7 @@ import type {
     UpdatePriceRule,
 } from '../../../../shared/zod/priceRules.js';
 import { getBusinessDate } from '../../utils/dateRange.js';
+import { getProductMinDaysBeforeExpirySale } from '../products/productExpirySaleDays.js';
 
 // ============================================================================
 // Engine-private cache — stores full ResolvedPrice objects
@@ -116,11 +117,7 @@ async function attachAllocatedIssueCost(
     const qty = new Decimal(baseQty);
     if (!qty.isFinite() || qty.lessThanOrEqualTo(0)) return price;
     try {
-        const minDaysRes = await pool.query<{ min_days: string }>(
-            `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days FROM products WHERE id = $1`,
-            [productId],
-        );
-        const minDaysBeforeExpiry = parseInt(minDaysRes.rows[0]?.min_days ?? '0', 10);
+        const minDaysBeforeExpiry = await getProductMinDaysBeforeExpirySale(pool, productId);
         const issueOpts = { minDaysBeforeExpiry };
         const preview = await previewFefoIssueCostForBaseQty(pool, productId, qty, 0, issueOpts);
         const covered = preview?.coveredQty;

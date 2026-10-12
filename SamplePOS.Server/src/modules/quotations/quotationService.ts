@@ -46,6 +46,8 @@ import {
   allocatedCostPerSellingUnit,
   previewProductLineAllocatedCost,
 } from '../sales/saleAllocatedCostPreview.js';
+import { getProductMinDaysBeforeExpirySale } from '../products/productExpirySaleDays.js';
+import { tableHasColumn } from '../../db/schemaColumnCache.js';
 import { Money } from '../../utils/money.js';
 
 const logger = createLogger('quotationService');
@@ -804,20 +806,32 @@ export const quotationService = {
         const baseQty = item.uomSnapshot
           ? new Decimal(item.uomSnapshot.baseQuantity)
           : new Decimal(item.quantity);
-        const productCost = await client.query<{
-          min_days: string | number;
-          cost_price: string;
-          average_cost: string;
-        }>(
-          `SELECT COALESCE(p.min_days_before_expiry_sale, 0) AS min_days,
-                  COALESCE(p.cost_price, 0)::text AS cost_price,
-                  COALESCE(pv.average_cost, 0)::text AS average_cost
-             FROM products p
-             LEFT JOIN product_valuation pv ON pv.product_id = p.id
-            WHERE p.id = $1`,
-          [item.productId],
-        );
-        const minDays = parseInt(String(productCost.rows[0]?.min_days ?? '0'), 10);
+        const minDays = await getProductMinDaysBeforeExpirySale(client, item.productId);
+        const hasValuation = await tableHasColumn(client, 'product_valuation', 'cost_price');
+        const hasProductCost = await tableHasColumn(client, 'products', 'cost_price');
+        const productCost = hasValuation
+          ? await client.query<{ cost_price: string; average_cost: string }>(
+              hasProductCost
+                ? `SELECT COALESCE(pv.cost_price, p.cost_price, 0)::text AS cost_price,
+                          COALESCE(pv.average_cost, 0)::text AS average_cost
+                     FROM products p
+                     LEFT JOIN product_valuation pv ON pv.product_id = p.id
+                    WHERE p.id = $1`
+                : `SELECT COALESCE(pv.cost_price, 0)::text AS cost_price,
+                          COALESCE(pv.average_cost, 0)::text AS average_cost
+                     FROM products p
+                     LEFT JOIN product_valuation pv ON pv.product_id = p.id
+                    WHERE p.id = $1`,
+              [item.productId],
+            )
+          : await client.query<{ cost_price: string; average_cost: string }>(
+              hasProductCost
+                ? `SELECT COALESCE(cost_price, 0)::text AS cost_price,
+                        '0'::text AS average_cost
+                   FROM products WHERE id = $1`
+                : `SELECT '0'::text AS cost_price, '0'::text AS average_cost`,
+              hasProductCost ? [item.productId] : [],
+            );
         const masterCost = Money.parseDb(String(productCost.rows[0]?.cost_price ?? '0'));
         const averageCost = Money.parseDb(String(productCost.rows[0]?.average_cost ?? '0'));
         const { totalCost: allocatedCost } = await previewProductLineAllocatedCost(client, {

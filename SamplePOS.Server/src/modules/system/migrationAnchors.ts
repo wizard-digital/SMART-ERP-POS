@@ -110,6 +110,16 @@ export function relationSatisfiesAnchor(
 export const MIGRATION_COLUMN_ANCHORS: Readonly<
     Record<string, Readonly<Record<string, readonly string[]>>>
 > = {
+    '052_pharmacy_features.sql': {
+        products: ['generic_name', 'min_days_before_expiry_sale'],
+        inventory_batches: ['is_bonus'],
+        goods_receipt_items: ['is_bonus'],
+    },
+    '637_fefo_allocated_cost_column_ssot.sql': {
+        products: ['min_days_before_expiry_sale'],
+        inventory_batches: ['status', 'received_date'],
+        product_valuation: ['cost_price', 'average_cost', 'costing_method'],
+    },
     '523_products_stock_level_columns.sql': {
         products: ['max_stock_level', 'reorder_point', 'optimal_stock_level'],
     },

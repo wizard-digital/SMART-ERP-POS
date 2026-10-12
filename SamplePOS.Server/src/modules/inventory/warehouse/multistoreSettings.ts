@@ -3,11 +3,23 @@ import { tableHasColumn } from '../../../db/schemaColumnCache.js';
 
 export type DbConn = Pool | PoolClient;
 
-let warehouseTablesExistCache: boolean | undefined;
+/** Per-database cache — never share across tenants in one Node process. */
+const warehouseTablesExistByDb = new Map<string, boolean>();
+const poolDatabaseCache = new WeakMap<object, string>();
+
+async function resolveDatabaseName(conn: DbConn): Promise<string> {
+    const cached = poolDatabaseCache.get(conn as object);
+    if (cached) return cached;
+    const result = await conn.query<{ db: string }>('SELECT current_database() AS db');
+    const name = result.rows[0]?.db || 'unknown';
+    poolDatabaseCache.set(conn as object, name);
+    return name;
+}
 
 /**
- * Returns true only when tenant has enabled multistore AND warehouse schema is present.
+ * Returns true only when THIS tenant has enabled multistore AND warehouse schema is present.
  * Defaults to false — preserves legacy single-store behaviour.
+ * SSOT: decision is always from the connection's database, never another tenant's cache.
  */
 export async function isMultistoreEnabled(conn: DbConn): Promise<boolean> {
     const hasFlagColumn = await tableHasColumn(conn, 'system_settings', 'is_multistore_enabled');
@@ -29,8 +41,10 @@ export async function isMultistoreEnabled(conn: DbConn): Promise<boolean> {
 }
 
 async function warehouseSchemaExists(conn: DbConn): Promise<boolean> {
-    if (warehouseTablesExistCache !== undefined) {
-        return warehouseTablesExistCache;
+    const db = await resolveDatabaseName(conn);
+    const cached = warehouseTablesExistByDb.get(db);
+    if (cached !== undefined) {
+        return cached;
     }
 
     const result = await conn.query<{ exists: boolean }>(
@@ -40,11 +54,12 @@ async function warehouseSchemaExists(conn: DbConn): Promise<boolean> {
          ) AS exists`,
     );
 
-    warehouseTablesExistCache = result.rows[0]?.exists === true;
-    return warehouseTablesExistCache;
+    const exists = result.rows[0]?.exists === true;
+    warehouseTablesExistByDb.set(db, exists);
+    return exists;
 }
 
 /** Test-only: reset cached warehouse schema probe */
 export function clearMultistoreSettingsCache(): void {
-    warehouseTablesExistCache = undefined;
+    warehouseTablesExistByDb.clear();
 }

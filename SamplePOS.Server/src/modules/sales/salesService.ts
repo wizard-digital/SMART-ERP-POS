@@ -89,6 +89,7 @@ import { logAction } from '../audit/auditService.js';
 import { DocumentTaxOverrideSchema, type DocumentTaxOverride } from '../../../../shared/zod/taxOverride.js';
 import { resolveSaleItemUom, type SaleItemUomSnapshot } from './saleItemBaseQuantity.js';
 import { reconcileSaleCostsToActualBatchDeduction } from '../../utils/cogsDriftGuard.js';
+import { getProductMinDaysBeforeExpirySale } from '../products/productExpirySaleDays.js';
 import {
   assertInventoryCouplingUnchanged,
   captureInventoryCoupling,
@@ -697,12 +698,10 @@ export const salesService = {
           );
         }
 
-        const expiryRuleRes = await client.query(
-          `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days
-           FROM products WHERE id = $1`,
-          [item.productId],
+        const minDaysBeforeExpiry = await getProductMinDaysBeforeExpirySale(
+          client,
+          item.productId,
         );
-        const minDaysBeforeExpiry = parseInt(expiryRuleRes.rows[0]?.min_days ?? '0', 10);
         const masterCostPerBase = Money.parseDb(productData.cost_price || '0');
 
         // Calculate actual cost from FEFO inventory batches (same source as stock movements).
@@ -735,12 +734,10 @@ export const salesService = {
               );
               const compMaster = Money.parseDb(String(compVal.rows[0]?.cost_price ?? '0'));
               const compAvg = Money.parseDb(String(compVal.rows[0]?.average_cost ?? '0'));
-              const compExpiry = await client.query(
-                `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days
-                 FROM products WHERE id = $1`,
-                [rl.componentProductId],
+              const compMinDays = await getProductMinDaysBeforeExpirySale(
+                client,
+                rl.componentProductId,
               );
-              const compMinDays = parseInt(compExpiry.rows[0]?.min_days ?? '0', 10);
               const { totalCost: compTotal } = await previewProductLineAllocatedCost(client, {
                 productId: rl.componentProductId,
                 baseQty: rl.baseQty,
@@ -1610,12 +1607,10 @@ export const salesService = {
             });
           }
 
-          const expiryRuleRes = await client.query(
-            `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days
-             FROM products WHERE id = $1`,
-            [target.productId],
+          const minDaysBeforeExpiry = await getProductMinDaysBeforeExpirySale(
+            client,
+            target.productId,
           );
-          const minDaysBeforeExpiry = parseInt(expiryRuleRes.rows[0]?.min_days ?? '0', 10);
 
           if (multistoreEnabled && sellingStoreId) {
             const deductResult = await warehouseSaleDeductionService.deductForSaleLine(client, {

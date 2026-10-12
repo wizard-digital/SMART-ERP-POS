@@ -88,8 +88,20 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(decision).toBe('copy');
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–636 MoMo/banking/targets/expense/ownership SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(636);
+  it('anchors 052/637 so FEFO columns cannot be ledger-faked', () => {
+    expect(MIGRATION_COLUMN_ANCHORS['052_pharmacy_features.sql']?.products).toContain(
+      'min_days_before_expiry_sale',
+    );
+    expect(MIGRATION_COLUMN_ANCHORS['637_fefo_allocated_cost_column_ssot.sql']?.inventory_batches).toContain(
+      'status',
+    );
+    expect(MIGRATION_COLUMN_ANCHORS['637_fefo_allocated_cost_column_ssot.sql']?.product_valuation).toContain(
+      'cost_price',
+    );
+  });
+
+  it('CURRENT_SCHEMA_VERSION matches 621–637 MoMo/banking/targets/expense/ownership/FEFO SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(637);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -150,6 +162,14 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(ownershipSql).toContain('3200 Owner Capital');
     expect(ownershipSql).toContain('Not owner capital 3200');
     expect(ownershipSql).not.toContain("WHERE \"AccountCode\" = '3200'"); // never retargets 3200 rows
+    const fefoColSql = fs.readFileSync(
+      path.join(sqlDir, '637_fefo_allocated_cost_column_ssot.sql'),
+      'utf8',
+    );
+    expect(fefoColSql).toContain('min_days_before_expiry_sale');
+    expect(fefoColSql).toContain('ADD COLUMN IF NOT EXISTS status');
+    expect(fefoColSql).toContain('product_valuation');
+    expect(fefoColSql).toContain('SELECT 637');
     const sessionSql = fs.readFileSync(path.join(sqlDir, '620_pos_session_policy_ssot.sql'), 'utf8');
     expect(sessionSql).toMatch(/pg_constraint WHERE conname = 'chk_pos_session_policy'/);
     expect(sessionSql).not.toMatch(/^ALTER TABLE system_settings\s+ADD CONSTRAINT/m);

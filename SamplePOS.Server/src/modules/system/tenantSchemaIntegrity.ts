@@ -23,7 +23,10 @@ export const CRITICAL_SCHEMA_COLUMNS: Readonly<Record<string, readonly string[]>
     'max_stock_level',
     'reorder_point',
     'optimal_stock_level',
+    'min_days_before_expiry_sale',
   ],
+  inventory_batches: ['status', 'remaining_quantity', 'cost_price', 'received_date'],
+  product_valuation: ['cost_price', 'selling_price', 'average_cost', 'costing_method'],
   quotation_items: [
     'uom_id',
     'uom_name',

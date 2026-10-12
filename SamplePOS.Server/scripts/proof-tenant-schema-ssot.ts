@@ -478,6 +478,9 @@ async function main() {
     'system_settings.pos_session_policy',
     'sales.cash_register_session_id',
     'expenses.employee_id',
+    'products.min_days_before_expiry_sale',
+    'inventory_batches.status',
+    'product_valuation.cost_price',
   ];
   const criticalCoverage = requiredCritical.every((k) =>
     Object.entries(CRITICAL_SCHEMA_COLUMNS).some(([table, cols]) =>
@@ -494,9 +497,9 @@ async function main() {
     'utf8'
   );
   const versionAligned =
-    CURRENT_SCHEMA_VERSION === 628 &&
+    CURRENT_SCHEMA_VERSION === 637 &&
     versionFile.includes('SELECT 621') &&
-    /CURRENT_SCHEMA_VERSION = 628/.test(versionConst);
+    /CURRENT_SCHEMA_VERSION = 637/.test(versionConst);
 
   const ok =
     jestResult.ok &&
@@ -549,8 +552,8 @@ async function main() {
     `| Gate | Result | Detail |`,
     `|------|--------|--------|`,
     `| Jest SSOT tests | ${jestResult.ok ? 'PASS' : 'FAIL'} | ${jestResult.passed} passed, ${jestResult.failed} failed |`,
-    `| Version 624 + 621 stamp | ${versionAligned ? 'PASS' : 'FAIL'} | const 624 and 621 stamp file |`,
-    `| Critical column coverage | ${criticalCoverage ? 'PASS' : 'FAIL'} | customer_group_id, pos_session_policy, cash_register_session_id, employee_id |`,
+    `| Version 637 + 621 stamp | ${versionAligned ? 'PASS' : 'FAIL'} | const 637 and 621 stamp file |`,
+    `| Critical column coverage | ${criticalCoverage ? 'PASS' : 'FAIL'} | customer_group_id, pos_session_policy, FEFO min_days/status/valuation, employee_id |`,
     `| Poisoned 502 ledger heal | ${poisonedHeal.ok ? 'PASS' : 'FAIL'} | drifted=${poisonedHeal.drifted502} restored=${poisonedHeal.columnRestored} |`,
     `| Complete tenants identical SSOT | ${mismatches.length === 0 && current.length > 0 ? 'PASS' : 'FAIL'} | ${current.map((s) => s.slug).join(', ') || '(none)'} |`,
     `| Fail-closed not marked verified | ${failClosed.every((s) => !s.verified) ? 'PASS' : 'FAIL'} | ${failClosed.map((s) => s.slug).join(', ') || 'none'} |`,

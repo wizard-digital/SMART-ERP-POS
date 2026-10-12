@@ -126,6 +126,7 @@
     "proof:order-at-cost-fefo": "node scripts/proof-order-at-cost-fefo.mjs",
     "proof:sale-below-cost:local": "node scripts/proof-sale-below-cost-local.mjs",
     "proof:fefo-allocated-cost:e2e": "node scripts/proof-fefo-allocated-cost-e2e-local.mjs",
+    "proof:fefo-ssot-all-tenants": "node scripts/proof-fefo-ssot-all-tenants-local.mjs",
     "proof:pos-at-cost-reprice:local": "node scripts/proof-pos-at-cost-reprice-local.mjs",
     "proof:at-cost-fifo-layers:local": "node scripts/proof-at-cost-fifo-layers-local.mjs",
     "proof:at-cost-fifo-split-policy": "node scripts/proof-at-cost-fifo-split-policy.mjs",

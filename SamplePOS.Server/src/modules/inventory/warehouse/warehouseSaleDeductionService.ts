@@ -11,6 +11,7 @@ import { lotService } from '../../inventory-lot/lotService.js';
 import { loadStoreSelectableLots } from '../../inventory-lot/postgresLotSelector.js';
 import { selectLots } from '@shared/inventory-lot/index.js';
 import { allocateNextMovementNumber } from '../../../utils/documentNumberAllocation.js';
+import { getProductMinDaysBeforeExpirySale } from '../../products/productExpirySaleDays.js';
 
 export interface MultistoreSaleDeductionResult {
     storeLocationId: string;
@@ -131,11 +132,7 @@ export const warehouseSaleDeductionService = {
         baseQty: Decimal,
         _masterCostPerBase: Decimal,
     ): Promise<MultistoreSaleCostPreview> {
-        const minDaysRes = await client.query<{ min_days: string }>(
-            `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days FROM products WHERE id = $1`,
-            [productId],
-        );
-        const minDaysBeforeExpiry = parseInt(minDaysRes.rows[0]?.min_days ?? '0', 10);
+        const minDaysBeforeExpiry = await getProductMinDaysBeforeExpirySale(client, productId);
         const selectableLots = await loadStoreSelectableLots(
             client,
             productId,
@@ -174,11 +171,10 @@ export const warehouseSaleDeductionService = {
         client: PoolClient,
         params: MultistoreStockDeductionParams,
     ): Promise<MultistoreSaleDeductionResult> {
-        const minDaysRes = await client.query<{ min_days: string }>(
-            `SELECT COALESCE(min_days_before_expiry_sale, 0) AS min_days FROM products WHERE id = $1`,
-            [params.productId],
+        const minDaysBeforeExpiry = await getProductMinDaysBeforeExpirySale(
+            client,
+            params.productId,
         );
-        const minDaysBeforeExpiry = parseInt(minDaysRes.rows[0]?.min_days ?? '0', 10);
 
         const selectableLots = await loadStoreSelectableLots(
             client,

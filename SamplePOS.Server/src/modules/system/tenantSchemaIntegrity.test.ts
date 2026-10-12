@@ -29,6 +29,16 @@ describe('tenantSchemaIntegrity', () => {
     expect(CRITICAL_SCHEMA_COLUMNS.customers).toContain('customer_group_id');
   });
 
+  it('requires FEFO / allocated-cost columns on every tenant', () => {
+    expect(CRITICAL_SCHEMA_COLUMNS.products).toContain('min_days_before_expiry_sale');
+    expect(CRITICAL_SCHEMA_COLUMNS.inventory_batches).toEqual(
+      expect.arrayContaining(['status', 'remaining_quantity', 'cost_price']),
+    );
+    expect(CRITICAL_SCHEMA_COLUMNS.product_valuation).toEqual(
+      expect.arrayContaining(['cost_price', 'average_cost', 'costing_method']),
+    );
+  });
+
   it('requires uom columns on quotation_items', () => {
     expect(CRITICAL_SCHEMA_COLUMNS.quotation_items).toEqual(
       expect.arrayContaining(['uom_id', 'uom_name'])

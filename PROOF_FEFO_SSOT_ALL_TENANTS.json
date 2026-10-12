@@ -1,0 +1,336 @@
+{
+  "feature": "FEFO_SSOT_ALL_TENANTS",
+  "verdict": "PASS",
+  "structural": {
+    "ok": true,
+    "gates": [
+      {
+        "id": "PREVIEW_USES_FEFO_ISSUE",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "ATCOST_USES_SELECTLOTS_FEFO",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "SALE_USES_SHARED_PREVIEW",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "QUOTE_USES_SHARED_PREVIEW",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "MULTISTORE_CACHE_PER_DB",
+        "ok": true,
+        "detail": "no process-global boolean cache"
+      },
+      {
+        "id": "SALE_DEDUCT_HARDCODES_FEFO",
+        "ok": true,
+        "detail": ""
+      },
+      {
+        "id": "MIN_DAYS_SSOT_HELPER",
+        "ok": true,
+        "detail": "sale/quote/deduct/pricing share lagging-schema helper"
+      }
+    ]
+  },
+  "tenants": [
+    {
+      "db": "pos_accounting_clean",
+      "ok": true,
+      "gates": [
+        {
+          "id": "DB_CONNECTED",
+          "ok": true,
+          "detail": "pos_accounting_clean"
+        },
+        {
+          "id": "HAS_INVENTORY_BATCHES",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "HAS_PRODUCT_VALUATION",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_MIN_DAYS_COLUMN",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_SYSTEM_SETTINGS",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "MULTISTORE_SELF_CONSISTENT",
+          "ok": true,
+          "detail": "enabledPath=false store_locations=true"
+        },
+        {
+          "id": "FEFO_FLOOR_SAMPLE",
+          "ok": true,
+          "detail": "SKIP no sellable batches"
+        }
+      ]
+    },
+    {
+      "db": "pos_system",
+      "ok": true,
+      "gates": [
+        {
+          "id": "DB_CONNECTED",
+          "ok": true,
+          "detail": "pos_system"
+        },
+        {
+          "id": "HAS_INVENTORY_BATCHES",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "HAS_PRODUCT_VALUATION",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_MIN_DAYS_COLUMN",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_SYSTEM_SETTINGS",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "MULTISTORE_SELF_CONSISTENT",
+          "ok": true,
+          "detail": "enabledPath=true store_locations=true"
+        },
+        {
+          "id": "FEFO_FLOOR_SAMPLE",
+          "ok": true,
+          "detail": "product=98cc5e26 cost=1000 lots=1 multistore=true minDaysCol=true statusCol=true"
+        }
+      ]
+    },
+    {
+      "db": "pos_template",
+      "ok": true,
+      "gates": [
+        {
+          "id": "DB_CONNECTED",
+          "ok": true,
+          "detail": "pos_template"
+        },
+        {
+          "id": "HAS_INVENTORY_BATCHES",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "HAS_PRODUCT_VALUATION",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_MIN_DAYS_COLUMN",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_SYSTEM_SETTINGS",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "MULTISTORE_SELF_CONSISTENT",
+          "ok": true,
+          "detail": "enabledPath=false store_locations=true"
+        },
+        {
+          "id": "FEFO_FLOOR_SAMPLE",
+          "ok": true,
+          "detail": "SKIP no sellable batches"
+        }
+      ]
+    },
+    {
+      "db": "pos_tenant_acme_store",
+      "ok": true,
+      "gates": [
+        {
+          "id": "DB_CONNECTED",
+          "ok": true,
+          "detail": "pos_tenant_acme_store"
+        },
+        {
+          "id": "HAS_INVENTORY_BATCHES",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "HAS_PRODUCT_VALUATION",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_MIN_DAYS_COLUMN",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_SYSTEM_SETTINGS",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "MULTISTORE_SELF_CONSISTENT",
+          "ok": true,
+          "detail": "enabledPath=false store_locations=true"
+        },
+        {
+          "id": "FEFO_FLOOR_SAMPLE",
+          "ok": true,
+          "detail": "SKIP no sellable batches"
+        }
+      ]
+    },
+    {
+      "db": "pos_tenant_proof_alpha_p1c9x",
+      "ok": true,
+      "gates": [
+        {
+          "id": "DB_CONNECTED",
+          "ok": true,
+          "detail": "pos_tenant_proof_alpha_p1c9x"
+        },
+        {
+          "id": "HAS_INVENTORY_BATCHES",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "HAS_PRODUCT_VALUATION",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_MIN_DAYS_COLUMN",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_SYSTEM_SETTINGS",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "MULTISTORE_SELF_CONSISTENT",
+          "ok": true,
+          "detail": "enabledPath=false store_locations=true"
+        },
+        {
+          "id": "FEFO_FLOOR_SAMPLE",
+          "ok": true,
+          "detail": "SKIP no sellable batches"
+        }
+      ]
+    },
+    {
+      "db": "pos_tenant_proof_beta_p1c9x",
+      "ok": true,
+      "gates": [
+        {
+          "id": "DB_CONNECTED",
+          "ok": true,
+          "detail": "pos_tenant_proof_beta_p1c9x"
+        },
+        {
+          "id": "HAS_INVENTORY_BATCHES",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "HAS_PRODUCT_VALUATION",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_MIN_DAYS_COLUMN",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_SYSTEM_SETTINGS",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "MULTISTORE_SELF_CONSISTENT",
+          "ok": true,
+          "detail": "enabledPath=false store_locations=true"
+        },
+        {
+          "id": "FEFO_FLOOR_SAMPLE",
+          "ok": true,
+          "detail": "SKIP no sellable batches"
+        }
+      ]
+    },
+    {
+      "db": "pos_wh_audit",
+      "ok": true,
+      "gates": [
+        {
+          "id": "DB_CONNECTED",
+          "ok": true,
+          "detail": "pos_wh_audit"
+        },
+        {
+          "id": "HAS_INVENTORY_BATCHES",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "HAS_PRODUCT_VALUATION",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_MIN_DAYS_COLUMN",
+          "ok": true,
+          "detail": "present"
+        },
+        {
+          "id": "HAS_SYSTEM_SETTINGS",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "id": "MULTISTORE_SELF_CONSISTENT",
+          "ok": true,
+          "detail": "enabledPath=true store_locations=true"
+        },
+        {
+          "id": "FEFO_FLOOR_SAMPLE",
+          "ok": true,
+          "detail": "product=98cc5e26 cost=1250 lots=3 multistore=true minDaysCol=true statusCol=true"
+        }
+      ]
+    }
+  ],
+  "passedTenants": 7,
+  "totalTenants": 7,
+  "at": "2026-10-12T20:23:10.403Z"
+}

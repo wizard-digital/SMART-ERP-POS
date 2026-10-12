@@ -1,0 +1,45 @@
+{
+  "feature": "FEFO_COLUMN_SSOT_PREDEPLOY",
+  "verdict": "PASS",
+  "deployAllowed": false,
+  "note": "Local proofs green. Deploy only after explicit user request. proof:all-tenants skipped locally (docker CLI unavailable).",
+  "schemaVersion": 637,
+  "at": "2026-10-12T20:24:30.000Z",
+  "gates": [
+    {
+      "id": "UNIT_FEFO_SCHEMA",
+      "ok": true,
+      "detail": "46/46 — drift, integrity, tenantCache, saleAllocatedCostPreview, atCostIssuePrice, quotationConvertSSOT"
+    },
+    {
+      "id": "UNIT_AT_COST_REGRESSION",
+      "ok": true,
+      "detail": "59/59 — test:at-cost-regression"
+    },
+    {
+      "id": "ALL_TENANT_FEFO_SSOT",
+      "ok": true,
+      "detail": "7/7 tenants — PROOF_FEFO_SSOT_ALL_TENANTS"
+    },
+    {
+      "id": "TENANT_SCHEMA_SSOT",
+      "ok": true,
+      "detail": "v637 all ACTIVE complete — PROOF_TENANT_SCHEMA_SSOT"
+    },
+    {
+      "id": "E2E_FEFO_ALLOCATED_COST",
+      "ok": true,
+      "detail": "6/6 API+DB live — PROOF_FEFO_ALLOCATED_COST_E2E"
+    },
+    {
+      "id": "E2E_SALE_BELOW_COST",
+      "ok": true,
+      "detail": "18/18 API+DB live — proof:sale-below-cost:local"
+    },
+    {
+      "id": "DOCKER_ALL_TENANTS_MIGRATE",
+      "ok": false,
+      "detail": "SKIP local — docker CLI not available; run on deploy host"
+    }
+  ]
+}
