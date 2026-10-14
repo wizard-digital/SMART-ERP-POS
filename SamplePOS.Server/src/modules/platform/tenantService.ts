@@ -967,9 +967,15 @@ export const tenantService = {
         {
           name: 'Sales Representative',
           desc: 'Sales operations - sales, customers, CRM, and quotations',
+          // Privileged sales corrections: Manager / Admin / Accountant only
           filter: (p) =>
-            ['sales', 'customers', 'crm', 'reports', 'quotations'].includes(p.module) ||
-            ['pos.read', 'pos.create', 'inventory.read', 'delivery.read', 'settings.read'].includes(p.key),
+            !['sales.tax_restatement', 'sales.tax_override', 'sales.reassign_customer'].includes(
+              p.key,
+            ) &&
+            (['sales', 'customers', 'crm', 'reports', 'quotations'].includes(p.module) ||
+              ['pos.read', 'pos.create', 'inventory.read', 'delivery.read', 'settings.read'].includes(
+                p.key,
+              )),
         },
         {
           name: 'HR Manager',

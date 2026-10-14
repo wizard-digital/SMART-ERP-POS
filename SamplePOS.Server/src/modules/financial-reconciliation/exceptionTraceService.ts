@@ -9,6 +9,7 @@ import { getLedgerTransactionById } from '../../repositories/accountingRepositor
 import { getFinancialLane } from './financialLaneService.js';
 import type { FinancialDomain } from './types.js';
 import { tableHasColumn } from '../../db/schemaColumnCache.js';
+import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
 
 type Db = Pool | PoolClient;
 
@@ -567,7 +568,7 @@ async function traceArCustomer(
             SELECT GREATEST(0,
                 COALESCE((SELECT SUM(i.amount_due) FROM invoices i
                   WHERE i.customer_id = $1::uuid
-                    AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+                    AND COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
                     AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
                     AND i.issue_date::DATE <= $2::date), 0)
                 - COALESCE((SELECT SUM(p.unallocated_amount) FROM ar_customer_payments p
@@ -603,7 +604,7 @@ async function traceArCustomer(
             i.status
         FROM invoices i
         WHERE i.customer_id = $1::uuid
-          AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+          AND COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
           AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
           AND ABS(COALESCE(i.amount_due, 0)) > 0.01
         ORDER BY i.issue_date DESC

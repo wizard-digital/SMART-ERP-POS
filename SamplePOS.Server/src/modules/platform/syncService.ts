@@ -37,12 +37,15 @@ const ALLOWED_COLUMNS: Record<string, Set<string>> = {
   sale_items: new Set(['id', 'sale_id', 'product_id', 'product_name', 'quantity', 'unit_price', 'cost_price', 'discount_amount', 'tax_amount', 'total_amount', 'uom_id', 'uom_conversion_factor', 'created_at']),
   customers: new Set(['id', 'name', 'email', 'phone', 'address', 'customer_group', 'credit_limit', 'balance', 'is_active', 'created_at', 'updated_at']),
   products: new Set(['id', 'product_number', 'name', 'description', 'sku', 'barcode', 'category', 'price', 'cost_price', 'stock_quantity', 'reorder_level', 'base_uom', 'track_expiry', 'is_taxable', 'tax_rate', 'product_type', 'is_active', 'created_at', 'updated_at']),
-  inventory_batches: new Set(['id', 'product_id', 'batch_number', 'expiry_date', 'quantity', 'remaining_quantity', 'cost_price', 'created_at']),
+  inventory_batches: new Set(['id', 'product_id', 'batch_number', 'expiry_date', 'quantity', 'remaining_quantity', 'cost_price', 'original_cost_price', 'created_at']),
   invoices: new Set(['id', 'invoice_number', 'sale_id', 'customer_id', 'invoice_date', 'due_date', 'subtotal', 'tax_amount', 'total_amount', 'amount_paid', 'status', 'notes', 'created_at', 'updated_at']),
   sale_payments: new Set(['id', 'sale_id', 'payment_method_id', 'amount', 'reference_number', 'notes', 'created_at']),
   stock_movements: new Set(['id', 'product_id', 'movement_type', 'quantity', 'reference_type', 'reference_id', 'batch_id', 'notes', 'created_by', 'created_at']),
   ledger_entries: new Set(['id', 'entry_date', 'account_id', 'debit', 'credit', 'description', 'reference_type', 'reference_id', 'created_by', 'created_at']),
 };
+
+/** Cloud SSOT: edge cannot overwrite lot original or carrying cost (write-down / 1300). */
+const CLOUD_OWNED_INVENTORY_COST_COLUMNS = new Set(['cost_price', 'original_cost_price']);
 
 /**
  * Sanitize a column name: must be alphanumeric + underscores only.
@@ -417,6 +420,7 @@ export const syncService = {
     const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
     const updateClauses = columns
       .filter(c => c !== 'id')
+      .filter((c) => !(tableName === 'inventory_batches' && CLOUD_OWNED_INVENTORY_COST_COLUMNS.has(c)))
       .map((col) => `${col} = EXCLUDED.${col}`)
       .join(', ');
 
@@ -444,6 +448,11 @@ export const syncService = {
 
     // Remove 'id' from SET clauses (can't update primary key)
     delete safeData.id;
+    if (tableName === 'inventory_batches') {
+      for (const col of CLOUD_OWNED_INVENTORY_COST_COLUMNS) {
+        delete safeData[col];
+      }
+    }
 
     const columns = Object.keys(safeData);
     const values = Object.values(safeData);

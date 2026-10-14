@@ -12,6 +12,7 @@ import { poItemOpenQuantitySql } from '../purchase-orders/purchaseOrderNetReceiv
 import { alignSalesComparisonBuckets } from '../../../../shared/reports/salesComparisonSsot.js';
 import { classifyExpiryUrgency } from '../../../../shared/reports/expiringItemsSsot.js';
 import { LEDGER_NET_ACTIVE_SQL } from '../../utils/ledgerNetActive.js';
+import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
 import type {
   SalesReportRow,
   SupplierCostAnalysisRow,
@@ -1438,7 +1439,7 @@ export const reportsRepository = {
     }
 
     const openItemFilter = `
-      COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+      COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
       AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
     `;
 
@@ -2931,7 +2932,7 @@ export const reportsRepository = {
       WITH open_due AS (
         SELECT i.customer_id, COALESCE(SUM(i.amount_due), 0) AS due
         FROM invoices i
-        WHERE COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+        WHERE COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
           AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
           AND i.amount_due > 0.009
         GROUP BY i.customer_id
@@ -3013,10 +3014,10 @@ export const reportsRepository = {
     const asOfDate = options.asOfDate || getBusinessDate();
     const asOfDateStr = asOfDate instanceof Date ? formatDateBusiness(asOfDate) : String(asOfDate).slice(0, 10);
 
-    // SAP/QB open-item aging: INVOICE + OPENING_BALANCE only; exclude cancelled/void/draft.
+    // SAP/QB open-item aging: AR_OPEN_DOCUMENT_TYPE_IN_SQL (includes DIST_INVOICE).
     // Unallocated AR receipts (on-account) reduce net outstanding and sit in Current.
     const openItemWhere = `
-      COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+      COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
       AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT', 'PAID')
       AND i.amount_due > 0.009
     `;

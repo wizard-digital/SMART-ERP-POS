@@ -12,6 +12,7 @@ import {
   sqlSortOrder,
   type EnterpriseListQuery,
 } from '../../utils/enterpriseListQuery.js';
+import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
 
 export type CustomerListQuery = EnterpriseListQuery;
 
@@ -25,7 +26,7 @@ export const CUSTOMER_OPEN_AR_SQL = `GREATEST(0,
         SELECT SUM(i.amount_due)
         FROM invoices i
         WHERE i.customer_id = c.id
-          AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+          AND COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
           AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
       ), 0)
       - COALESCE((
@@ -594,7 +595,7 @@ export async function getOpeningBalance(customerId: string, start: Date | string
   const res = await pool.query(
     `WITH debits AS (
        SELECT COALESCE(SUM(
-         CASE WHEN i.document_type IS NULL OR i.document_type IN ('INVOICE', 'DEBIT_NOTE', 'OPENING_BALANCE')
+         CASE WHEN i.document_type IS NULL OR i.document_type IN ('INVOICE', 'DEBIT_NOTE', 'OPENING_BALANCE', 'DIST_INVOICE')
               THEN i.total_amount ELSE 0 END
        ),0) AS amt
        FROM invoices i
@@ -645,7 +646,7 @@ export async function getStatementEntries(customerId: string, start: Date | stri
         0::numeric as credit
       FROM invoices i
       WHERE i.customer_id = $1
-        AND (i.document_type IS NULL OR i.document_type = 'INVOICE')
+        AND (i.document_type IS NULL OR i.document_type IN ('INVOICE', 'DIST_INVOICE'))
         AND i.status NOT IN ('CANCELLED', 'DRAFT')
         AND i.issue_date >= $2 AND i.issue_date < $3
     )
@@ -836,7 +837,7 @@ export async function getCustomerCenterStats(dbPool?: pg.Pool): Promise<Customer
          SELECT COUNT(*)::int
          FROM invoices i
          WHERE i.created_at >= (NOW() - INTERVAL '7 days')
-           AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE', 'CREDIT_NOTE', 'DEBIT_NOTE')
+           AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE', 'DIST_INVOICE', 'CREDIT_NOTE', 'DEBIT_NOTE')
            AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
        ) AS "recentActivityCount"
      FROM customers c`,

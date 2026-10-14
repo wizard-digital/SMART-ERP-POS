@@ -8,6 +8,7 @@ import Decimal from 'decimal.js';
 import { Money } from '../../utils/money.js';
 import logger from '../../utils/logger.js';
 import { invoiceRepository } from '../invoices/invoiceRepository.js';
+import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
 
 /** Pool or transaction client — query interface is identical. */
 export type OpenItemDbConn = Pool | PoolClient;
@@ -76,7 +77,7 @@ export async function listOpenInvoicesForCustomer(
             COALESCE(document_type, 'INVOICE') AS document_type
      FROM invoices
      WHERE customer_id = $1
-       AND COALESCE(document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+       AND COALESCE(document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
        AND status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
        AND amount_due > 0.009
      ORDER BY due_date ASC NULLS LAST, issue_date ASC`,
@@ -185,7 +186,7 @@ export async function syncCustomerBalanceFromOpenItems(
        SELECT COALESCE(SUM(amount_due), 0) AS due
        FROM invoices
        WHERE customer_id = $1
-         AND COALESCE(document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+         AND COALESCE(document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
          AND status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
      ),
      unalloc AS (
@@ -253,7 +254,7 @@ export async function assertArIntegrity(
        SELECT SUM(amount_due) AS due
        FROM invoices i
        WHERE i.customer_id = c.id
-         AND COALESCE(i.document_type, 'INVOICE') IN ('INVOICE', 'OPENING_BALANCE')
+         AND COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
          AND i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT')
      ) inv ON TRUE
      LEFT JOIN LATERAL (

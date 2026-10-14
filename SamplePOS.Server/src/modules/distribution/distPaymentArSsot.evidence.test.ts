@@ -171,6 +171,34 @@ describe('PROOF: dist payment AR SSOT', () => {
       invRepo.includes('AR_OPEN_DOCUMENT_TYPE_IN_SQL'),
       'customer invoice list uses open AR types',
     );
+    const openItem = readFileSync(
+      path.join(serverRoot, 'src/modules/ar-payments/openItemAllocationEngine.ts'),
+      'utf8',
+    );
+    gate(
+      'ALLOCATION_USES_AR_OPEN_SSOT',
+      openItem.includes('AR_OPEN_DOCUMENT_TYPE_IN_SQL') &&
+        !openItem.includes("IN ('INVOICE', 'OPENING_BALANCE')"),
+      'allocation engine uses AR open SSOT (includes DIST)',
+    );
+    const custRepo = readFileSync(
+      path.join(serverRoot, 'src/modules/customers/customerRepository.ts'),
+      'utf8',
+    );
+    gate(
+      'CUSTOMER_OPEN_AR_USES_SSOT',
+      custRepo.includes('AR_OPEN_DOCUMENT_TYPE_IN_SQL'),
+      'customer open AR SQL uses SSOT',
+    );
+    const reports = readFileSync(
+      path.join(serverRoot, 'src/modules/reports/reportsRepository.ts'),
+      'utf8',
+    );
+    gate(
+      'REPORTS_AGING_USES_AR_OPEN_SSOT',
+      reports.includes('AR_OPEN_DOCUMENT_TYPE_IN_SQL'),
+      'aging / open-item reports use AR open SSOT',
+    );
   });
 
   it('writes proof artifact', () => {
