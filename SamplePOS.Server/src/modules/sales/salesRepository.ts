@@ -39,6 +39,8 @@ export interface SaleRecord {
   quoteId?: string | null;
   createdAt: Date;
   saleDate?: string;
+  exchangeCreditApplied?: number;
+  exchangeRefundNumber?: string;
 }
 
 export interface SaleItemRecord {
@@ -616,8 +618,30 @@ export const salesRepository = {
       [id]
     );
 
+    const exchangeResult = await pool.query<{
+      refund_number: string;
+      exchange_applied_amount: string;
+    }>(
+      `SELECT refund_number, exchange_applied_amount
+         FROM sale_refunds
+        WHERE exchange_applied_sale_id = $1
+          AND refund_type = 'EXCHANGE'
+        ORDER BY updated_at DESC
+        LIMIT 1`,
+      [id],
+    );
+
+    const sale = saleResult.rows[0] as SaleRecord & Record<string, unknown>;
+    if (exchangeResult.rows[0]) {
+      const applied = Money.toNumber(Money.parseDb(exchangeResult.rows[0].exchange_applied_amount));
+      sale.exchangeCreditApplied = applied;
+      sale.exchange_credit_applied = applied;
+      sale.exchangeRefundNumber = exchangeResult.rows[0].refund_number;
+      sale.exchange_refund_number = exchangeResult.rows[0].refund_number;
+    }
+
     return {
-      sale: saleResult.rows[0],
+      sale,
       items: itemsResult.rows,
       paymentLines: paymentLinesResult.rows.length > 0 ? paymentLinesResult.rows : undefined,
     };

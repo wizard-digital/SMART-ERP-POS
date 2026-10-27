@@ -7,6 +7,7 @@ import { formatCurrency } from '../../utils/currency';
 import { useTransactionGuard, ZINDEX } from '../../hooks/useTransactionGuard';
 import type { GuardHandle } from '../../hooks/useTransactionGuard';
 import { formatSellingQuantityWithBaseHint } from '@shared/utils/sale-item-uom';
+import { projectExchangeReplacementSale } from '@shared/domain/saleDiscountSsot';
 
 type ResidualAction = 'REFUND_ORIGINAL_TENDER' | 'KEEP_VOUCHER';
 type Step = 'return' | 'replace' | 'settle' | 'done';
@@ -175,8 +176,20 @@ export function ProductExchangeModal({
     [replacements],
   );
 
-  const creditApplied = Math.min(creditTotal, replacementTotal);
-  const topUp = Math.max(0, new Decimal(replacementTotal).minus(creditApplied).toNumber());
+  const exchangeProjection = useMemo(
+    () =>
+      projectExchangeReplacementSale({
+        replacementItems: replacements.map((line) => ({
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+          lineDiscount: 0,
+        })),
+        remainingCredit: creditTotal,
+      }),
+    [replacements, creditTotal],
+  );
+  const creditApplied = replacements.length > 0 ? exchangeProjection.creditApplied : 0;
+  const topUp = replacements.length > 0 ? Math.max(0, exchangeProjection.persist.chargedTotal) : 0;
   const residual = Math.max(0, new Decimal(creditTotal).minus(creditApplied).toNumber());
 
   const searchProducts = useCallback(async (q: string) => {

@@ -24,6 +24,7 @@ import {
   type ReceiptPrintConfig,
 } from '../../lib/receiptPrintConfig';
 import { computeUomPrices } from '@shared/utils/uom-pricing';
+import { buildCheckoutDiscountPayload } from '@shared/domain/saleDiscountSsot';
 import { previewPosCartTax, saleChargeTotal, previewDocumentTax } from '@shared/utils/documentTaxPreview';
 import {
   getCachedTaxSnapshot,
@@ -648,12 +649,13 @@ export default function POSPage() {
             }
           : undefined,
         invoiceSettings,
+        exchangeCreditApplied: exchangeCredit ? input.discountAmount : undefined,
       });
       return applyReceiptPrintPresentation(base, receiptPrintConfigRef.current, {
         taxName: undefined,
       });
     },
-    [currentUser?.fullName, selectedCustomer, invoiceSettings]
+    [currentUser?.fullName, selectedCustomer, invoiceSettings, exchangeCredit]
   );
 
   /** After payment: show sale complete; auto-open print dialog when auto-print is on. */
@@ -3327,12 +3329,22 @@ export default function POSPage() {
       }
     }
 
+    const checkoutDiscounts = buildCheckoutDiscountPayload({
+      items: items.map((item) => ({
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        lineDiscount: item.discount?.amount || 0,
+      })),
+      cartDiscount: cartDiscountAmount,
+      isExchangeCredit: Boolean(exchangeCredit),
+    });
+
     const saleData = {
       customerId: resolvedCustomerId,
       quoteId: loadedQuoteId || undefined, // Pass quote ID for auto-conversion
       cashRegisterSessionId: currentSession?.id, // Link to cash register for drawer tracking
       idempotencyKey: saleIdempotencyKey,
-      lineItems: items.map((item) => {
+      lineItems: items.map((item, idx) => {
         const linePreview = previewPosCartTax(
           [
             {
@@ -3356,10 +3368,10 @@ export default function POSPage() {
           uom: item.uom,
           uomId: item.selectedUomId && !item.selectedUomId.startsWith('default-') ? item.selectedUomId : undefined,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          unitPrice: checkoutDiscounts.items[idx]?.unitPrice ?? item.unitPrice,
           costPrice: item.costPrice,
           subtotal: item.subtotal,
-          discountAmount: item.discount?.amount || undefined, // Per-item discount
+          discountAmount: checkoutDiscounts.items[idx]?.discountAmount || undefined,
           taxAmount: linePreview,
           productType: item.productType || 'inventory',
           isTaxable: item.isTaxable,
@@ -3367,7 +3379,7 @@ export default function POSPage() {
         };
       }),
       subtotal,
-      discountAmount: cartDiscountAmount,
+      discountAmount: checkoutDiscounts.discountAmount,
       taxAmount: tax,
       totalAmount: chargedTotal,
       saleDate: formattedSaleDate,
@@ -3437,10 +3449,6 @@ export default function POSPage() {
         toast.success(`Sale saved offline (${offlineId}). Will sync when online.`);
 
         // Build receipt data BEFORE clearing state so user gets a receipt
-        const itemDiscountTotalOffline = items.reduce(
-          (sum, item) => new Decimal(sum).plus(item.discount?.amount || 0).toNumber(),
-          0
-        );
         const today = new Date();
         const offlineSaleDate = getBusinessDate();
 
@@ -3449,7 +3457,7 @@ export default function POSPage() {
             saleNumber: offlineId,
             saleDate: formatReceiptDateTime(today),
             subtotal,
-            discountAmount: cartDiscountAmount + itemDiscountTotalOffline,
+            discountAmount: checkoutDiscounts.discountAmount,
             taxAmount: tax,
             totalAmount: grandTotal,
             items: items.map((item) => ({
@@ -3528,10 +3536,6 @@ export default function POSPage() {
         );
 
         // Prepare receipt data with payment lines (use finalPaymentLines which includes auto-credit)
-        const itemDiscountTotal = items.reduce(
-          (sum, item) => new Decimal(sum).plus(item.discount?.amount || 0).toNumber(),
-          0
-        );
         setReceiptData(
           makePosReceiptData({
             saleNumber: sale.saleNumber || sale.sale_number || '',
@@ -3539,7 +3543,7 @@ export default function POSPage() {
               (sale.createdAt || sale.created_at) ? new Date(sale.createdAt || sale.created_at || '') : new Date()
             ),
             subtotal,
-            discountAmount: cartDiscountAmount + itemDiscountTotal,
+            discountAmount: checkoutDiscounts.discountAmount,
             taxAmount: tax,
             totalAmount: sale.totalAmount || sale.total_amount || grandTotal,
             items: items.map((item) => ({

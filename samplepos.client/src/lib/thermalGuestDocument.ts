@@ -34,6 +34,7 @@ export type ThermalGuestDocument = DocumentCompanyBranding & {
   items: ThermalGuestLine[];
   subtotal?: number;
   discountAmount?: number;
+  discountLabel?: string;
   taxAmount?: number;
   taxName?: string;
   /** When set, these rows replace the single tax line */
@@ -204,7 +205,7 @@ export function buildThermalGuestDocumentHtml(doc: ThermalGuestDocument): string
   ${lines || '<div class="footer">No items</div>'}
   <hr/>
   ${doc.subtotal !== undefined ? `<div class="tot-row"><span>Subtotal</span><span>${fmt(doc.subtotal)}</span></div>` : ''}
-  ${doc.discountAmount && doc.discountAmount > 0 ? `<div class="tot-row"><span>Discount</span><span>-${fmt(doc.discountAmount)}</span></div>` : ''}
+  ${doc.discountAmount && doc.discountAmount > 0 ? `<div class="tot-row"><span>${escapeHtml(doc.discountLabel || 'Discount')}</span><span>-${fmt(doc.discountAmount)}</span></div>` : ''}
   ${taxBlock}
   <div class="tot-row grand"><span>TOTAL</span><span>${fmt(doc.totalAmount)}</span></div>
   ${paymentBlock}
@@ -347,6 +348,7 @@ export function receiptToThermalGuestDocument(data: {
   totalAmount: number;
   subtotal?: number;
   discountAmount?: number;
+  discountLabel?: string;
   taxAmount?: number;
   taxName?: string;
   taxRows?: Array<{ label: string; amount: number }>;
@@ -468,6 +470,7 @@ export function receiptToThermalGuestDocument(data: {
     items,
     subtotal: data.subtotal,
     discountAmount: data.discountAmount,
+    discountLabel: data.discountLabel,
     taxAmount: data.taxAmount,
     taxName: data.taxName || 'Tax',
     taxRows,

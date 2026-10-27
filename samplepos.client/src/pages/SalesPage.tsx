@@ -5,6 +5,10 @@ import { useSales, useSalesSummary, useSalesSummaryByDate, useSalesByCashier } f
 import { useAuth } from '../hooks/useAuth';
 import { shouldRestrictSalesToOwnUser, shouldLockSalesToBusinessDay } from '@shared/authorization/salesPolicy';
 import {
+  documentReductionLabel,
+  presentPersistedSaleDiscounts,
+} from '@shared/domain/saleDiscountSsot';
+import {
   AGED_SALE_RETURN_DAYS,
   canProcessAgedSaleReturn,
   agedSaleReturnDeniedMessage,
@@ -99,6 +103,10 @@ interface SaleRow {
   /** Raw snake_case aliases used defensively in modal */
   discount_amount?: number | string;
   tax_amount?: number | string;
+  exchangeCreditApplied?: number;
+  exchange_credit_applied?: number | string;
+  exchangeRefundNumber?: string;
+  exchange_refund_number?: string;
 }
 
 interface SaleItemRow {
@@ -2650,12 +2658,13 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
               ) : (
                 <div className="overflow-x-auto -mx-4 sm:mx-0">
                   {(() => {
-                    const hasAnyDiscount = items.some((item: SaleItemRow) => {
-                      const disc = parseFloat(
-                        String(item.discountAmount || item.discount_amount || 0)
-                      );
-                      return disc > 0;
-                    });
+                    const discountView = presentPersistedSaleDiscounts(
+                      {
+                        ...(sale as unknown as Record<string, unknown>),
+                        ...((saleDetails || {}) as Record<string, unknown>),
+                      },
+                      items as unknown as Array<Record<string, unknown>>,
+                    );
                     return (
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -2669,7 +2678,7 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
                             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Unit Price
                             </th>
-                            {hasAnyDiscount && (
+                            {discountView.hasLineDiscounts && (
                               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Discount
                               </th>
@@ -2682,35 +2691,10 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
                         <tbody className="bg-white divide-y divide-gray-200">
                           {items.map((item: SaleItemRow, index: number) => {
                             const quantity = parseFloat(String(item.quantity || item.qty || 0));
-                            const itemDiscount = parseFloat(
-                              String(item.discountAmount || item.discount_amount || 0)
-                            );
-                            const storedLineTotal = parseFloat(
-                              String(
-                                item.totalPrice ||
-                                  item.total_price ||
-                                  item.lineTotal ||
-                                  item.line_total ||
-                                  0,
-                              ),
-                            );
-                            const subtotal =
-                              storedLineTotal > 0
-                                ? storedLineTotal
-                                : new Decimal(quantity)
-                                    .times(
-                                      parseFloat(
-                                        String(item.unitPrice || item.unit_price || item.price || 0),
-                                      ),
-                                    )
-                                    .minus(itemDiscount)
-                                    .toNumber();
-                            const displayUnitPrice =
-                              quantity > 0
-                                ? new Decimal(subtotal).plus(itemDiscount).dividedBy(quantity).toNumber()
-                                : parseFloat(
-                                    String(item.unitPrice || item.unit_price || item.price || 0),
-                                  );
+                            const presented = discountView.lines[index];
+                            const itemDiscount = presented?.lineDiscount ?? 0;
+                            const subtotal = presented?.lineNet ?? 0;
+                            const displayUnitPrice = presented?.unitPrice ?? 0;
 
                             return (
                               <tr key={index} className="hover:bg-gray-50">
@@ -2723,7 +2707,7 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
                                 <td className="px-4 py-3 text-sm text-gray-600 text-right">
                                   {formatCurrency(displayUnitPrice)}
                                 </td>
-                                {hasAnyDiscount && (
+                                {discountView.hasLineDiscounts && (
                                   <td className="px-4 py-3 text-sm text-right">
                                     {itemDiscount > 0 ? (
                                       <span className="text-red-600 font-medium">
@@ -2752,25 +2736,16 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
             <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 mt-6">
               <div className="space-y-2">
                 {(() => {
-                  // Compute effective discount: sale-level OR sum of item-level discounts
-                  const saleDiscount = parseFloat(
-                    String(sale.discountAmount || sale.discount_amount || 0)
+                  const detailSale = {
+                    ...(sale as unknown as Record<string, unknown>),
+                    ...((saleDetails || {}) as Record<string, unknown>),
+                  };
+                  const discountView = presentPersistedSaleDiscounts(
+                    detailSale,
+                    items as unknown as Array<Record<string, unknown>>,
                   );
-                  const itemDiscountTotal =
-                    saleDiscount > 0
-                      ? 0
-                      : items.reduce((sum: number, item: SaleItemRow) => {
-                        return (
-                          sum +
-                          parseFloat(String(item.discountAmount || item.discount_amount || 0))
-                        );
-                      }, 0);
-                  const effectiveDiscount = saleDiscount > 0 ? saleDiscount : itemDiscountTotal;
-                  // Show pre-discount subtotal when there's a discount
                   const displaySubtotal =
-                    effectiveDiscount > 0
-                      ? new Decimal(sale.totalAmount || 0).plus(effectiveDiscount).toNumber()
-                      : sale.subtotal || sale.totalAmount || 0;
+                    discountView.merchandiseNet || sale.subtotal || sale.totalAmount || 0;
 
                   return (
                     <>
@@ -2778,10 +2753,19 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
                         <span>Subtotal:</span>
                         <span className="font-medium">{formatCurrency(displaySubtotal)}</span>
                       </div>
-                      {effectiveDiscount > 0 && (
+                      {discountView.hasCartDiscount && (
                         <div className="flex justify-between text-red-600">
-                          <span>Discount:</span>
-                          <span className="font-medium">-{formatCurrency(effectiveDiscount)}</span>
+                          <span>
+                            {documentReductionLabel(
+                              Number(
+                                detailSale.exchangeCreditApplied ||
+                                  detailSale.exchange_credit_applied ||
+                                  0,
+                              ) > 0.02,
+                            )}
+                            :
+                          </span>
+                          <span className="font-medium">-{formatCurrency(discountView.cartDiscount)}</span>
                         </div>
                       )}
                     </>

@@ -5,6 +5,7 @@ import Decimal from 'decimal.js';
 import { BusinessError } from '../../middleware/errorHandler.js';
 import { Money } from '../../utils/money.js';
 
+/** Net unit from a line total. FORBIDDEN as persist unit_price (that is the rung/catalog price). */
 export function deriveUnitPriceFromLineTotal(lineTotal: number, quantity: number): number {
   if (quantity <= 0) return 0;
   return Money.toNumber(Money.round(new Decimal(lineTotal).dividedBy(quantity), 2));
@@ -111,15 +112,19 @@ export function assertSaleLineEconomicsConsistent(params: {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  discountAmount?: number;
   tolerance?: number;
 }): { ok: boolean; message: string } {
   const tol = params.tolerance ?? 0.02;
-  const implied = new Decimal(params.quantity).times(params.unitPrice);
+  const lineDisc = new Decimal(params.discountAmount || 0);
+  const implied = new Decimal(params.quantity).times(params.unitPrice).minus(lineDisc);
   const stored = new Decimal(params.totalPrice);
   if (implied.minus(stored).abs().greaterThan(tol)) {
     return {
       ok: false,
-      message: `unit×qty=${implied.toFixed(2)} != total_price=${stored.toFixed(2)}`,
+      message:
+        `unit×qty−lineDisc=${implied.toFixed(2)} != total_price=${stored.toFixed(2)}` +
+        (lineDisc.greaterThan(0) ? ` (lineDisc=${lineDisc.toFixed(2)})` : ''),
     };
   }
   return { ok: true, message: 'line economics OK' };

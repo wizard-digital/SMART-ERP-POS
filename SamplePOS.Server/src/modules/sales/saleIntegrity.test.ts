@@ -43,6 +43,17 @@ describe('saleIntegrity', () => {
     ).toBe(false);
   });
 
+  it('assertSaleLineEconomicsConsistent accepts rung unit minus line markdown', () => {
+    expect(
+      assertSaleLineEconomicsConsistent({
+        quantity: 1,
+        unitPrice: 312000,
+        totalPrice: 306000,
+        discountAmount: 6000,
+      }).ok,
+    ).toBe(true);
+  });
+
   it('assertAtCostMargin rejects 4063 profit profile', () => {
     expect(
       assertAtCostMargin({ totalAmount: 4800000, totalCost: 3900000, maxMarginPct: 2 }).ok,

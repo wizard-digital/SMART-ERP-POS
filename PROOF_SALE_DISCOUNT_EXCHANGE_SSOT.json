@@ -1,0 +1,102 @@
+{
+  "title": "PROOF_SALE_DISCOUNT_EXCHANGE_SSOT",
+  "runAt": "2026-10-27T22:02:12.556Z",
+  "verdict": "PASS",
+  "identity": {
+    "unit": "rung_or_catalog",
+    "lineDiscount": "line_markdown_only",
+    "cartDiscount": "header_only",
+    "exchangeCredit": "2210 applied as cart",
+    "forbiddenUnit": "(lineNet + discount) / qty"
+  },
+  "blissCase": {
+    "catalogUnit": 306000,
+    "copiedDump": 6000,
+    "charged": 300000,
+    "inventedUnit": 312000
+  },
+  "checks": [
+    {
+      "name": "fail-312000-minus-6000-is-not-300000",
+      "ok": true,
+      "detail": {
+        "inventedUnit": 312000,
+        "oneCut": 306000,
+        "claimedCharge": 300000,
+        "persistWouldCharge": 306000,
+        "rejected": "Charged 300000.00 does not close to merchandise 312000.00 − cart 6000.00"
+      }
+    },
+    {
+      "name": "exchange-persist-306k-unit-6k-cart-300k-charge",
+      "ok": true,
+      "detail": {
+        "unit": 306000,
+        "lineDiscount": 0,
+        "lineNet": 306000,
+        "creditApplied": 6000,
+        "charged": 300000,
+        "label": "Exchange credit"
+      }
+    },
+    {
+      "name": "fail-exchange-must-not-consume-cart-plus-line",
+      "ok": true,
+      "detail": {
+        "attemptedApply": 12000,
+        "remainingCredit": 6000,
+        "rejected": "Exchange credit 12000.00 exceeds remaining 6000.00"
+      }
+    },
+    {
+      "name": "fail-copied-cart-onto-line-dump",
+      "ok": true,
+      "detail": {
+        "storedUnit": 306000,
+        "storedLineDiscount": 6000,
+        "storedLineNet": 306000,
+        "persistRejected": "Persist line net 306000 != qty×unit−lineDisc 300000",
+        "economicsRejected": "unit×qty−lineDisc=300000.00 != total_price=306000.00 (lineDisc=6000.00)"
+      }
+    },
+    {
+      "name": "historic-display-never-invents-312000",
+      "ok": true,
+      "detail": {
+        "brokenModalUnit": 312000,
+        "presentedUnit": 306000,
+        "presentedLineDiscount": 0,
+        "presentedCart": 6000,
+        "presentedTotal": 300000
+      }
+    },
+    {
+      "name": "pos-payload-cart-stays-on-header",
+      "ok": true,
+      "detail": {
+        "lineDiscountSent": 0,
+        "cartSent": 6000,
+        "exchangeCreditApplied": 6000
+      }
+    },
+    {
+      "name": "vat-modes-close",
+      "ok": true,
+      "detail": {
+        "exclusiveCharge": 108,
+        "exclusiveCartFromTotals": 10,
+        "inclusiveCartFromTotals": 10
+      }
+    },
+    {
+      "name": "pos-schema-persist-2210-close",
+      "ok": true,
+      "detail": {
+        "schemaOk": true,
+        "charged": 300000,
+        "creditTo2210": 6000,
+        "lineDiscount": 0
+      }
+    }
+  ]
+}

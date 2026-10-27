@@ -76,10 +76,13 @@ import { warehouseReturnInventoryService } from '../inventory/warehouse/warehous
 import { warehouseSaleVoidRestoreService } from '../inventory/warehouse/warehouseSaleVoidRestoreService.js';
 import { allocateNextMovementNumber } from '../../utils/documentNumberAllocation.js';
 import type { AuditContext } from '../../../../shared/types/audit.js';
+import { resolveSaleHeaderTotal, assertSaleLineEconomicsConsistent } from './saleIntegrity.js';
 import {
-  resolveSaleHeaderTotal,
-  deriveUnitPriceFromLineTotal,
-} from './saleIntegrity.js';
+  assertExchangeCreditIdentity,
+  assertSaleDiscountPersistClosed,
+  cartDiscountProfitShares,
+  projectExchangeReplacementSale,
+} from '@shared/domain/saleDiscountSsot.js';
 import {
   DocumentTaxService,
   resolveAuthoritativeTaxAmount,
@@ -895,17 +898,12 @@ export const salesService = {
         // Use the selling UoM ID resolved during conversion lookup (no extra query needed)
         const actualUomId = snapshotSellingUomId || undefined;
 
-        const storedUnitPrice =
-          item.quantity > 0
-            ? deriveUnitPriceFromLineTotal(Money.toNumber(lineTotalAfterDiscount), item.quantity)
-            : effectiveUnitPrice;
-
         itemsWithCosts.push({
           saleId: '', // Will be set after sale creation
           productId: item.productId,
           productName: item.productName,
           quantity: item.quantity,
-          unitPrice: storedUnitPrice,
+          unitPrice: effectiveUnitPrice,
           lineTotal: Money.toNumber(lineTotalAfterDiscount),
           costPrice: costPerSellingUnit,
           profit: Money.toNumber(profit),
@@ -1114,13 +1112,6 @@ export const salesService = {
       }
 
       if (input.exchangeRefundId) {
-        if (discountAmount.lessThanOrEqualTo(0)) {
-          throw new BusinessError(
-            'Exchange credit requires a matching cart discount on the replacement sale',
-            'ERR_EXCHANGE_CREDIT_002',
-            { exchangeRefundId: input.exchangeRefundId },
-          );
-        }
         const exchangeRefund = await salesRepository.getExchangeRefundForApplication(
           client,
           input.exchangeRefundId,
@@ -1132,14 +1123,21 @@ export const salesService = {
             { exchangeRefundId: input.exchangeRefundId },
           );
         }
-        const creditApplied = Money.toNumber(discountAmount);
-        const remainingCredit = exchangeRefund.remainingAmount;
-        if (creditApplied > remainingCredit + 0.01) {
-          throw new BusinessError(
-            `Exchange credit (${creditApplied.toFixed(2)}) exceeds available balance (${remainingCredit.toFixed(2)})`,
-            'ERR_EXCHANGE_CREDIT_004',
-            { exchangeRefundId: input.exchangeRefundId, creditApplied, remainingCredit },
-          );
+        const identity = assertExchangeCreditIdentity({
+          cartDiscount: Money.toNumber(discountAmount),
+          remainingCredit: exchangeRefund.remainingAmount,
+          merchandiseNet: Money.toNumber(totalAmount),
+          chargedTotal: Money.toNumber(finalTotalAmount),
+          taxAmount: Money.toNumber(taxAmount),
+        });
+        if (!identity.ok) {
+          throw new BusinessError(identity.message, 'ERR_EXCHANGE_CREDIT_IDENTITY', {
+            exchangeRefundId: input.exchangeRefundId,
+            cartDiscount: Money.toNumber(discountAmount),
+            remainingCredit: exchangeRefund.remainingAmount,
+            merchandiseNet: Money.toNumber(totalAmount),
+            chargedTotal: Money.toNumber(finalTotalAmount),
+          });
         }
       }
 
@@ -1335,6 +1333,25 @@ export const salesService = {
       );
       const totalDiscountAmount = cartDiscount.plus(lineItemDiscountTotal);
 
+      const persistClosed = assertSaleDiscountPersistClosed({
+        items: itemsWithCosts.map((item) => ({
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountAmount: item.discountAmount || 0,
+          totalPrice: item.lineTotal,
+        })),
+        cartDiscount: Money.toNumber(cartDiscount),
+        chargedTotal: Money.toNumber(actualTotalAmount),
+        taxAmount: Money.toNumber(taxAmount),
+        taxInclusive: taxDoc.taxInclusive === true,
+      });
+      if (!persistClosed.ok) {
+        throw new BusinessError(persistClosed.message, 'ERR_SALE_DISCOUNT_SSOT', {
+          cartDiscount: Money.toNumber(cartDiscount),
+          chargedTotal: Money.toNumber(actualTotalAmount),
+        });
+      }
+
       const saleData: CreateSaleData = {
         customerId: input.customerId || null,
         subtotal: input.subtotal
@@ -1401,75 +1418,49 @@ export const salesService = {
         );
       }
 
-      // ============================================================
-      // CRITICAL: DISCOUNT ALLOCATION TO ITEM-LEVEL PROFITS
-      // ============================================================
-      // Problem: lineTotal and profit were calculated BEFORE discount
-      // Fix: Proportionally allocate discount to each item's profit AND discount_amount
-      // Formula: itemDiscountShare = lineTotal * (discountAmount / subtotal)
-      //          adjustedProfit = originalProfit - itemDiscountShare
-      // The item-level discount_amount is also set so the DB trigger
-      // (fn_update_sale_totals_internal) can recalculate sale totals correctly.
-      // ============================================================
-      const discountToAllocate = new Decimal(saleData.discountAmount || 0);
+      // Cart reduces document total and line profit. It must NEVER be copied onto
+      // sale_items.discount_amount (SAP/QB header model — shared/domain/saleDiscountSsot.ts).
       const saleSubtotal = new Decimal(saleData.subtotal || 0);
-
-      if (discountToAllocate.greaterThan(0) && saleSubtotal.greaterThan(0)) {
-        const discountRatio = discountToAllocate.dividedBy(saleSubtotal);
-
-        logger.info('Allocating cart discount to items', {
-          discountAmount: discountToAllocate.toFixed(2),
-          subtotal: saleSubtotal.toFixed(2),
-          discountRatio: discountRatio.toFixed(6),
-          itemCount: itemsWithCosts.length,
+      const lineDiscountSnapshot = itemsWithCosts.map((item) =>
+        Money.toNumber(new Decimal(item.discountAmount || 0)),
+      );
+      const profitShares = cartDiscountProfitShares(
+        itemsWithCosts.map((item) => item.lineTotal),
+        Money.toNumber(cartDiscount),
+        Money.toNumber(saleSubtotal),
+      );
+      for (let i = 0; i < itemsWithCosts.length; i++) {
+        const item = itemsWithCosts[i];
+        const share = profitShares[i] || 0;
+        if (share !== 0) {
+          item.profit = Money.toNumber(new Decimal(item.profit).minus(share));
+        }
+        if (Math.abs((item.discountAmount || 0) - (lineDiscountSnapshot[i] || 0)) > 0.02) {
+          throw new BusinessError(
+            'Cart discount must not be written onto sale_items.discount_amount',
+            'ERR_SALE_DISCOUNT_SSOT',
+            {
+              productName: item.productName,
+              lineDiscount: lineDiscountSnapshot[i],
+              stored: item.discountAmount,
+            },
+          );
+        }
+        const economics = assertSaleLineEconomicsConsistent({
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: item.lineTotal,
+          discountAmount: item.discountAmount || 0,
         });
-
-        let totalDiscountAllocated = new Decimal(0);
-
-        for (let i = 0; i < itemsWithCosts.length; i++) {
-          const item = itemsWithCosts[i];
-          const itemLineTotal = new Decimal(item.lineTotal);
-
-          // Calculate this item's share of the cart discount
-          let itemDiscountShare: Decimal;
-
-          if (i === itemsWithCosts.length - 1) {
-            // Last item gets remainder to avoid rounding errors
-            itemDiscountShare = discountToAllocate.minus(totalDiscountAllocated);
-          } else {
-            itemDiscountShare = itemLineTotal.times(discountRatio);
-          }
-
-          // Adjust profit: subtract the discount share
-          const originalProfit = new Decimal(item.profit);
-          const adjustedProfit = originalProfit.minus(itemDiscountShare);
-
-          item.profit = Money.toNumber(adjustedProfit);
-
-          // Distribute cart discount to each item's discount_amount.
-          // This is the correct SAP-style approach: application layer calculates
-          // all totals, and DB only validates (trg_validate_sale_totals).
-          // Cart discount is stored at item level for accurate per-item reporting.
-          const existingItemDiscount = new Decimal(item.discountAmount || 0);
-          item.discountAmount = Money.toNumber(existingItemDiscount.plus(itemDiscountShare));
-
-          totalDiscountAllocated = totalDiscountAllocated.plus(itemDiscountShare);
-
-          logger.debug('Item adjusted for cart discount', {
+        if (!economics.ok) {
+          throw new BusinessError(economics.message, 'ERR_SALE_LINE_ECONOMICS', {
             productName: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
             lineTotal: item.lineTotal,
-            itemDiscountShare: itemDiscountShare.toFixed(2),
-            totalItemDiscount: item.discountAmount,
-            originalProfit: originalProfit.toFixed(2),
-            adjustedProfit: adjustedProfit.toFixed(2),
+            discountAmount: item.discountAmount,
           });
         }
-
-        logger.info('Cart discount allocation complete', {
-          totalDiscountAllocated: totalDiscountAllocated.toFixed(2),
-          expectedDiscount: discountToAllocate.toFixed(2),
-          allocationAccurate: totalDiscountAllocated.equals(discountToAllocate),
-        });
       }
 
       // Add sale ID to items
@@ -1788,8 +1779,8 @@ export const salesService = {
       }
 
       const saleSubtotalDec = new Decimal(sale.subtotal ?? saleData.subtotal ?? 0);
-      const saleDiscountDec = new Decimal(sale.discountAmount ?? saleData.discountAmount ?? 0);
-      const revenueBeforeTax = saleSubtotalDec.minus(saleDiscountDec);
+      // Subtotal is already net of line markdowns. Subtract cart/exchange credit only.
+      const revenueBeforeTax = saleSubtotalDec.minus(cartDiscount);
       const reconciledProfit = revenueBeforeTax.minus(exactInventoryIssueCost);
       const reconciledMargin = revenueBeforeTax.greaterThan(0)
         ? reconciledProfit.dividedBy(revenueBeforeTax).toNumber()
@@ -1879,8 +1870,8 @@ export const salesService = {
         throw buffetErr;
       }
 
-      if (input.exchangeRefundId && saleDiscountDec.greaterThan(0)) {
-        const creditApplied = Money.toNumber(saleDiscountDec);
+      if (input.exchangeRefundId && cartDiscount.greaterThan(0)) {
+        const creditApplied = Money.toNumber(cartDiscount);
         const exchangeRefund = await salesRepository.getExchangeRefundForApplication(
           client,
           input.exchangeRefundId,
@@ -4342,23 +4333,33 @@ export const salesService = {
     let replacementSale: SaleRecord | null = null;
     let cashToCustomer = 0;
 
-    // 2) Replacement sale with credit applied as discount
+    // 2) Replacement sale: 2210 credit is cart only (never a line markdown).
     if (replacementItems.length > 0) {
-      const lineSubtotal = replacementItems.reduce(
-        (sum, it) => sum.plus(new Decimal(it.unitPrice).times(it.quantity)),
-        new Decimal(0),
-      );
-      creditApplied = Math.min(
-        creditTotal,
-        Money.toNumber(Money.round(lineSubtotal, 2)),
-      );
+      const exchangeProjection = projectExchangeReplacementSale({
+        replacementItems: replacementItems.map((it) => ({
+          quantity: it.quantity,
+          unitPrice: it.unitPrice,
+          lineDiscount: 0,
+        })),
+        remainingCredit: creditTotal,
+      });
+      if (!exchangeProjection.identity.ok) {
+        throw new BusinessError(
+          exchangeProjection.identity.message,
+          'ERR_EXCHANGE_CREDIT_IDENTITY',
+          {
+            remainingCredit: creditTotal,
+            creditApplied: exchangeProjection.creditApplied,
+            merchandiseNet: exchangeProjection.persist.merchandiseNet,
+            chargedTotal: exchangeProjection.persist.chargedTotal,
+          },
+        );
+      }
+      creditApplied = exchangeProjection.creditApplied;
       const residualBeforeSale = Money.toNumber(
         Money.round(Money.subtract(Money.parseDb(creditTotal), Money.parseDb(creditApplied)), 2),
       );
-      topUpPaid = Math.max(
-        0,
-        Money.toNumber(Money.round(lineSubtotal.minus(creditApplied), 2)),
-      );
+      topUpPaid = Math.max(0, exchangeProjection.persist.chargedTotal);
 
       const paymentMethod = topUpPaid > 0.009
         ? (input.topUpPaymentMethod || 'CASH')

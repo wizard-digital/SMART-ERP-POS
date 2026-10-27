@@ -2,6 +2,10 @@ import Decimal from 'decimal.js';
 import type { ReceiptData } from './print';
 import { api } from '../utils/api';
 import { accountsForReceipt } from '@shared/utils/paymentAccountsVisibility';
+import {
+  documentReductionLabel,
+  presentPersistedSaleDiscounts,
+} from '@shared/domain/saleDiscountSsot';
 
 /** Invoice/receipt branding fields from tenant settings */
 export interface InvoiceSettingsForReceipt {
@@ -70,6 +74,8 @@ export interface SaleForReceipt {
   subtotal?: number;
   discountAmount?: number | string;
   discount_amount?: number | string;
+  exchangeCreditApplied?: number | string;
+  exchange_credit_applied?: number | string;
   taxAmount?: number | string;
   tax_amount?: number | string;
   cashierName?: string;
@@ -99,6 +105,8 @@ export interface CheckoutReceiptInput {
   saleDate?: string;
   subtotal?: number;
   discountAmount?: number;
+  discountLabel?: string;
+  exchangeCreditApplied?: number;
   taxAmount?: number;
   totalAmount: number;
   cashierName?: string;
@@ -276,17 +284,6 @@ export function invoiceSettingsToReceiptBranding(
   };
 }
 
-function computeEffectiveDiscount(sale: SaleForReceipt): number {
-  const saleDisc = Number(pickNumber(sale.discountAmount, sale.discount_amount) ?? 0);
-  if (saleDisc > 0) {
-    return saleDisc;
-  }
-
-  return (sale.items || []).reduce((sum, item) => {
-    return sum + parseFloat(String(item.discountAmount || item.discount_amount || 0));
-  }, 0);
-}
-
 function resolveSaleDate(sale: SaleForReceipt): string {
   const raw = sale.createdAt || sale.created_at || sale.saleDate || sale.sale_date;
   if (raw) {
@@ -304,7 +301,11 @@ export function buildReceiptDataFromSale(
   invoiceSettings?: InvoiceSettingsForReceipt | null,
   options?: { isReprint?: boolean }
 ): ReceiptData {
-  const effectiveDisc = computeEffectiveDiscount(sale);
+  const discountView = presentPersistedSaleDiscounts(
+    sale as unknown as Record<string, unknown>,
+    (sale.items || []) as unknown as Array<Record<string, unknown>>,
+  );
+  const effectiveDisc = discountView.cartDiscount;
   const totalAmount = pickNumber(sale.totalAmount, sale.total_amount) ?? 0;
   const changeAmount = Number(pickNumber(sale.changeAmount, sale.change_amount) ?? 0);
   const customer = resolveReceiptCustomerFields(sale);
@@ -315,10 +316,15 @@ export function buildReceiptDataFromSale(
     saleDate: resolveSaleDate(sale),
     totalAmount,
     subtotal:
-      effectiveDisc > 0
-        ? new Decimal(totalAmount).plus(effectiveDisc).toNumber()
-        : pickNumber(sale.subtotal),
+      discountView.merchandiseNet > 0
+        ? discountView.merchandiseNet
+        : effectiveDisc > 0
+          ? new Decimal(totalAmount).plus(effectiveDisc).toNumber()
+          : pickNumber(sale.subtotal),
     discountAmount: effectiveDisc > 0 ? effectiveDisc : undefined,
+    discountLabel: documentReductionLabel(
+      Number(pickNumber(sale.exchangeCreditApplied, sale.exchange_credit_applied) ?? 0) > 0.02,
+    ),
     taxAmount: pickNumber(sale.taxAmount, sale.tax_amount),
     cashierName: pickString(
       sale.cashierName,
@@ -336,22 +342,26 @@ export function buildReceiptDataFromSale(
     ),
     changeAmount: changeAmount > 0 ? changeAmount : undefined,
     changeGiven: changeAmount > 0 ? changeAmount : undefined,
-    items: sale.items?.map((item) => ({
+    items: sale.items?.map((item, index) => ({
       name: item.productName || item.product_name || 'Unknown',
       quantity: Number(item.quantity || item.qty || 0),
-      unitPrice: Number(item.unitPrice || item.unit_price || item.price || 0),
-      subtotal: Number(
-        item.totalPrice ||
-          item.total_price ||
-          item.subtotal ||
-          item.totalAmount ||
-          item.lineTotal ||
-          item.line_total ||
-          0
-      ),
+      unitPrice: discountView.lines[index]?.unitPrice ?? Number(item.unitPrice || item.unit_price || item.price || 0),
+      subtotal:
+        discountView.lines[index]?.lineNet ??
+        Number(
+          item.totalPrice ||
+            item.total_price ||
+            item.subtotal ||
+            item.totalAmount ||
+            item.lineTotal ||
+            item.line_total ||
+            0
+        ),
       uom: item.uom,
       discountAmount:
-        parseFloat(String(item.discountAmount || item.discount_amount || 0)) || undefined,
+        (discountView.lines[index]?.lineDiscount || 0) > 0
+          ? discountView.lines[index]?.lineDiscount
+          : undefined,
       taxAmount: pickNumber(item.taxAmount, item.tax_amount),
       taxRate: pickNumber(item.taxRate, item.tax_rate),
       isTaxable: item.isTaxable === true || item.is_taxable === true,
@@ -374,6 +384,7 @@ export function buildReceiptDataFromCheckout(input: CheckoutReceiptInput): Recei
       saleDate: input.saleDate,
       subtotal: input.subtotal,
       discountAmount: input.discountAmount,
+      exchangeCreditApplied: input.exchangeCreditApplied,
       taxAmount: input.taxAmount,
       totalAmount: input.totalAmount,
       cashierName: input.cashierName,

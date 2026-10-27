@@ -1,0 +1,101 @@
+{
+  "title": "PROOF_SALE_DISCOUNT_EXCHANGE_E2E",
+  "runAt": "2026-10-27T22:02:14.140Z",
+  "verdict": "PASS",
+  "path": "POS checkout → POSSaleSchema → completeProductExchange → createSale persist → 2210 apply → sale modal → receipt → thermal HTML",
+  "blissCase": {
+    "catalogUnit": 306000,
+    "credit": 6000,
+    "charged": 300000,
+    "inventedUnit": 312000
+  },
+  "hops": [
+    {
+      "hop": "1-pos-checkout-payload",
+      "ok": true,
+      "detail": {
+        "unitSent": 306000,
+        "lineDiscountSent": 0,
+        "cartSent": 6000
+      }
+    },
+    {
+      "hop": "2-pos-schema",
+      "ok": true,
+      "detail": {
+        "totalAmount": 300000,
+        "headerDiscount": 6000,
+        "lineDiscount": 0,
+        "exchangeRefundId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+      }
+    },
+    {
+      "hop": "3-complete-product-exchange",
+      "ok": true,
+      "detail": {
+        "creditApplied": 6000,
+        "merchandiseNet": 306000,
+        "charged": 300000
+      }
+    },
+    {
+      "hop": "4-create-sale-persist-closed",
+      "ok": true,
+      "detail": {
+        "message": "sale discount persist closed"
+      }
+    },
+    {
+      "hop": "5-apply-2210-cart-only",
+      "ok": true,
+      "detail": {
+        "creditTo2210": 6000,
+        "headerDump": 6000,
+        "rejectedIfCartPlusLine": 12000
+      }
+    },
+    {
+      "hop": "6-sales-modal",
+      "ok": true,
+      "detail": {
+        "unit": 306000,
+        "lineDiscount": 0,
+        "lineNet": 306000,
+        "cartDiscount": 6000,
+        "total": 300000,
+        "label": "Exchange credit"
+      }
+    },
+    {
+      "hop": "7-receipt-from-sale",
+      "ok": true,
+      "detail": {
+        "unit": 306000,
+        "lineDiscount": 0,
+        "cart": 6000,
+        "label": "Exchange credit",
+        "total": 300000
+      }
+    },
+    {
+      "hop": "8-thermal-html",
+      "ok": true,
+      "detail": {
+        "unit": 306000,
+        "label": "Exchange credit",
+        "htmlHasExchangeCredit": true,
+        "htmlHasInvented312000": false
+      }
+    },
+    {
+      "hop": "9-fail-closed",
+      "ok": true,
+      "detail": {
+        "inventedUnit": 312000,
+        "oneCutRejected": "Charged 300000.00 does not close to merchandise 312000.00 − cart 6000.00",
+        "copiedDumpRejected": "Persist line net 306000 != qty×unit−lineDisc 300000",
+        "cartPlusLineRejected": "Exchange credit 12000.00 exceeds remaining 6000.00"
+      }
+    }
+  ]
+}

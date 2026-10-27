@@ -41,6 +41,7 @@ export interface ReceiptData {
   totalAmount: number;
   subtotal?: number;
   discountAmount?: number;
+  discountLabel?: string;
   taxAmount?: number;
   taxName?: string;
   /** Settings: detailed tax vs single line (from receipt print config) */
