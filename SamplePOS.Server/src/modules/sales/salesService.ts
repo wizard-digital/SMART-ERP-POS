@@ -12,6 +12,7 @@ import {
 } from './salesRepository.js';
 import * as costLayerService from '../../services/costLayerService.js';
 import { BankingService } from '../../services/bankingService.js';
+import { aggregatePaymentsByMethod } from '../treasury/saleBankMirrorPolicy.js';
 import { jobQueue } from '../../services/jobQueue.js';
 import { incrementMetric } from '../../routes/health.js';
 import {
@@ -1825,6 +1826,11 @@ export const salesService = {
             actualInventoryCost,
             paymentMethod: sale.paymentMethod as SaleData['paymentMethod'],
             amountPaid: sale.amountPaid ?? 0,
+            // Split tender: one liquidity debit per tender (see saleTenderAllocation.ts)
+            paymentLines: input.paymentLines?.map((l) => ({
+              paymentMethod: l.paymentMethod,
+              amount: l.amount,
+            })),
             taxAmount: sale.taxAmount || 0,
             customerId: sale.customerId || undefined,
             saleItems: itemsWithCosts.map((item) => ({
@@ -2646,7 +2652,9 @@ export const salesService = {
         const failedPayments: Array<{ amount: number; paymentMethod: string }> = [];
         let lastError = '';
 
-        for (const payment of pendingBankPayments) {
+        // One bank row per (sale, method): same-method split lines are summed first, otherwise the
+        // second line would be dropped by the idempotency key and the bank book under-stated.
+        for (const payment of aggregatePaymentsByMethod(pendingBankPayments)) {
           try {
             await BankingService.createFromSale(
               sale.id,

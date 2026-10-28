@@ -1,0 +1,503 @@
+{
+  "generatedAt": "2026-10-28T17:29:36.176Z",
+  "note": "LOCAL rehearsal on copies of production ledgers; production untouched",
+  "tenants": {
+    "henber": {
+      "gateDefinitionReconciliation": {
+        "gate_sales_incl_credit_lines": 39,
+        "gate_amount_incl_credit_lines": 2860199,
+        "sales_excluding_credit_deposit_lines": 31,
+        "amount_excluding_credit_deposit_lines": 1024701
+      },
+      "population": {
+        "ELIGIBLE": 44,
+        "ALREADY_CORRECT": 16797,
+        "NOT_APPLICABLE_NO_TENDER": 515,
+        "REVIEW_NO_LINES": 0,
+        "REVIEW_LIQUIDITY_WITHOUT_TENDER": 0,
+        "REVIEW_DEPOSIT_TENDER": 0,
+        "REVIEW_UNMAPPED_TENDER": 0,
+        "REVIEW_NOT_ONE_SALE_JOURNAL": 0,
+        "REVIEW_NOT_COMPLETED": 99,
+        "REVIEW_DELTA_DOES_NOT_NET_ZERO": 0,
+        "REVIEW_SHORTFALL": 0,
+        "REVIEW_TENDER_NOT_POSTED": 0
+      },
+      "perScope": {
+        "SPLIT_TENDER": {
+          "sales": 28,
+          "grossAmountMoved": 634700,
+          "accountMovement": {
+            "1010": 371700,
+            "1020": -20000,
+            "1030": 0,
+            "1040": -351700
+          },
+          "fingerprint": "708dd0602078924f677ba9927f28131cfcc29702bd567b7c0a5c98f2e9fd6d98",
+          "result": {
+            "posted": 28,
+            "replayed": 0,
+            "failed": [],
+            "fingerprintBefore": "708dd0602078924f677ba9927f28131cfcc29702bd567b7c0a5c98f2e9fd6d98"
+          }
+        },
+        "SINGLE_TENDER_MISPOSTED": {
+          "sales": 16,
+          "grossAmountMoved": 1184300,
+          "accountMovement": {
+            "1010": -1184300,
+            "1020": 0,
+            "1030": 0,
+            "1040": 1184300
+          },
+          "fingerprint": "76d98488853ea0e070297d07ce18c11bfee3b3ffcd035ff24e5b18d9af8d5039",
+          "result": {
+            "posted": 16,
+            "replayed": 0,
+            "failed": [],
+            "fingerprintBefore": "76d98488853ea0e070297d07ce18c11bfee3b3ffcd035ff24e5b18d9af8d5039"
+          }
+        }
+      },
+      "eligibleSales": 44,
+      "grossAmountMoved": 1819000,
+      "accountMovement": {
+        "1010": -812600,
+        "1020": -20000,
+        "1030": 0,
+        "1040": 832600
+      },
+      "fingerprint": "21a19e9113ee85a4773b9db2cff9ac3fb937b368737eaf81104d9a9aaf31876c",
+      "before": {
+        "liquidity": {
+          "1010": 3590860.81,
+          "1020": 2220800,
+          "1030": 0,
+          "1040": 2029133.02
+        },
+        "liquidityTotal": 7840793.83,
+        "trialBalance": {
+          "dr": 2668782571.57,
+          "cr": 2668782571.57,
+          "entries": 98158
+        },
+        "ledgerTransactions": 47500,
+        "nonLiquidAccountsChecksum": "9d62ef8fba4cc8aaf8a2e76a7836125e607fa60041155a5c5f9f222ac3798982",
+        "sourceChecksums": {
+          "sales_md5": "a84d9ca5026f0e7d46473081b5e51307",
+          "lines_md5": "7fb1f464a7c68af5caa4b0a14fbdf6ee",
+          "bank_md5": "78fd20bfec5c0729360a34a990688d23",
+          "preexisting_entries_md5": "7f11b96043b3f7f50de15c35fb23ab47"
+        },
+        "outboxEvents": 66
+      },
+      "after": {
+        "liquidity": {
+          "1010": 2778260.81,
+          "1020": 2200800,
+          "1030": 0,
+          "1040": 2861733.02
+        },
+        "liquidityTotal": 7840793.83,
+        "trialBalance": {
+          "dr": 2670601571.57,
+          "cr": 2670601571.57,
+          "entries": 98246
+        },
+        "ledgerTransactions": 47544,
+        "nonLiquidAccountsChecksum": "9d62ef8fba4cc8aaf8a2e76a7836125e607fa60041155a5c5f9f222ac3798982",
+        "sourceChecksums": {
+          "sales_md5": "a84d9ca5026f0e7d46473081b5e51307",
+          "lines_md5": "7fb1f464a7c68af5caa4b0a14fbdf6ee",
+          "bank_md5": "78fd20bfec5c0729360a34a990688d23",
+          "preexisting_entries_md5": "7f11b96043b3f7f50de15c35fb23ab47"
+        },
+        "outboxEvents": 154
+      },
+      "checks": [
+        {
+          "id": "plan.deterministic",
+          "pass": true
+        },
+        {
+          "id": "plan.nets_to_zero",
+          "pass": true,
+          "observed": 0
+        },
+        {
+          "id": "plan.dry_run_changed_nothing",
+          "pass": true
+        },
+        {
+          "id": "apply.posted_equals_eligible",
+          "pass": true,
+          "observed": {
+            "posted": 44,
+            "failed": []
+          }
+        },
+        {
+          "id": "after.no_eligible_left",
+          "pass": true,
+          "observed": {
+            "ELIGIBLE": 0,
+            "ALREADY_CORRECT": 16841,
+            "NOT_APPLICABLE_NO_TENDER": 515,
+            "REVIEW_NO_LINES": 0,
+            "REVIEW_LIQUIDITY_WITHOUT_TENDER": 0,
+            "REVIEW_DEPOSIT_TENDER": 0,
+            "REVIEW_UNMAPPED_TENDER": 0,
+            "REVIEW_NOT_ONE_SALE_JOURNAL": 0,
+            "REVIEW_NOT_COMPLETED": 99,
+            "REVIEW_DELTA_DOES_NOT_NET_ZERO": 0,
+            "REVIEW_SHORTFALL": 0,
+            "REVIEW_TENDER_NOT_POSTED": 0
+          }
+        },
+        {
+          "id": "after.review_populations_unchanged",
+          "pass": true
+        },
+        {
+          "id": "after.total_liquidity_unchanged",
+          "pass": true,
+          "observed": {
+            "before": 7840793.83,
+            "after": 7840793.83
+          }
+        },
+        {
+          "id": "after.account_1010_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": -81260000,
+            "planned": -81260000
+          }
+        },
+        {
+          "id": "after.account_1020_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": -2000000,
+            "planned": -2000000
+          }
+        },
+        {
+          "id": "after.account_1030_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": 0,
+            "planned": 0
+          }
+        },
+        {
+          "id": "after.account_1040_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": 83260000,
+            "planned": 83260000
+          }
+        },
+        {
+          "id": "after.trial_balance_balanced",
+          "pass": true,
+          "observed": {
+            "dr": 2670601571.57,
+            "cr": 2670601571.57,
+            "entries": 98246
+          }
+        },
+        {
+          "id": "after.non_liquidity_accounts_identical",
+          "pass": true
+        },
+        {
+          "id": "after.sales_payment_lines_bank_untouched",
+          "pass": true,
+          "observed": {
+            "before": {
+              "sales_md5": "a84d9ca5026f0e7d46473081b5e51307",
+              "lines_md5": "7fb1f464a7c68af5caa4b0a14fbdf6ee",
+              "bank_md5": "78fd20bfec5c0729360a34a990688d23",
+              "preexisting_entries_md5": "7f11b96043b3f7f50de15c35fb23ab47"
+            },
+            "after": {
+              "sales_md5": "a84d9ca5026f0e7d46473081b5e51307",
+              "lines_md5": "7fb1f464a7c68af5caa4b0a14fbdf6ee",
+              "bank_md5": "78fd20bfec5c0729360a34a990688d23",
+              "preexisting_entries_md5": "7f11b96043b3f7f50de15c35fb23ab47"
+            }
+          }
+        },
+        {
+          "id": "after.new_journals_only",
+          "pass": true,
+          "observed": {
+            "before": 47500,
+            "after": 47544,
+            "eligible": 44
+          }
+        },
+        {
+          "id": "replay.noop",
+          "pass": true,
+          "observed": {
+            "posted": 0,
+            "replayed": 0,
+            "failed": [],
+            "fingerprintBefore": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        }
+      ]
+    },
+    "blis": {
+      "gateDefinitionReconciliation": {
+        "gate_sales_incl_credit_lines": 51,
+        "gate_amount_incl_credit_lines": 771000,
+        "sales_excluding_credit_deposit_lines": 51,
+        "amount_excluding_credit_deposit_lines": 771000
+      },
+      "population": {
+        "ELIGIBLE": 51,
+        "ALREADY_CORRECT": 3007,
+        "NOT_APPLICABLE_NO_TENDER": 951,
+        "REVIEW_NO_LINES": 0,
+        "REVIEW_LIQUIDITY_WITHOUT_TENDER": 0,
+        "REVIEW_DEPOSIT_TENDER": 0,
+        "REVIEW_UNMAPPED_TENDER": 0,
+        "REVIEW_NOT_ONE_SALE_JOURNAL": 0,
+        "REVIEW_NOT_COMPLETED": 9,
+        "REVIEW_DELTA_DOES_NOT_NET_ZERO": 0,
+        "REVIEW_SHORTFALL": 0,
+        "REVIEW_TENDER_NOT_POSTED": 0
+      },
+      "perScope": {
+        "SPLIT_TENDER": {
+          "sales": 51,
+          "grossAmountMoved": 747900,
+          "accountMovement": {
+            "1010": 497900,
+            "1020": 19000,
+            "1030": 0,
+            "1040": -516900
+          },
+          "fingerprint": "2fceef164d4dccae0e09dbbe5328cf5384a2d26a8151b10a2c268c4352f15339",
+          "result": {
+            "posted": 51,
+            "replayed": 0,
+            "failed": [],
+            "fingerprintBefore": "2fceef164d4dccae0e09dbbe5328cf5384a2d26a8151b10a2c268c4352f15339"
+          }
+        },
+        "SINGLE_TENDER_MISPOSTED": {
+          "sales": 0,
+          "grossAmountMoved": 0,
+          "accountMovement": {
+            "1010": 0,
+            "1020": 0,
+            "1030": 0,
+            "1040": 0
+          },
+          "fingerprint": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "result": {
+            "posted": 0,
+            "replayed": 0,
+            "failed": [],
+            "fingerprintBefore": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        }
+      },
+      "eligibleSales": 51,
+      "grossAmountMoved": 747900,
+      "accountMovement": {
+        "1010": 497900,
+        "1020": 19000,
+        "1030": 0,
+        "1040": -516900
+      },
+      "fingerprint": "2fceef164d4dccae0e09dbbe5328cf5384a2d26a8151b10a2c268c4352f15339",
+      "before": {
+        "liquidity": {
+          "1010": 40664659.98,
+          "1020": 562000,
+          "1030": 0,
+          "1040": 24365140
+        },
+        "liquidityTotal": 65591799.98,
+        "trialBalance": {
+          "dr": 701445269.95,
+          "cr": 701445269.95,
+          "entries": 8627
+        },
+        "ledgerTransactions": 4237,
+        "nonLiquidAccountsChecksum": "b26fdbc7a4a8df7e08c84f71c82eba32312d96fddcc470d899fbdbf3895e9619",
+        "sourceChecksums": {
+          "sales_md5": "0d034b22ee3f601ab56745f85dd20646",
+          "lines_md5": "9f91c5f0f2da9a99c5a9104e4c0d278d",
+          "bank_md5": "4883eb8d7fb10bffad6abc6ed508cb36",
+          "preexisting_entries_md5": "61cf24aad30906b8c7a469b50e7f8f3a"
+        },
+        "outboxEvents": 0
+      },
+      "after": {
+        "liquidity": {
+          "1010": 41162559.98,
+          "1020": 581000,
+          "1030": 0,
+          "1040": 23848240
+        },
+        "liquidityTotal": 65591799.98,
+        "trialBalance": {
+          "dr": 702193169.95,
+          "cr": 702193169.95,
+          "entries": 8729
+        },
+        "ledgerTransactions": 4288,
+        "nonLiquidAccountsChecksum": "b26fdbc7a4a8df7e08c84f71c82eba32312d96fddcc470d899fbdbf3895e9619",
+        "sourceChecksums": {
+          "sales_md5": "0d034b22ee3f601ab56745f85dd20646",
+          "lines_md5": "9f91c5f0f2da9a99c5a9104e4c0d278d",
+          "bank_md5": "4883eb8d7fb10bffad6abc6ed508cb36",
+          "preexisting_entries_md5": "61cf24aad30906b8c7a469b50e7f8f3a"
+        },
+        "outboxEvents": 102
+      },
+      "checks": [
+        {
+          "id": "plan.deterministic",
+          "pass": true
+        },
+        {
+          "id": "plan.nets_to_zero",
+          "pass": true,
+          "observed": 0
+        },
+        {
+          "id": "plan.dry_run_changed_nothing",
+          "pass": true
+        },
+        {
+          "id": "apply.posted_equals_eligible",
+          "pass": true,
+          "observed": {
+            "posted": 51,
+            "failed": []
+          }
+        },
+        {
+          "id": "after.no_eligible_left",
+          "pass": true,
+          "observed": {
+            "ELIGIBLE": 0,
+            "ALREADY_CORRECT": 3058,
+            "NOT_APPLICABLE_NO_TENDER": 951,
+            "REVIEW_NO_LINES": 0,
+            "REVIEW_LIQUIDITY_WITHOUT_TENDER": 0,
+            "REVIEW_DEPOSIT_TENDER": 0,
+            "REVIEW_UNMAPPED_TENDER": 0,
+            "REVIEW_NOT_ONE_SALE_JOURNAL": 0,
+            "REVIEW_NOT_COMPLETED": 9,
+            "REVIEW_DELTA_DOES_NOT_NET_ZERO": 0,
+            "REVIEW_SHORTFALL": 0,
+            "REVIEW_TENDER_NOT_POSTED": 0
+          }
+        },
+        {
+          "id": "after.review_populations_unchanged",
+          "pass": true
+        },
+        {
+          "id": "after.total_liquidity_unchanged",
+          "pass": true,
+          "observed": {
+            "before": 65591799.98,
+            "after": 65591799.98
+          }
+        },
+        {
+          "id": "after.account_1010_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": 49790000,
+            "planned": 49790000
+          }
+        },
+        {
+          "id": "after.account_1020_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": 1900000,
+            "planned": 1900000
+          }
+        },
+        {
+          "id": "after.account_1030_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": 0,
+            "planned": 0
+          }
+        },
+        {
+          "id": "after.account_1040_moved_exactly_as_planned",
+          "pass": true,
+          "observed": {
+            "moved": -51690000,
+            "planned": -51690000
+          }
+        },
+        {
+          "id": "after.trial_balance_balanced",
+          "pass": true,
+          "observed": {
+            "dr": 702193169.95,
+            "cr": 702193169.95,
+            "entries": 8729
+          }
+        },
+        {
+          "id": "after.non_liquidity_accounts_identical",
+          "pass": true
+        },
+        {
+          "id": "after.sales_payment_lines_bank_untouched",
+          "pass": true,
+          "observed": {
+            "before": {
+              "sales_md5": "0d034b22ee3f601ab56745f85dd20646",
+              "lines_md5": "9f91c5f0f2da9a99c5a9104e4c0d278d",
+              "bank_md5": "4883eb8d7fb10bffad6abc6ed508cb36",
+              "preexisting_entries_md5": "61cf24aad30906b8c7a469b50e7f8f3a"
+            },
+            "after": {
+              "sales_md5": "0d034b22ee3f601ab56745f85dd20646",
+              "lines_md5": "9f91c5f0f2da9a99c5a9104e4c0d278d",
+              "bank_md5": "4883eb8d7fb10bffad6abc6ed508cb36",
+              "preexisting_entries_md5": "61cf24aad30906b8c7a469b50e7f8f3a"
+            }
+          }
+        },
+        {
+          "id": "after.new_journals_only",
+          "pass": true,
+          "observed": {
+            "before": 4237,
+            "after": 4288,
+            "eligible": 51
+          }
+        },
+        {
+          "id": "replay.noop",
+          "pass": true,
+          "observed": {
+            "posted": 0,
+            "replayed": 0,
+            "failed": [],
+            "fingerprintBefore": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          }
+        }
+      ]
+    }
+  },
+  "allChecksPass": true
+}

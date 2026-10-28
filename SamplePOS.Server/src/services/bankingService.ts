@@ -25,6 +25,13 @@ import { SYSTEM_USER_ID } from '../utils/constants.js';
 import { ensureBankGlLiquidityTag, assertBankBookGlEligible, isEligibleBankBookLiquidity } from '../modules/banking/ensureBankGlLiquidityTag.js';
 import { LEDGER_NET_ACTIVE_SQL } from '../utils/ledgerNetActive.js';
 import { ensureDepositLiquidityBook } from '../modules/treasury/ensureDepositLiquidityBook.js';
+import {
+    describeSaleBankMirrorSkip,
+    isNonBankTender,
+    saleBankMirrorGlCode,
+    shouldAutoEnsureBook,
+    type SaleBankMirrorSkipReason,
+} from '../modules/treasury/saleBankMirrorPolicy.js';
 
 /** GL book balance for a bank_accounts.gl_account_id — net-active reverse pairs. */
 const BANK_GL_BALANCE_SQL = `
@@ -2678,14 +2685,17 @@ export class BankingService {
         amount: number,
         paymentMethod: string,
         saleDate: string,
-        dbPool?: pg.Pool | PoolClient
+        dbPool?: pg.Pool | PoolClient,
+        opts?: { descriptionSuffix?: string }
     ): Promise<BankTransaction | null> {
         const pool = dbPool || globalPool;
-        if (paymentMethod === 'CASH' || paymentMethod === 'CREDIT' || paymentMethod === 'DEPOSIT') {
+        if (isNonBankTender(paymentMethod)) {
             return null;
         }
 
-        const txnDescription = `Sale ${saleNumber} [${paymentMethod}]`;
+        // `descriptionSuffix` is used ONLY by the historical reconciliation to add one supplementary row for the
+        // un-mirrored remainder of a same-method split (the base description is already taken by the first row).
+        const txnDescription = `Sale ${saleNumber} [${paymentMethod}]${opts?.descriptionSuffix ?? ''}`;
         const existing = await pool.query(
             `SELECT id FROM bank_transactions
              WHERE source_type = 'SALE' AND source_id = $1
@@ -2702,22 +2712,17 @@ export class BankingService {
             return null;
         }
 
-        const glCodeMap: Record<string, string> = {
-            CARD: '1020',
-            MOBILE_MONEY: '1040',
-            AIRTEL_MONEY: '1040',
-            BANK_TRANSFER: '1030',
-        };
-        const targetGlCode = glCodeMap[paymentMethod];
+        const targetGlCode = saleBankMirrorGlCode(paymentMethod);
         if (!targetGlCode) {
             logger.warn('No liquidity GL mapping for sale payment method — skipping bank mirror', {
                 saleId,
                 paymentMethod,
+                reasonCode: 'NO_LIQUIDITY_GL_MAPPING' satisfies SaleBankMirrorSkipReason,
             });
             return null;
         }
 
-        if (paymentMethod === 'MOBILE_MONEY' || paymentMethod === 'AIRTEL_MONEY') {
+        if (shouldAutoEnsureBook(paymentMethod)) {
             await ensureDepositLiquidityBook(pool, 'MOBILE_MONEY');
         }
 
@@ -2732,14 +2737,14 @@ export class BankingService {
              LIMIT 1`,
             [saleId]
         );
-        const existingGlTransactionId = saleGl.rows[0]?.Id;
+        let existingGlTransactionId = saleGl.rows[0]?.Id;
         if (!existingGlTransactionId) {
             throw new Error(
                 `Sale ${saleNumber} has no posted SALE journal — cannot mirror bank without mismatch`
             );
         }
 
-        // Fail closed: SALE journal must touch the liquidity account we will mirror
+        // Fail closed: a journal of THIS sale must debit the liquidity account we will mirror
         const glTouch = await pool.query<{ ok: boolean }>(
             `SELECT EXISTS (
                 SELECT 1
@@ -2751,7 +2756,27 @@ export class BankingService {
              ) AS ok`,
             [existingGlTransactionId, targetGlCode]
         );
-        if (!glTouch.rows[0]?.ok) {
+        let glTouchOk = Boolean(glTouch.rows[0]?.ok);
+        if (!glTouchOk) {
+            // Historic split tenders are corrected by an audited SALE_TENDER_RECLASS journal (never by editing the SALE
+            // journal). If that correction debits the account, the bank row links to it — still no second journal.
+            const reclass = await pool.query<{ Id: string }>(
+                `SELECT lt."Id" FROM ledger_transactions lt
+                   JOIN ledger_entries le ON le."TransactionId" = lt."Id"
+                   JOIN accounts a ON a."Id" = le."AccountId"
+                  WHERE lt."ReferenceType" = 'SALE_TENDER_RECLASS' AND lt."ReferenceId" = $1
+                    AND lt."Status" = 'POSTED' AND COALESCE(lt."IsReversed", FALSE) = FALSE
+                    AND lt."ReversesTransactionId" IS NULL
+                    AND a."AccountCode" = $2 AND le."DebitAmount" > 0
+                  ORDER BY lt."CreatedAt" DESC LIMIT 1`,
+                [saleId, targetGlCode]
+            );
+            if (reclass.rows[0]?.Id) {
+                existingGlTransactionId = reclass.rows[0].Id;
+                glTouchOk = true;
+            }
+        }
+        if (!glTouchOk) {
             // Split tenders may not each appear on the SALE journal (header method drives GL).
             // Never invent a second journal — skip mirror rather than create a mismatch.
             logger.warn(
@@ -2774,9 +2799,16 @@ export class BankingService {
         );
 
         if (bankAccountResult.rows.length === 0) {
-            logger.warn('No bank account configured for payment method', {
+            // Expected for CARD: GL (DR 1020) is already correct and Treasury transfers settle it.
+            // Skip WITHOUT inventing a journal or a bank row; make the skip observable, not a warning storm.
+            const reasonCode: SaleBankMirrorSkipReason = 'NO_ACTIVE_BANK_BOOK_ON_GL';
+            logger.info('Sale bank mirror skipped', {
+                saleId,
+                saleNumber,
                 paymentMethod,
                 targetGlCode,
+                reasonCode,
+                detail: describeSaleBankMirrorSkip(reasonCode, paymentMethod, targetGlCode),
             });
             return null;
         }
@@ -2794,9 +2826,18 @@ export class BankingService {
         const categoryId = categoryResult.rows[0]?.id || null;
 
         const transactionId = uuidv4();
-        const transactionNumber = await BankingService.generateBankTxnNumber(pool);
-        await pool.query(
-            `
+        // Two distinct races exist on this insert and they must NOT be conflated:
+        //  1. uq_bank_txn_sale_source_desc_live  -> the SAME (sale, method) row already exists (concurrent /
+        //     duplicate delivery). That is success (ALREADY_MIRRORED): never create a second row.
+        //  2. bank_transactions_transaction_number_key -> a DIFFERENT payment drew the same number (the
+        //     advisory lock in generateBankTxnNumber is released at once when run on a pool, not a client).
+        //     THIS payment is not mirrored yet; swallowing it would silently lose it, so draw a fresh number.
+        const MAX_NUMBER_ATTEMPTS = 6;
+        for (let attempt = 1; ; attempt++) {
+            const transactionNumber = await BankingService.generateBankTxnNumber(pool);
+            try {
+                await pool.query(
+                    `
         INSERT INTO bank_transactions (
           id, transaction_number, bank_account_id, transaction_date,
           type, category_id, description, reference, amount,
@@ -2806,20 +2847,42 @@ export class BankingService {
         VALUES ($1, $2, $3, $4, 'DEPOSIT', $5, $6, $7, $8,
                 NULL, $9, 'SALE', $10, FALSE, FALSE, $11)
       `,
-            [
-                transactionId,
-                transactionNumber,
-                bankAccountId,
-                saleDate,
-                categoryId,
-                txnDescription,
-                saleNumber,
-                amount,
-                existingGlTransactionId,
-                saleId,
-                SYSTEM_USER_ID,
-            ]
-        );
+                    [
+                        transactionId,
+                        transactionNumber,
+                        bankAccountId,
+                        saleDate,
+                        categoryId,
+                        txnDescription,
+                        saleNumber,
+                        amount,
+                        existingGlTransactionId,
+                        saleId,
+                        SYSTEM_USER_ID,
+                    ]
+                );
+                break;
+            } catch (insertErr: unknown) {
+                const e = insertErr as { code?: string; constraint?: string };
+                if (e?.code === '23505' && e.constraint === 'uq_bank_txn_sale_source_desc_live') {
+                    logger.info('Bank transaction already exists for sale payment (concurrent delivery) — skipping duplicate', {
+                        saleId,
+                        saleNumber,
+                        paymentMethod,
+                        reasonCode: 'ALREADY_MIRRORED' satisfies SaleBankMirrorSkipReason,
+                    });
+                    return null;
+                }
+                if (
+                    e?.code === '23505' &&
+                    e.constraint === 'bank_transactions_transaction_number_key' &&
+                    attempt < MAX_NUMBER_ATTEMPTS
+                ) {
+                    continue; // lost the number race to a different payment: fresh number, never drop this one
+                }
+                throw insertErr; // anything else (incl. exhausted attempts) surfaces so the job is retried, not lost
+            }
+        }
 
         logger.info('Bank transaction mirrored for sale payment (linked GL — no second journal)', {
             saleId,

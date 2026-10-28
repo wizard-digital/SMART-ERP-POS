@@ -337,6 +337,36 @@ export class AccountingCore {
         return { exists: false };
     }
 
+    /**
+     * Fail-closed check after writing a journal: header totals equal the sum of DebitAmount/CreditAmount,
+     * and every line's Amount equals DebitAmount + CreditAmount.
+     * TXN-002362 (Henber, Option A) is a historical exception of this class; new journals must not repeat it.
+     */
+    static async assertWrittenJournalMatchesHeader(client: PoolClient, transactionId: string): Promise<void> {
+        const result = await client.query<{
+            hdr_dr: string; hdr_cr: string; ent_dr: string; ent_cr: string; bad_amt: string;
+        }>(
+            `SELECT round(lt."TotalDebitAmount",2)::text hdr_dr, round(lt."TotalCreditAmount",2)::text hdr_cr,
+                    round(sum(le."DebitAmount"),2)::text ent_dr, round(sum(le."CreditAmount"),2)::text ent_cr,
+                    count(*) FILTER (WHERE le."Amount" <> le."DebitAmount" + le."CreditAmount")::text bad_amt
+               FROM ledger_transactions lt
+               JOIN ledger_entries le ON le."TransactionId" = lt."Id"
+              WHERE lt."Id" = $1
+              GROUP BY lt."Id"`,
+            [transactionId],
+        );
+        const row = result.rows[0];
+        if (!row) {
+            throw new AccountingError('Posted journal has no entries', 'HEADER_ENTRY_MISMATCH');
+        }
+        if (row.hdr_dr !== row.ent_dr || row.hdr_cr !== row.ent_cr || row.bad_amt !== '0') {
+            throw new AccountingError(
+                `Posted journal header/Amount does not match entries (hdr ${row.hdr_dr}/${row.hdr_cr} vs entries ${row.ent_dr}/${row.ent_cr}, amount-column mismatches ${row.bad_amt})`,
+                'HEADER_ENTRY_MISMATCH',
+            );
+        }
+    }
+
     // ===========================================================================
     // DOUBLE-ENTRY VALIDATION
     // ===========================================================================
@@ -757,6 +787,8 @@ export class AccountingCore {
                 }
             }
 
+            await this.assertWrittenJournalMatchesHeader(client, transactionId);
+
             // 10. Create audit log entry
             await client.query(
                 `
@@ -1153,6 +1185,8 @@ export class AccountingCore {
                     }
                 }
             }
+
+            await this.assertWrittenJournalMatchesHeader(client, transactionId);
 
             // 9. Mark original as reversed (but don't delete!)
             // Release IdempotencyKey so the business document may be reposted (SAP reversal pattern).

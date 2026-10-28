@@ -35,12 +35,35 @@ services:
     image: redis:7-alpine
     container_name: smarterp-redis
     restart: unless-stopped
+    # SECURITY: password required, never published. Same hardening as docker-compose.yml.
+    user: redis
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    command:
+      - sh
+      - -c
+      - |
+        umask 077
+        {
+          echo "requirepass $$REDIS_PASSWORD"
+          echo "protected-mode yes"
+          echo "stop-writes-on-bgsave-error no"
+          echo "appendonly yes"
+          echo "appendfsync everysec"
+          echo "maxmemory-policy noeviction"
+          echo 'rename-command SLAVEOF ""'
+          echo 'rename-command REPLICAOF ""'
+          echo 'rename-command MODULE ""'
+          echo 'rename-command DEBUG ""'
+        } > /tmp/redis-secure.conf
+        exec redis-server /tmp/redis-secure.conf
     volumes:
       - redis_data:/data
     networks:
       - app-network
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: [ "CMD-SHELL", "redis-cli ping | grep -q PONG" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -60,9 +83,10 @@ services:
       DB_NAME: ${POSTGRES_DB:-pos_system}
       DB_USER: ${POSTGRES_USER:-postgres}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env}
       AR_GOVERNANCE_MODE: ${AR_GOVERNANCE_MODE:-warn}

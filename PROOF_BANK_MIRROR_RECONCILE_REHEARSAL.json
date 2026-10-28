@@ -1,0 +1,252 @@
+{
+  "generatedAt": "2026-10-28T17:45:16.481Z",
+  "note": "LOCAL rehearsal on copies of production ledgers; production untouched",
+  "tenants": {
+    "henber": {
+      "goLive": "2026-09-25 10:10:21.633226+03",
+      "populationBefore": {
+        "PRE_GOLIVE:MISSING_ELIGIBLE": 1169,
+        "PRE_GOLIVE:OK": 1,
+        "POST_GOLIVE:MISSING_ELIGIBLE": 3,
+        "POST_GOLIVE:OK": 329
+      },
+      "postGoLive": {
+        "eligibleRows": 3,
+        "amount": 39000,
+        "rows": [
+          {
+            "sale": "SALE-2026-15160",
+            "method": "MOBILE_MONEY",
+            "status": "MISSING_ELIGIBLE",
+            "create": 10000
+          },
+          {
+            "sale": "SALE-2026-15350",
+            "method": "MOBILE_MONEY",
+            "status": "MISSING_ELIGIBLE",
+            "create": 24000
+          },
+          {
+            "sale": "SALE-2026-15411",
+            "method": "MOBILE_MONEY",
+            "status": "MISSING_ELIGIBLE",
+            "create": 5000
+          }
+        ]
+      },
+      "preGoLive": {
+        "eligibleRows": 1169,
+        "amount": 37113010,
+        "note": "NOT applied: back-fill of pre-go-live sales is a separate policy decision"
+      },
+      "review": [],
+      "reviewTotal": 0,
+      "bankBefore": {
+        "n": 333,
+        "amt": 9803750
+      },
+      "bankAfter": {
+        "n": 336,
+        "amt": 9842750
+      },
+      "linkedJournalTypes": [
+        {
+          "rt": "SALE",
+          "n": 333
+        },
+        {
+          "rt": "SALE_TENDER_RECLASS",
+          "n": 3
+        }
+      ],
+      "checks": [
+        {
+          "id": "apply.created_equals_planned",
+          "pass": true,
+          "observed": {
+            "created": 3,
+            "alreadyMirrored": 0,
+            "failed": []
+          }
+        },
+        {
+          "id": "apply.bank_rows_added_exactly",
+          "pass": true,
+          "observed": {
+            "bankBefore": {
+              "n": 333,
+              "amt": 9803750
+            },
+            "bankAfter": {
+              "n": 336,
+              "amt": 9842750
+            },
+            "planned": 39000
+          }
+        },
+        {
+          "id": "apply.no_journal_posted",
+          "pass": true,
+          "observed": {
+            "ledBefore": {
+              "txns": 47544,
+              "md5": "239bc46b74c17728598a0c70112b2af2"
+            },
+            "ledAfter": {
+              "txns": 47544,
+              "md5": "239bc46b74c17728598a0c70112b2af2"
+            }
+          }
+        },
+        {
+          "id": "after.no_post_golive_eligible",
+          "pass": true,
+          "observed": {
+            "POST_GOLIVE:OK": 332
+          }
+        },
+        {
+          "id": "after.pre_golive_untouched",
+          "pass": true
+        },
+        {
+          "id": "replay.noop",
+          "pass": true,
+          "observed": {
+            "created": 0,
+            "alreadyMirrored": 0,
+            "failed": []
+          }
+        }
+      ]
+    },
+    "blis": {
+      "goLive": "2026-09-25 08:44:08.746012+03",
+      "populationBefore": {
+        "PRE_GOLIVE:MISSING_ELIGIBLE": 558,
+        "PRE_GOLIVE:REVIEW_GL_DOES_NOT_SUPPORT": 1,
+        "PRE_GOLIVE:OK": 1,
+        "POST_GOLIVE:OK": 380,
+        "POST_GOLIVE:MISSING_ELIGIBLE": 1,
+        "POST_GOLIVE:UNDER_ELIGIBLE": 2
+      },
+      "postGoLive": {
+        "eligibleRows": 3,
+        "amount": 17000,
+        "rows": [
+          {
+            "sale": "SALE-2026-2724",
+            "method": "AIRTEL_MONEY",
+            "status": "MISSING_ELIGIBLE",
+            "create": 5000
+          },
+          {
+            "sale": "SALE-2026-2847",
+            "method": "MOBILE_MONEY",
+            "status": "UNDER_ELIGIBLE",
+            "create": 1000
+          },
+          {
+            "sale": "SALE-2026-3188",
+            "method": "MOBILE_MONEY",
+            "status": "UNDER_ELIGIBLE",
+            "create": 11000
+          }
+        ]
+      },
+      "preGoLive": {
+        "eligibleRows": 558,
+        "amount": 13686240,
+        "note": "NOT applied: back-fill of pre-go-live sales is a separate policy decision"
+      },
+      "review": [
+        {
+          "sale": "SALE-2026-2221",
+          "method": "MOBILE_MONEY",
+          "status": "REVIEW_GL_DOES_NOT_SUPPORT",
+          "era": "PRE_GOLIVE"
+        }
+      ],
+      "reviewTotal": 1,
+      "bankBefore": {
+        "n": 383,
+        "amt": 10120000
+      },
+      "bankAfter": {
+        "n": 386,
+        "amt": 10137000
+      },
+      "linkedJournalTypes": [
+        {
+          "rt": "SALE_TENDER_RECLASS",
+          "n": 1
+        },
+        {
+          "rt": "SALE",
+          "n": 385
+        }
+      ],
+      "checks": [
+        {
+          "id": "apply.created_equals_planned",
+          "pass": true,
+          "observed": {
+            "created": 3,
+            "alreadyMirrored": 0,
+            "failed": []
+          }
+        },
+        {
+          "id": "apply.bank_rows_added_exactly",
+          "pass": true,
+          "observed": {
+            "bankBefore": {
+              "n": 383,
+              "amt": 10120000
+            },
+            "bankAfter": {
+              "n": 386,
+              "amt": 10137000
+            },
+            "planned": 17000
+          }
+        },
+        {
+          "id": "apply.no_journal_posted",
+          "pass": true,
+          "observed": {
+            "ledBefore": {
+              "txns": 4288,
+              "md5": "0d4164423898c0179ae86ef9df277db7"
+            },
+            "ledAfter": {
+              "txns": 4288,
+              "md5": "0d4164423898c0179ae86ef9df277db7"
+            }
+          }
+        },
+        {
+          "id": "after.no_post_golive_eligible",
+          "pass": true,
+          "observed": {
+            "POST_GOLIVE:OK": 383
+          }
+        },
+        {
+          "id": "after.pre_golive_untouched",
+          "pass": true
+        },
+        {
+          "id": "replay.noop",
+          "pass": true,
+          "observed": {
+            "created": 0,
+            "alreadyMirrored": 0,
+            "failed": []
+          }
+        }
+      ]
+    }
+  },
+  "allChecksPass": true
+}

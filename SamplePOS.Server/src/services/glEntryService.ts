@@ -37,6 +37,7 @@ import logger from '../utils/logger.js';
 import { SYSTEM_USER_ID } from '../utils/constants.js';
 import { customerArLine, requireCustomerIdForAr } from '../modules/accounting-governance/arPostingHelpers.js';
 import { splitSupplierPaymentCredits, splitCustomerPaymentDebits } from '../modules/supplier-payments/supplierPaymentWht.js';
+import { allocateTenderToLiquidity, type TenderLine } from './saleTenderAllocation.js';
 
 // =============================================================================
 // ACCOUNT CODE CONSTANTS
@@ -136,8 +137,14 @@ export interface SaleData {
   saleDate: string;
   totalAmount: number;
   costAmount: number;
-  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT';
+  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'BANK_TRANSFER' | 'CREDIT' | 'DEPOSIT';
   amountPaid?: number;  // Amount actually paid (for partial payment tracking)
+  /**
+   * Split-tender payment lines. When present (and every non-CREDIT line is a liquidity tender), the journal
+   * debits ONE liquidity account per tender instead of the whole total to the header method's account.
+   * Omitted → legacy single-account behaviour (repost/quotation paths, single-method sales).
+   */
+  paymentLines?: TenderLine[];
   taxAmount?: number;   // Tax amount (posted to Tax Payable liability)
   customerId?: string;
   customerName?: string;
@@ -348,13 +355,34 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
       // - If full payment: DR Cash (total), CR Revenue (total) - shouldn't be CREDIT method
 
       if (amountPaid.gt(0)) {
-        // Debit Cash for amount actually paid
-        ledgerLines.push({
-          accountCode: AccountCodes.CASH,
-          description: `Partial payment received for ${sale.saleNumber}`,
-          debitAmount: amountPaid.toNumber(),
-          creditAmount: 0
-        });
+        // Debit each tender's own liquidity account for the amount actually paid
+        // (no payment lines → legacy: whole paid amount to Cash).
+        const partAlloc = allocateTenderToLiquidity(amountPaid.toNumber(), sale.paymentLines);
+        if (partAlloc) {
+          for (const it of partAlloc.items) {
+            ledgerLines.push({
+              accountCode: it.accountCode,
+              description: `Partial payment received for ${sale.saleNumber} [${it.methods.join('+')}]`,
+              debitAmount: it.amountCents / 100,
+              creditAmount: 0
+            });
+          }
+          if (partAlloc.shortfallCents > 0) {
+            ledgerLines.push({
+              accountCode: AccountCodes.CASH,
+              description: `Partial payment received for ${sale.saleNumber}`,
+              debitAmount: partAlloc.shortfallCents / 100,
+              creditAmount: 0
+            });
+          }
+        } else {
+          ledgerLines.push({
+            accountCode: AccountCodes.CASH,
+            description: `Partial payment received for ${sale.saleNumber}`,
+            debitAmount: amountPaid.toNumber(),
+            creditAmount: 0
+          });
+        }
       }
 
       if (unpaidAmount.gt(0)) {
@@ -413,6 +441,10 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
           debitAccountCode = AccountCodes.MOBILE_MONEY;
           paymentDescription = 'Mobile money payment received';
           break;
+        case 'BANK_TRANSFER':
+          debitAccountCode = AccountCodes.CHECKING_ACCOUNT;
+          paymentDescription = 'Bank transfer received';
+          break;
         default:
           debitAccountCode = AccountCodes.CASH;
           paymentDescription = 'Cash payment received';
@@ -422,12 +454,34 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
       // Debit payment account only when tender moves (skip zero-total sales
       // fully covered by exchange store credit / 100% discount).
       if (sale.totalAmount > 0.009) {
-        ledgerLines.push({
-          accountCode: debitAccountCode,
-          description: `${paymentDescription} for ${sale.saleNumber}`,
-          debitAmount: sale.totalAmount,
-          creditAmount: 0
-        });
+        // Split tender: one liquidity debit per tender account (sum == total, cash absorbs change).
+        // Single-method / no lines / DEPOSIT-mixed → allocation is null → one debit to the header account.
+        const alloc = allocateTenderToLiquidity(sale.totalAmount, sale.paymentLines);
+        if (alloc && alloc.items.length > 0) {
+          for (const it of alloc.items) {
+            ledgerLines.push({
+              accountCode: it.accountCode,
+              description: `Payment received [${it.methods.join('+')}] for ${sale.saleNumber}`,
+              debitAmount: it.amountCents / 100,
+              creditAmount: 0
+            });
+          }
+          if (alloc.shortfallCents > 0) {
+            ledgerLines.push({
+              accountCode: debitAccountCode,
+              description: `${paymentDescription} for ${sale.saleNumber}`,
+              debitAmount: alloc.shortfallCents / 100,
+              creditAmount: 0
+            });
+          }
+        } else {
+          ledgerLines.push({
+            accountCode: debitAccountCode,
+            description: `${paymentDescription} for ${sale.saleNumber}`,
+            debitAmount: sale.totalAmount,
+            creditAmount: 0
+          });
+        }
       }
 
       // Credit Revenue - split by product type

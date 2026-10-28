@@ -1,0 +1,92 @@
+{
+  "title": "Suspicious Redis keys: evidence preservation + removal + recovery rehearsal",
+  "generatedAt": "2026-10-28T18:05:31.8440982Z",
+  "productionTouched": false,
+  "note": "Run against a LOCAL Redis 7.4.8 loaded with a read-only copy of the production dump.rdb. Nothing was executed in production.",
+  "script": "ops/security/50-redis-suspicious-keys.sh",
+  "redisVersion": "7.4.8",
+  "dataset": {
+    "keys": 100444,
+    "floatKeys": 100000,
+    "huiKeys": 25,
+    "testKeys": 1,
+    "bullKeys": 418,
+    "otherNonTargetNonBull": 0,
+    "floatValueShape": "^1337\\.[0-9]+$ (all 100000 match)",
+    "huiAllStrings": true,
+    "testValue": "1"
+  },
+  "attackIndicatorsInCopy": {
+    "role": "master",
+    "modules": "none",
+    "dbfilename": "dump.rdb",
+    "note": "production INFO (earlier read-only recon) showed master_replid2 set and thousands of rejected SLAVEOF/CONFIG SET/MODULE LOAD/FLUSHALL attempts: see PROOF_REDIS_PG_LOCKDOWN.md"
+  },
+  "steps": [
+    {
+      "step": "check (read-only)",
+      "result": "PASS",
+      "seconds": 36,
+      "targetValueDigest": "13fc1ae6233c46d7259930bc88a019886090583ebe70b9f6eb325c7a43247add"
+    },
+    {
+      "step": "remove --apply without evidence marker",
+      "result": "REFUSED (exit 1)"
+    },
+    {
+      "step": "remove --apply with wrong approved count (99999 vs 100000)",
+      "result": "REFUSED (exit 1)"
+    },
+    {
+      "step": "evidence --apply",
+      "result": "PASS",
+      "files": [
+        "dump.rdb (4,162,769 bytes, sha256 recorded)",
+        "key-manifest.tsv (100,444 rows)",
+        "target.keys",
+        "nontarget.keys",
+        "pre-state.txt",
+        "redis-info.txt",
+        "redis-config-nonsecret.txt",
+        "MANIFEST.sha256"
+      ]
+    },
+    {
+      "step": "remove --apply (expect 100000/25/1)",
+      "result": "PASS",
+      "unlinked": 100026,
+      "batches": 201,
+      "dbsizeBefore": 100444,
+      "dbsizeAfter": 418,
+      "nonTargetNonBullDigestUnchanged": true,
+      "bullStructuralKeysUnchanged": true
+    },
+    {
+      "step": "restore (scratch redis from evidence dump, MIGRATE COPY, no REPLACE)",
+      "result": "PASS",
+      "restoredKeys": 100026,
+      "dbsizeAfter": 100444,
+      "restoredTargetValueDigest": "13fc1ae6233c46d7259930bc88a019886090583ebe70b9f6eb325c7a43247add",
+      "digestEqualsOriginal": true
+    }
+  ],
+  "syntheticSuiteWithRealRedis": {
+    "file": "SamplePOS.Server/src/security/redisSuspiciousKeys.rehearsal.test.ts",
+    "tests": "7/7 pass (K1-K7)",
+    "mutationCheck": "loosening RE_HUI to ^hui: made 5 of 7 tests fail (decoy deletion detected)",
+    "staticChecks": "opsScripts.dryrun.test.ts S1/S2 now also cover this script (34/34)"
+  },
+  "notVerified": [
+    "Docker execution path (docker exec -i / docker cp / scratch container sharing the redis network namespace) was not executed: no Docker locally",
+    "redis-cli inside the Alpine image reading REDISCLI_AUTH from the container env was not executed",
+    "msys redis-cli.exe ignores REDISCLI_AUTH under bash: local rehearsal passes -a via OPS_RCLI; production path relies on the container's own environment (same assumption as 90-verify-host.sh)"
+  ],
+  "productionRunbook": [
+    "1) --phase check (read-only) and compare counts with this proof",
+    "2) --phase evidence --apply --ts TS  (BGSAVE only; no writes to keyspace)",
+    "3) review evidence + approve exact counts",
+    "4) --phase remove --apply --ts TS --expect-float N --expect-hui N --expect-test N",
+    "5) --phase verify",
+    "rollback) start a scratch Redis from evidence dump.rdb and run --phase restore --apply"
+  ]
+}

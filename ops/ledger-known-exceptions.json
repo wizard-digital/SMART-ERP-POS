@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "decision": "Owner approved Option A on 2026-10-29: do not edit posted journals. A listed exception must match this fingerprint exactly or the integrity gate fails. An unlisted mismatch fails. A listed exception that disappears also fails (the list must be updated, it is not a silent filter).",
+  "headerMismatches": [
+    {
+      "id": "HENBER-TXN-002362",
+      "tenantSlug": "henber",
+      "decision": "A",
+      "approvedAt": "2026-10-29",
+      "record": "ops/TXN-002362_DECISION.md",
+      "transactionNumber": "TXN-002362",
+      "referenceType": "SALE",
+      "referenceNumber": "SALE-2026-0011",
+      "headerDebit": "14850.00",
+      "headerCredit": "14850.00",
+      "entriesDebit": "13850.00",
+      "entriesCredit": "13850.00",
+      "amountDebit": "14850.00",
+      "amountCredit": "14850.00",
+      "economicBalanced": true,
+      "notes": "April-2026 pre-discount artefact. DebitAmount/CreditAmount (8,000 cash + 5,850 COGS) are the economic truth; header and Amount kept the pre-discount 9,000. Trial balance and P&L are unaffected."
+    }
+  ]
+}

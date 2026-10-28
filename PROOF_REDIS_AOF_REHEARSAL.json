@@ -1,0 +1,155 @@
+{
+  "generatedAt": "2026-10-28T16:39:43.8467129Z",
+  "purpose": "Rehearsal of Redis AOF enablement on production-equivalent Redis 7.4.8 using a read-only COPY of the production dump.rdb. Nothing was executed against production.",
+  "redisBinary": "redis-windows 7.4.8 msys2 build (redis-server.exe sha256 27DFD07FBC87D46397393D750CE6EE4991780A3B6C974E0D7D7DE867F3DE7157)",
+  "prodRdbCopy": {
+    "source": "/var/lib/docker/volumes/smarterp_redis_data/_data/dump.rdb (scp, read-only)",
+    "bytes": 4165807,
+    "sha256": "F3DD9BFAA9C89295ED4F89EF26D79A0D1D2DDDF66F8F69F6379A360D5FCD0491",
+    "redisCheckRdb": "Checksum OK, 100453 keys read"
+  },
+  "limitations": [
+    "Windows build of 7.4.8 (msys2) not the Alpine/musl docker image: command semantics and persistence formats are identical, fsync/fork timing is not.",
+    "Jobs were planted on top of the real production dataset (production queues were nearly empty), so job-state retention is proven with synthetic jobs, not production jobs.",
+    "Docker/compose recreation itself was NOT executed (no Docker on the dev machine); see PROOF_GATES_REPORT.md unexecuted checks."
+  ],
+  "results": {
+    "R1": {
+      "version": "7.4.8",
+      "keys": 100446,
+      "digest": "a39921986279eedd2d1b69aa93eff6de185d1cd19e248e96cee903a005b93b76",
+      "prefixes": {
+        "bull:calculations:delayed": {
+          "keys": 1,
+          "digest": "e273d56beb383fddc9fce6d1d769f098e33775de670d451e7579a1194e6e7e2c"
+        },
+        "bull:calculations:id": {
+          "keys": 1,
+          "digest": "cf122251b57fc4475ca79f2976e6d2b372c61a338db8c739454cb012821d3ba4"
+        },
+        "bull:calculations:repeat": {
+          "keys": 6,
+          "digest": "5fbec3b5abb15fdfeda61ec49f8c5f4333456174349b72d15f793319400e155e"
+        },
+        "bull:gl_events:completed": {
+          "keys": 1,
+          "digest": "cbb48879b06ab46a2debb1017b7a5fec01de4ea35322e7804c13cb36ce948f96"
+        },
+        "bull:gl_events:delayed": {
+          "keys": 1,
+          "digest": "63b0429aa479cfa9e3e94f838784df90b771869b23e8e92b99f3568e723b020c"
+        },
+        "bull:gl_events:id": {
+          "keys": 1,
+          "digest": "4d34d8dc9417bacc7e30dfb20e56ebafc9491a36ea11c2049129a4094412c9e2"
+        },
+        "bull:gl_events:repeat": {
+          "keys": 202,
+          "digest": "b2a1faa6dbff475aacadb66df3c4aff4c629ff51174405c4738e24f872a7d862"
+        },
+        "bull:notifications:completed": {
+          "keys": 1,
+          "digest": "aac4ad60a841c3587fe79c9bb9bb175c3904e9fd3304ff0d5b7598b8ffa00ac6"
+        },
+        "bull:notifications:delayed": {
+          "keys": 1,
+          "digest": "dbe0b08d79ef5f0be06000ffa1aeac5c1269afdc01dc0be4b8bf921b4763d5f4"
+        },
+        "bull:notifications:id": {
+          "keys": 1,
+          "digest": "a977dc6807bfaf3636cc8a9cd591cdf0f6a0b48bd6bac0f5b29888fd4e5d7ea2"
+        },
+        "bull:notifications:repeat": {
+          "keys": 202,
+          "digest": "675c96ec171c98c8f45e08c3ba6c7156760ea596b145b1b45f153392cb7ac933"
+        },
+        "cache:*": {
+          "keys": 2,
+          "digest": "955bf3d3128dfd3835a0ffe849f236a90171bbb136e52a6a0087031007c49e56"
+        },
+        "float:*": {
+          "keys": 100000,
+          "digest": "fd3e9747779dd4ae1670136dd33da8f89ee90ea8f34deebc31b0361969f0115b"
+        },
+        "hui:*": {
+          "keys": 25,
+          "digest": "66bb75b0e7d1f66bdebf4e2905b6b0720142a409aeefa9fa220d38f8c33ab253"
+        },
+        "test": {
+          "keys": 1,
+          "digest": "6d7c2b7215f8d34ce7f8d027bd8a7e44ac54c2211de9d297c110f74b1a237774"
+        }
+      }
+    },
+    "R2_hazard": {
+      "keysInRdb": 100446,
+      "keysAfterBootWithAofOn": 0,
+      "aof_enabled": "1",
+      "files": [
+        "appendonlydir",
+        "dump.rdb"
+      ]
+    },
+    "plantedBankRowsBeforeMigration": [
+      "C-1|MOBILE_MONEY",
+      "C-2|MOBILE_MONEY",
+      "C-1|CARD",
+      "C-2|CARD",
+      "D-1|MOBILE_MONEY",
+      "D-1|CARD"
+    ],
+    "R3_redisCheckAof": {
+      "status": 0,
+      "tail": [
+        "BASE AOF appendonly.aof.1.base.rdb is valid",
+        "Start to check INCR files.",
+        "INCR AOF appendonly.aof.1.incr.aof is empty",
+        "All AOF files and manifest are valid"
+      ]
+    },
+    "R3": {
+      "keys": 100463,
+      "digestPre": "1e6a7313a2e025ceaeb7d0d4a797b9d5df34361a8103abe4058853f3b6ce667e",
+      "digestPost": "1e6a7313a2e025ceaeb7d0d4a797b9d5df34361a8103abe4058853f3b6ce667e",
+      "census": {
+        "wait": 3,
+        "active": 2,
+        "paused": 0,
+        "delayed": 3,
+        "failed": 1,
+        "completed": 2
+      },
+      "aof": [
+        "appendonly.aof.1.base.rdb",
+        "appendonly.aof.1.incr.aof",
+        "appendonly.aof.manifest"
+      ]
+    },
+    "R4": {
+      "bankRows": 10,
+      "createFromSaleCalls": 10,
+      "doubleDeliveredButDeduped": [
+        "D-1"
+      ],
+      "census": {
+        "wait": 0,
+        "active": 0,
+        "paused": 0,
+        "delayed": 3,
+        "failed": 1,
+        "completed": 7
+      }
+    },
+    "R5": {
+      "recovered": 50,
+      "of": 50
+    },
+    "R6_hazard_crash_then_rdb_only": {
+      "enqueued": 5,
+      "lost": 5
+    },
+    "R6_safe": {
+      "unsavedChangesAtBgsaveEnd": "0"
+    }
+  }
+}

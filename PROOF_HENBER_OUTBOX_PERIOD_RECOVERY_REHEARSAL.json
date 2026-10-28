@@ -1,0 +1,465 @@
+{
+  "database": "rehearsal_henber",
+  "generatedAt": "2026-10-28T17:33:36.833Z",
+  "note": "LOCAL rehearsal copy; production untouched",
+  "stuckEvents": {
+    "count": 18,
+    "byClassification": {
+      "ALREADY_APPLIED_OR_SUPERSEDED": 18
+    },
+    "rows": [
+      {
+        "eventId": "6d72cdc8-ac96-4c4a-93c7-ece21aa51f4a",
+        "account": "4110",
+        "period": "2026-04",
+        "txn": "TXN-008174",
+        "refType": "STOCK_MOVEMENT",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          0,
+          4700958.56
+        ],
+        "ledger": [
+          0,
+          4700958.56
+        ]
+      },
+      {
+        "eventId": "1350307f-0bd0-46c3-ac53-435b22d26790",
+        "account": "1300",
+        "period": "2026-04",
+        "txn": "TXN-008174",
+        "refType": "STOCK_MOVEMENT",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          128365684.63,
+          24640126.54
+        ],
+        "ledger": [
+          128365684.63,
+          24640126.54
+        ]
+      },
+      {
+        "eventId": "26a2d4ee-d61e-483d-bda6-e48f4e911710",
+        "account": "1300",
+        "period": "2026-04",
+        "txn": "TXN-008175",
+        "refType": "STOCK_MOVEMENT",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          128365684.63,
+          24640126.54
+        ],
+        "ledger": [
+          128365684.63,
+          24640126.54
+        ]
+      },
+      {
+        "eventId": "92e39a3d-793e-4de3-96e1-803a977ee82a",
+        "account": "4110",
+        "period": "2026-04",
+        "txn": "TXN-008175",
+        "refType": "STOCK_MOVEMENT",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          0,
+          4700958.56
+        ],
+        "ledger": [
+          0,
+          4700958.56
+        ]
+      },
+      {
+        "eventId": "c6b93103-cb9d-4b34-aabd-efb835b3a389",
+        "account": "1300",
+        "period": "2026-04",
+        "txn": "TXN-008176",
+        "refType": "STOCK_MOVEMENT",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          128365684.63,
+          24640126.54
+        ],
+        "ledger": [
+          128365684.63,
+          24640126.54
+        ]
+      },
+      {
+        "eventId": "c77fa4ae-8915-4de0-bc8e-47c9664f62f3",
+        "account": "4110",
+        "period": "2026-04",
+        "txn": "TXN-008176",
+        "refType": "STOCK_MOVEMENT",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          0,
+          4700958.56
+        ],
+        "ledger": [
+          0,
+          4700958.56
+        ]
+      },
+      {
+        "eventId": "60412f20-43c2-4d16-acbf-6fa259e14d06",
+        "account": "6900",
+        "period": "2026-05",
+        "txn": "TXN-008178",
+        "refType": "SUPPLIER_INVOICE",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          4547590,
+          0
+        ],
+        "ledger": [
+          4547590,
+          0
+        ]
+      },
+      {
+        "eventId": "fe6d3683-6671-4bfc-a84e-f5254155ec57",
+        "account": "2100",
+        "period": "2026-05",
+        "txn": "TXN-008178",
+        "refType": "SUPPLIER_INVOICE",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          39108627,
+          46374255
+        ],
+        "ledger": [
+          39108627,
+          46374255
+        ]
+      },
+      {
+        "eventId": "f2e1fad1-99a4-4625-b26d-c40b4927200f",
+        "account": "2100",
+        "period": "2026-05",
+        "txn": "TXN-008179",
+        "refType": "SUPPLIER_INVOICE",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          39108627,
+          46374255
+        ],
+        "ledger": [
+          39108627,
+          46374255
+        ]
+      },
+      {
+        "eventId": "cb20c6d7-ca4d-4fa6-8eb6-3961aad7a428",
+        "account": "6900",
+        "period": "2026-05",
+        "txn": "TXN-008179",
+        "refType": "SUPPLIER_INVOICE",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          4547590,
+          0
+        ],
+        "ledger": [
+          4547590,
+          0
+        ]
+      },
+      {
+        "eventId": "901e3645-6828-4b0f-9399-9bdc0d13fb77",
+        "account": "2100",
+        "period": "2026-05",
+        "txn": "TXN-011802",
+        "refType": "CORRECTION",
+        "txnStatus": "REVERSED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          39108627,
+          46374255
+        ],
+        "ledger": [
+          39108627,
+          46374255
+        ]
+      },
+      {
+        "eventId": "adbc904c-5708-421f-97b1-369ff3e0ca5f",
+        "account": "5000",
+        "period": "2026-05",
+        "txn": "TXN-011802",
+        "refType": "CORRECTION",
+        "txnStatus": "REVERSED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          29134705,
+          4377000
+        ],
+        "ledger": [
+          29134705,
+          4377000
+        ]
+      },
+      {
+        "eventId": "b5e27fb4-b2d5-465a-966f-861948009781",
+        "account": "1300",
+        "period": "2026-05",
+        "txn": "TXN-011803",
+        "refType": "ADJUSTMENT",
+        "txnStatus": "REVERSED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          51684598.39,
+          44574137.24
+        ],
+        "ledger": [
+          51684598.39,
+          44574137.24
+        ]
+      },
+      {
+        "eventId": "6189fbb4-2c5a-42fe-950c-d390370f2e99",
+        "account": "5110",
+        "period": "2026-05",
+        "txn": "TXN-011803",
+        "refType": "ADJUSTMENT",
+        "txnStatus": "REVERSED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          13481635.34,
+          0
+        ],
+        "ledger": [
+          13481635.34,
+          0
+        ]
+      },
+      {
+        "eventId": "94cf5fd3-229d-4f27-b518-f56286a5ee7c",
+        "account": "1300",
+        "period": "2026-05",
+        "txn": "TXN-012357",
+        "refType": "CORRECTION",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          51684598.39,
+          44574137.24
+        ],
+        "ledger": [
+          51684598.39,
+          44574137.24
+        ]
+      },
+      {
+        "eventId": "87b0e6c4-b8bc-4e27-a5da-bac0e0284ad3",
+        "account": "5110",
+        "period": "2026-05",
+        "txn": "TXN-012357",
+        "refType": "CORRECTION",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          13481635.34,
+          0
+        ],
+        "ledger": [
+          13481635.34,
+          0
+        ]
+      },
+      {
+        "eventId": "5ec2be56-0b59-4beb-af98-a9a09981acd2",
+        "account": "2150",
+        "period": "2026-08",
+        "txn": "TXN-028972",
+        "refType": "SYSTEM_CORRECTION",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          44627353.79,
+          44785149.79
+        ],
+        "ledger": [
+          44627353.79,
+          44785149.79
+        ]
+      },
+      {
+        "eventId": "3090d865-a2c5-4b81-ac62-7f2d6b4799a9",
+        "account": "6900",
+        "period": "2026-08",
+        "txn": "TXN-028972",
+        "refType": "SYSTEM_CORRECTION",
+        "txnStatus": "POSTED",
+        "classification": "ALREADY_APPLIED_OR_SUPERSEDED",
+        "stored": [
+          1376000,
+          133990
+        ],
+        "ledger": [
+          1376000,
+          133990
+        ]
+      }
+    ]
+  },
+  "differencesBefore": [
+    {
+      "code": "2100",
+      "y": 2027,
+      "m": 7,
+      "d": 0,
+      "c": 4000,
+      "last_updated": "2026-07-22 14:50:30.175573+03",
+      "kind": "ORPHAN"
+    },
+    {
+      "code": "2150",
+      "y": 2027,
+      "m": 7,
+      "d": 4000,
+      "c": 0,
+      "last_updated": "2026-07-22 14:50:30.175573+03",
+      "kind": "ORPHAN"
+    }
+  ],
+  "recovery": {
+    "workerCycles": [
+      {
+        "claimed": 18,
+        "rebuilt": 9,
+        "failed": 0,
+        "durationMs": 494
+      },
+      {
+        "claimed": 0,
+        "rebuilt": 0,
+        "failed": 0,
+        "durationMs": 1
+      }
+    ],
+    "histogram": {
+      "before": {
+        "PROCESSING": 18,
+        "DONE": 48
+      },
+      "afterWorker": {
+        "DONE": 66
+      },
+      "after": {
+        "DONE": 66
+      }
+    },
+    "diffs": {
+      "before": 2,
+      "afterWorker": 2,
+      "after": 0
+    },
+    "reconcileApplyTail": [
+      "[APPLY] rehearsal_henber: 2 difference(s) between gl_period_balances and the ledger",
+      "  ORPHAN  acct 2100 2027-07  stored dr/cr 0.00/4000.00  ledger dr/cr 0/0",
+      "  ORPHAN  acct 2150 2027-07  stored dr/cr 4000.00/0.00  ledger dr/cr 0/0",
+      "APPLIED 2 change(s); post-check clean; ledger untouched.",
+      "Evidence written: C:\\Users\\Chase\\AppData\\Local\\Temp/recon-rehearsal_henber-apply.json",
+      ""
+    ]
+  },
+  "checks": [
+    {
+      "id": "before.stuck_processing_present",
+      "pass": true,
+      "observed": {
+        "PROCESSING": 18,
+        "DONE": 48
+      }
+    },
+    {
+      "id": "worker.drained_all_processing",
+      "pass": true,
+      "observed": {
+        "DONE": 66
+      }
+    },
+    {
+      "id": "worker.no_failed_events",
+      "pass": true,
+      "observed": {
+        "DONE": 66
+      }
+    },
+    {
+      "id": "reconcile.dry_run_exit0",
+      "pass": true,
+      "observed": [
+        "[DRY_RUN] rehearsal_henber: 2 difference(s) between gl_period_balances and the ledger",
+        "  ORPHAN  acct 2100 2027-07  stored dr/cr 0.00/4000.00  ledger dr/cr 0/0",
+        "  ORPHAN  acct 2150 2027-07  stored dr/cr 4000.00/0.00  ledger dr/cr 0/0",
+        "DRY-RUN only: nothing was written. Re-run with --apply --confirm-db <db> to apply."
+      ]
+    },
+    {
+      "id": "reconcile.apply_exit0",
+      "pass": true,
+      "observed": [
+        "[APPLY] rehearsal_henber: 2 difference(s) between gl_period_balances and the ledger",
+        "  ORPHAN  acct 2100 2027-07  stored dr/cr 0.00/4000.00  ledger dr/cr 0/0",
+        "  ORPHAN  acct 2150 2027-07  stored dr/cr 4000.00/0.00  ledger dr/cr 0/0",
+        "APPLIED 2 change(s); post-check clean; ledger untouched.",
+        "Evidence written: C:\\Users\\Chase\\AppData\\Local\\Temp/recon-rehearsal_henber-apply.json",
+        ""
+      ]
+    },
+    {
+      "id": "after.period_balances_equal_ledger",
+      "pass": true,
+      "observed": {
+        "before": 2,
+        "afterWorker": 2,
+        "after": 0
+      }
+    },
+    {
+      "id": "after.ledger_fingerprint_identical",
+      "pass": true,
+      "observed": {
+        "before": {
+          "entries": 98158,
+          "dr": "2668782571.570000",
+          "cr": "2668782571.570000",
+          "txns": 47500,
+          "md5": "7f11b96043b3f7f50de15c35fb23ab47"
+        },
+        "after": {
+          "entries": 98158,
+          "dr": "2668782571.570000",
+          "cr": "2668782571.570000",
+          "txns": 47500,
+          "md5": "7f11b96043b3f7f50de15c35fb23ab47"
+        }
+      }
+    },
+    {
+      "id": "replay.second_apply_is_noop",
+      "pass": true,
+      "observed": [
+        "[APPLY] rehearsal_henber: 0 difference(s) between gl_period_balances and the ledger",
+        "APPLIED 0 change(s); post-check clean; ledger untouched.",
+        "Evidence written: C:\\Users\\Chase\\AppData\\Local\\Temp/recon-rehearsal_henber-apply2.json"
+      ]
+    }
+  ],
+  "allChecksPass": true
+}

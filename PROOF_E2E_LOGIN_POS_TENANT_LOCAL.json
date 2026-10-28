@@ -1,0 +1,521 @@
+{
+  "title": "Release gate — login / POS sale / tenant switch with seeded data (local, real server)",
+  "startedAt": "2026-10-28T22:33:02.257Z",
+  "finishedAt": "2026-10-28T22:33:42.914Z",
+  "summary": {
+    "total": 20,
+    "pass": 20,
+    "failBlocker": 0,
+    "failWarn": 0,
+    "notExecuted": 0
+  },
+  "meta": {
+    "commands": [
+      {
+        "cmd": "tsx src/server.ts (master + 2 tenant DBs, authenticated redis)",
+        "port": 51333
+      }
+    ],
+    "seeded": {
+      "databases": {
+        "master": "e2e_master_1793226782258",
+        "alpha": "e2e_alpha_1793226782258",
+        "beta": "e2e_beta_1793226782258"
+      },
+      "alpha": {
+        "userId": "6332e331-46d0-4331-b7c5-8c77bdec008e",
+        "productId": "673a67ae-57a7-4cd4-893a-1c269573b508"
+      },
+      "beta": {
+        "userId": "edbcf9b1-3b81-4645-abfb-2d9e48313759",
+        "productId": "757e8d0b-41c7-441f-99ea-c098e2329d4d"
+      },
+      "passwordsInThisFile": "test-only values, never used outside this script"
+    },
+    "alphaState": {
+      "sales": [
+        {
+          "id": "ce1235fb-382f-4b7d-add4-7045ca3d27e6",
+          "sale_number": "SALE-2026-0001",
+          "total": 10000,
+          "payment_method": "CASH",
+          "status": "COMPLETED"
+        },
+        {
+          "id": "d0be4039-744b-4d11-9028-793c6d7a1e91",
+          "sale_number": "SALE-2026-0002",
+          "total": 10000,
+          "payment_method": "CASH",
+          "status": "COMPLETED"
+        }
+      ],
+      "lines": [
+        {
+          "sale_number": "SALE-2026-0002",
+          "payment_method": "CASH",
+          "amount": 6000
+        },
+        {
+          "sale_number": "SALE-2026-0002",
+          "payment_method": "MOBILE_MONEY",
+          "amount": 4000
+        }
+      ],
+      "journals": [
+        {
+          "n": "TXN-000001",
+          "ref": "SALE-2026-0001",
+          "st": "POSTED",
+          "dr": 10000,
+          "cr": 10000,
+          "diff": 0
+        },
+        {
+          "n": "TXN-000003",
+          "ref": "SALE-2026-0002",
+          "st": "POSTED",
+          "dr": 10000,
+          "cr": 10000,
+          "diff": 0
+        }
+      ],
+      "liquidity": [
+        {
+          "code": "1010",
+          "dr": 10000,
+          "cr": 0,
+          "ref": "SALE-2026-0001"
+        },
+        {
+          "code": "1010",
+          "dr": 6000,
+          "cr": 0,
+          "ref": "SALE-2026-0002"
+        },
+        {
+          "code": "1040",
+          "dr": 4000,
+          "cr": 0,
+          "ref": "SALE-2026-0002"
+        }
+      ],
+      "stock": 96,
+      "bank": [
+        {
+          "description": "Sale SALE-2026-0002 [MOBILE_MONEY]",
+          "amount": 4000
+        }
+      ]
+    },
+    "betaState": {
+      "sales": [
+        {
+          "id": "d4351900-aa51-4c5e-963e-4eafbfa56f11",
+          "sale_number": "SALE-2026-0001",
+          "total": 10000,
+          "payment_method": "MOBILE_MONEY",
+          "status": "COMPLETED"
+        }
+      ],
+      "lines": [
+        {
+          "sale_number": "SALE-2026-0001",
+          "payment_method": "MOBILE_MONEY",
+          "amount": 10000
+        }
+      ],
+      "journals": [
+        {
+          "n": "TXN-000001",
+          "ref": "SALE-2026-0001",
+          "st": "POSTED",
+          "dr": 10000,
+          "cr": 10000,
+          "diff": 0
+        }
+      ],
+      "liquidity": [
+        {
+          "code": "1040",
+          "dr": 10000,
+          "cr": 0,
+          "ref": "SALE-2026-0001"
+        }
+      ],
+      "stock": 98,
+      "bank": [
+        {
+          "description": "Sale SALE-2026-0001 [MOBILE_MONEY]",
+          "amount": 10000
+        }
+      ]
+    },
+    "serverLogTail": [
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mInventory batch deducted for product 757e8d0b-41c7-441f-99ea-c098e2329d4d\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mSale revenue breakdown\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mAP governance: rebased account cache from posted ledger\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mJournal entry created\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mAP governance: rebased account cache from posted ledger\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mJournal entry created\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mCOGS entry created under INVENTORY_MOVE (service items excluded)\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mRecorded sale to GL\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mPayment lines created\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mCost layers deducted\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mCost layers deducted for product 757e8d0b-41c7-441f-99ea-c098e2329d4d\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mBank transaction mirrored for sale payment (linked GL — no second journal)\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mBank transaction created for sale payment\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mJob notif:65098dd1-4872-40c8-bac7-b1950000d63f:SALE_COMPLETED:sale:d4351900-aa51-4c5e-963e-4eafbfa56f11 added to queue notifications\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mProcessing job notif:65098dd1-4872-40c8-bac7-b1950000d63f:SALE_COMPLETED:sale:d4351900-aa51-4c5e-963e-4eafbfa56f11 in queue notifications\u001b[39m",
+      "2026-10-29 01:33:27 [\u001b[32minfo\u001b[39m]: \u001b[32mNotification event processed\u001b[39m",
+      "2026-10-29 01:33:28 [\u001b[32minfo\u001b[39m]: \u001b[32mJob notif:65098dd1-4872-40c8-bac7-b1950000d63f:SALE_COMPLETED:sale:d4351900-aa51-4c5e-963e-4eafbfa56f11 in queue notifications completed\u001b[39m",
+      "2026-10-29 01:33:28 [\u001b[31merror\u001b[39m]: \u001b[31mUnhandled error\u001b[39m",
+      "error: insert or update on table \"product_uoms\" violates foreign key constraint \"product_uoms_product_id_fkey\"",
+      "    at C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\node_modules\\pg\\lib\\client.js:545:17",
+      "    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)",
+      "    at async Module.createProductUom (C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\src\\modules\\products\\uomRepository.ts:411:15)",
+      "    at async bootstrapProductUomsFromCreateInput (C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\src\\modules\\products\\uomService.ts:914:3)",
+      "    at async bootstrapLegacyProductUomFromProductRow (C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\src\\modules\\products\\uomService.ts:39:3)",
+      "    at async ensureProductBaseUomContext (C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\src\\modules\\products\\uomService.ts:67:5)",
+      "    at async resolveSaleItemUom (C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\src\\modules\\products\\uomService.ts:696:3)",
+      "    at async Object.createSale (C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\src\\modules\\sales\\salesService.ts:414:11)",
+      "    at async createSale (C:\\Users\\Chase\\source\\repos\\SamplePOS\\SamplePOS.Server\\src\\modules\\sales\\salesRoutes.ts:252:16)",
+      "2026-10-29 01:33:30 [\u001b[32minfo\u001b[39m]: \u001b[32mProcessing job repeat:bccf8bcbad84b28c8aacfa3f9b276be9:1793226810000 in queue gl_events\u001b[39m",
+      "2026-10-29 01:33:30 [\u001b[32minfo\u001b[39m]: \u001b[32mJob repeat:bccf8bcbad84b28c8aacfa3f9b276be9:1793226810000 in queue gl_events completed\u001b[39m"
+    ]
+  },
+  "results": [
+    {
+      "gate": "E2E",
+      "id": "E2E.health",
+      "description": "Server starts against the seeded master + tenant databases",
+      "severity": "BLOCKER",
+      "expected": "200",
+      "evidence": "GET /health",
+      "executed": true,
+      "observed": {
+        "health": 200,
+        "exited": null
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.login.wrongPassword",
+      "description": "Wrong password is rejected",
+      "severity": "BLOCKER",
+      "expected": "401",
+      "evidence": "POST /api/auth/login",
+      "executed": true,
+      "observed": {
+        "status": 401
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.login.otherTenantCredentials",
+      "description": "Tenant B's user cannot log in on tenant A's host",
+      "severity": "BLOCKER",
+      "expected": "401",
+      "evidence": "POST /api/auth/login (alpha host, beta user)",
+      "executed": true,
+      "observed": {
+        "status": 401
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.login.alpha",
+      "description": "Alpha admin logs in on the alpha host and receives a token for tenant alpha",
+      "severity": "BLOCKER",
+      "expected": "200 + token",
+      "evidence": "POST /api/auth/login",
+      "executed": true,
+      "observed": {
+        "status": 200,
+        "hasToken": true,
+        "keys": [
+          "user",
+          "token",
+          "accessToken",
+          "refreshToken",
+          "expiresIn",
+          "requires2FASetup",
+          "passwordExpiry",
+          "mustChangePassword"
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.login.beta",
+      "description": "Beta admin logs in on the beta host (tenant switch = a different host/tenant)",
+      "severity": "BLOCKER",
+      "expected": "200 + token",
+      "evidence": "POST /api/auth/login",
+      "executed": true,
+      "observed": {
+        "status": 200,
+        "hasToken": true
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.profile.ownTenant",
+      "description": "Each token works on its own tenant and returns that tenant's user",
+      "severity": "BLOCKER",
+      "expected": "200/200, emails admin@alpha.test / admin@beta.test",
+      "evidence": "GET /api/auth/profile",
+      "executed": true,
+      "observed": {
+        "alpha": [
+          200,
+          "admin@alpha.test"
+        ],
+        "beta": [
+          200,
+          "admin@beta.test"
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.tenantSwitch.tokenNotPortable",
+      "description": "A token issued for tenant A is refused on tenant B's host and vice versa",
+      "severity": "BLOCKER",
+      "expected": "401/403 both ways",
+      "evidence": "GET /api/auth/profile with swapped hosts",
+      "executed": true,
+      "observed": {
+        "aOnB": 401,
+        "bOnA": 401
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.pos.singleCash",
+      "description": "POS single-tender CASH sale is created",
+      "severity": "BLOCKER",
+      "expected": "201/200 success",
+      "evidence": "POST /api/sales",
+      "executed": true,
+      "observed": {
+        "status": 201,
+        "ok": true
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.pos.splitTender",
+      "description": "POS split-tender (CASH 6,000 + MOBILE_MONEY 4,000) sale is created",
+      "severity": "BLOCKER",
+      "expected": "201/200 success",
+      "evidence": "POST /api/sales",
+      "executed": true,
+      "observed": {
+        "status": 201,
+        "ok": true
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.pos.replayIdempotent",
+      "description": "Replaying the same idempotency key returns the existing sale and creates nothing",
+      "severity": "BLOCKER",
+      "expected": "200 alreadySynced",
+      "evidence": "POST /api/sales (same key)",
+      "executed": true,
+      "observed": {
+        "status": 200,
+        "alreadySynced": true
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.pos.betaSale",
+      "description": "A sale on the other tenant (single MOBILE_MONEY line) is created",
+      "severity": "BLOCKER",
+      "expected": "201/200 success",
+      "evidence": "POST /api/sales (beta host)",
+      "executed": true,
+      "observed": {
+        "status": 201,
+        "ok": true
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.pos.crossTenantProductRefused",
+      "description": "Tenant B cannot sell tenant A's product id",
+      "severity": "BLOCKER",
+      "expected": "not 2xx",
+      "evidence": "POST /api/sales",
+      "executed": true,
+      "observed": {
+        "status": 400
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.db.alphaSales",
+      "description": "Alpha DB has exactly the two created sales (replay created nothing)",
+      "severity": "BLOCKER",
+      "expected": "2 sales; payment_lines only for the split sale (the legacy single-method path stores none): 2 lines",
+      "evidence": "sales / payment_lines",
+      "executed": true,
+      "observed": {
+        "sales": 2,
+        "lines": 2,
+        "stock": 96
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.db.journalsBalanced",
+      "description": "Every sale journal in both tenants balances (debit = credit)",
+      "severity": "BLOCKER",
+      "expected": "diff 0, header dr = cr",
+      "evidence": "ledger_entries",
+      "executed": true,
+      "observed": {
+        "alpha": [
+          {
+            "n": "TXN-000001",
+            "ref": "SALE-2026-0001",
+            "st": "POSTED",
+            "dr": 10000,
+            "cr": 10000,
+            "diff": 0
+          },
+          {
+            "n": "TXN-000003",
+            "ref": "SALE-2026-0002",
+            "st": "POSTED",
+            "dr": 10000,
+            "cr": 10000,
+            "diff": 0
+          }
+        ],
+        "beta": [
+          {
+            "n": "TXN-000001",
+            "ref": "SALE-2026-0001",
+            "st": "POSTED",
+            "dr": 10000,
+            "cr": 10000,
+            "diff": 0
+          }
+        ]
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.db.cashSaleToCash",
+      "description": "Single CASH sale debits 1010 for the whole amount",
+      "severity": "BLOCKER",
+      "expected": "{1010: 10000}",
+      "evidence": "ledger_entries",
+      "executed": true,
+      "observed": {
+        "1010": 10000
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.db.splitTenderPostedPerLine",
+      "description": "Split sale posts CASH 6,000 to 1010 and MOBILE_MONEY 4,000 to 1040 (not 10,000 to one account)",
+      "severity": "BLOCKER",
+      "expected": "{1010: 6000, 1040: 4000}",
+      "evidence": "ledger_entries",
+      "executed": true,
+      "observed": {
+        "1010": 6000,
+        "1040": 4000
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.db.momoSaleTo1040",
+      "description": "Beta single MOBILE_MONEY sale posts to 1040, not cash",
+      "severity": "BLOCKER",
+      "expected": "{1040: 10000}",
+      "evidence": "ledger_entries",
+      "executed": true,
+      "observed": {
+        "1040": 10000
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.db.tenantIsolation",
+      "description": "Alpha sales never appear in beta and vice versa; cross-tenant product sale left no trace",
+      "severity": "BLOCKER",
+      "expected": "beta has exactly 1 sale; none shares a sale number with alpha only via own sequence",
+      "evidence": "sales",
+      "executed": true,
+      "observed": {
+        "alphaSales": [
+          "SALE-2026-0001",
+          "SALE-2026-0002"
+        ],
+        "betaSales": [
+          "SALE-2026-0001"
+        ],
+        "betaStock": 98
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.db.stock",
+      "description": "Stock moved by the sold quantity on each tenant (alpha 100-4=96, beta 100-2=98)",
+      "severity": "BLOCKER",
+      "expected": "96 / 98",
+      "evidence": "product_inventory",
+      "executed": true,
+      "observed": {
+        "alpha": 96,
+        "beta": 98
+      },
+      "status": "PASS"
+    },
+    {
+      "gate": "E2E",
+      "id": "E2E.info.bankMirror",
+      "description": "Bank register rows created for the sales (informational; depends on seeded bank accounts, none seeded here)",
+      "severity": "INFO",
+      "status": "PASS",
+      "executed": true,
+      "observed": {
+        "alpha": [
+          {
+            "description": "Sale SALE-2026-0002 [MOBILE_MONEY]",
+            "amount": 4000
+          }
+        ],
+        "beta": [
+          {
+            "description": "Sale SALE-2026-0001 [MOBILE_MONEY]",
+            "amount": 10000
+          }
+        ]
+      },
+      "evidence": "bank_transactions"
+    }
+  ]
+}
