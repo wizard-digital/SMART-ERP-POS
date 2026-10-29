@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-10-29T09:52:11.822Z",
+  "from": "operator machine (external)",
+  "results": [
+    {
+      "host": "209.38.203.138",
+      "port": 5432,
+      "result": "timeout",
+      "ms": 6017
+    },
+    {
+      "host": "209.38.203.138",
+      "port": 6379,
+      "result": "timeout",
+      "ms": 6005
+    },
+    {
+      "host": "209.38.203.138",
+      "port": 22,
+      "result": "OPEN",
+      "ms": 157
+    },
+    {
+      "host": "209.38.203.138",
+      "port": 80,
+      "result": "OPEN",
+      "ms": 174
+    },
+    {
+      "host": "209.38.203.138",
+      "port": 443,
+      "result": "OPEN",
+      "ms": 153
+    }
+  ],
+  "exposedDataStorePorts": [],
+  "verdict": "NOT_EXPOSED"
+}

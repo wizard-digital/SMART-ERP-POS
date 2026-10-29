@@ -157,7 +157,7 @@ bgsave_and_wait() {
 }
 copy_rdb() { if [ -n "${OPS_RDB_SRC:-}" ]; then cp "$OPS_RDB_SRC" "$EV/dump.rdb"; else docker cp "$RD:/data/dump.rdb" "$EV/dump.rdb"; fi; }
 remote_rdb_sha() { if [ -n "${OPS_RDB_SRC:-}" ]; then sha256sum "$OPS_RDB_SRC" | cut -d' ' -f1; else docker exec "$RD" sha256sum /data/dump.rdb | cut -d' ' -f1; fi; }
-check_rdb() { if [ -n "${OPS_RDB_SRC:-}" ]; then ${OPS_CHECK_RDB:-true} "$EV/dump.rdb" | tail -2; else docker exec "$RD" redis-check-rdb /data/dump.rdb | tail -2; fi; }
+check_rdb() { if [ -n "${OPS_RDB_SRC:-}" ]; then ${OPS_CHECK_RDB:-true} "$EV/dump.rdb"; else docker exec "$RD" redis-check-rdb /data/dump.rdb; fi; }
 
 evidence() {
   say "== EVIDENCE =="
@@ -174,7 +174,7 @@ evidence() {
   done
   echo "$a  dump.rdb" > "$EV/dump.rdb.sha256"
   check_rdb > "$EV/redis-check-rdb.txt" || true
-  grep -q 'looks OK' "$EV/redis-check-rdb.txt" || [ -n "${OPS_RDB_SRC:-}" ] || die "redis-check-rdb did not report OK"
+  grep -qE 'looks OK|Checksum OK' "$EV/redis-check-rdb.txt" || [ -n "${OPS_RDB_SRC:-}" ] || die "redis-check-rdb did not report OK"
   # manifest of EVERY key (name, type, bytes) so a wrongly removed key can be identified later
   batch TYPE "$ALL" | tr -d '\r' > "$TMP/all.types"
   paste -d'\t' "$ALL" "$TMP/all.types" > "$EV/key-manifest.tsv"

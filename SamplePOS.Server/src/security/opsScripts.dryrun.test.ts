@@ -166,6 +166,30 @@ suite('ops/security scripts (offline proof)', () => {
     expect(sh.status).toBe(0);
   });
 
+  it('S8 redis-check-rdb success is grepped from the full output (7.4 prints "looks OK" above the last [info] lines)', () => {
+    const aof = code('20-redis-aof.sh');
+    const keys = code('50-redis-suspicious-keys.sh');
+    expect(aof).not.toMatch(/redis-check-rdb[^\n]*\|\s*tail\s+-/);
+    expect(aof).toMatch(/grep -qE 'looks OK\|Checksum OK'/);
+    expect(keys).not.toMatch(/redis-check-rdb[^\n]*\|\s*tail\s+-/);
+    expect(keys).toMatch(/grep -qE 'looks OK\|Checksum OK'/);
+    expect(aof).not.toMatch(/redis-check-aof[^\n]*\|\s*tail\s+-/);
+    expect(aof).toMatch(/grep -q 'valid'/);
+  });
+
+  it('S8b end-state verifier checks ip6tables DROP on the same NICs/ports as iptables', () => {
+    const v = code('90-verify-host.sh');
+    expect(v).toMatch(/ip6tables -C DOCKER-USER -i "\$nic" -p tcp -m conntrack --ctorigdstport "\$port"/);
+    expect(v).toMatch(/iptables -C DOCKER-USER -i "\$nic" -p tcp -m conntrack --ctorigdstport "\$port"/);
+  });
+
+  it('S8c redis-only rotation verify does not assert the postgres password changed', () => {
+    const c = code('40-rotate-credentials.sh');
+    expect(c).toMatch(/postgres password unchanged this run/);
+    expect(c).toMatch(/env_val POSTGRES_PASSWORD "\$CHG\/secrets\/env\.before"/);
+    expect(c).toMatch(/env_val REDIS_PASSWORD "\$CHG\/secrets\/env\.before"/);
+  });
+
   it('S7 rotation script never puts a secret on a command line', () => {
     const c = code('40-rotate-credentials.sh');
     expect(c).not.toMatch(/PASSWORD=\$\{?NEWVAL/);                // no  X=$NEW  assignment on a command

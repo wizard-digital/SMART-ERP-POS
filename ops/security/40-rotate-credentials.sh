@@ -150,8 +150,19 @@ verify() {
   bc=$(rcli client list | grep -c 'name=bull:' || true); [ "$bc" -ge 4 ] && pass "bull connections present ($bc)" || warn "only $bc bull client connections"
   n=$(docker logs --since 5m "$BACK" 2>&1 | grep -c -E 'NOAUTH|WRONGPASS|password authentication failed' || true); [ "$n" = 0 ] && pass "no auth errors in backend log (5m)" || warn "$n auth-error lines in backend log (5m)"
   docker exec "$BACK" wget -qO- --tries=1 http://localhost:3001/api/health >/dev/null && pass "backend /api/health" || die "backend health failed"
-  [ -f "$CHG/secrets/env.before" ] && { old_pg_rejected || true; old_redis_rejected || true; }
-  [ -f "$CHG/secrets/env.before" ] && say "REMINDER: delete $CHG/secrets after the verification window: shred -u $CHG/secrets/env.before" || true
+  if [ -f "$CHG/secrets/env.before" ]; then
+    if [ "$(env_val POSTGRES_PASSWORD "$CHG/secrets/env.before")" != "$(env_val POSTGRES_PASSWORD "$ENVF")" ]; then
+      old_pg_rejected && pass "OLD postgres password is rejected" || die "old postgres password still accepted"
+    else
+      pass "postgres password unchanged this run"
+    fi
+    if [ "$(env_val REDIS_PASSWORD "$CHG/secrets/env.before")" != "$(env_val REDIS_PASSWORD "$ENVF")" ]; then
+      old_redis_rejected && pass "OLD redis password is rejected" || die "old redis password still accepted"
+    else
+      pass "redis password unchanged this run"
+    fi
+    say "REMINDER: delete $CHG/secrets after the verification window: shred -u $CHG/secrets/env.before"
+  fi
 }
 
 rollback() {

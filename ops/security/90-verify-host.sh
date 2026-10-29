@@ -26,6 +26,13 @@ for nic in $(for d in /sys/class/net/*; do [ -e "$d/device" ] && echo "${d##*/}"
     iptables -C DOCKER-USER -i "$nic" -p tcp -m conntrack --ctorigdstport "$port" --ctdir ORIGINAL -j DROP 2>/dev/null && ok "iptables DROP $nic -> :$port" || bad "iptables missing DROP $nic -> :$port"
   done
 done
+if command -v ip6tables >/dev/null 2>&1 && ip6tables -S DOCKER-USER >/dev/null 2>&1; then
+  for nic in $(for d in /sys/class/net/*; do [ -e "$d/device" ] && echo "${d##*/}"; done); do
+    for port in 5432 6379; do
+      ip6tables -C DOCKER-USER -i "$nic" -p tcp -m conntrack --ctorigdstport "$port" --ctdir ORIGINAL -j DROP 2>/dev/null && ok "ip6tables DROP $nic -> :$port" || bad "ip6tables missing DROP $nic -> :$port"
+    done
+  done
+fi
 systemctl is-enabled docker-user-lockdown >/dev/null 2>&1 && ok "docker-user-lockdown enabled at boot" || bad "docker-user-lockdown not enabled"
 ip -6 addr show scope global | grep -q inet6 && say "NOTE  host has a global IPv6 address: confirm ip6tables rules above" || ok "no global IPv6 address"
 
@@ -35,7 +42,7 @@ rc() { docker exec "$RD" redis-cli "$@" | tr -d '\r'; }
 [ "$(rc info persistence | sed -n 's/^aof_last_write_status://p')" = ok ] && ok "aof_last_write_status ok" || bad "aof write status not ok"
 [ "$(rc config get maxmemory-policy | sed -n 2p)" = noeviction ] && ok "noeviction" || bad "eviction policy is not noeviction"
 rc config get requirepass | sed -n 2p | grep -q . && ok "requirepass set" || bad "no requirepass"
-docker exec "$RD" sh -c 'REDISCLI_AUTH= redis-cli ping' 2>&1 | grep -q -E 'NOAUTH|Authentication' && ok "unauthenticated client refused" || bad "unauthenticated client NOT refused"
+docker exec "$RD" sh -c 'REDISCLI_AUTH= redis-cli ping' 2>&1 | grep -q -E 'NOAUTH|WRONGPASS|Authentication' && ok "unauthenticated client refused" || bad "unauthenticated client NOT refused"
 
 say "== postgres =="
 [ "$(docker inspect -f '{{.State.Health.Status}}' "$PG")" = healthy ] && ok "postgres healthy" || bad "postgres unhealthy"

@@ -88,7 +88,10 @@ check() {
   say "appendonly=$(cfg appendonly) save='$(cfg save)' maxmemory-policy=$(cfg maxmemory-policy) dir=$(cfg dir)"
   [ "$(ifield persistence loading)" = 0 ] || die "redis is loading"
   [ "$(ifield persistence rdb_last_bgsave_status)" = ok ] || die "last BGSAVE failed"
-  docker exec "$RD" redis-check-rdb /data/dump.rdb | tail -3
+  docker exec "$RD" redis-check-rdb /data/dump.rdb > /tmp/rdbcheck.$$
+  cat /tmp/rdbcheck.$$
+  grep -qE 'looks OK|Checksum OK' /tmp/rdbcheck.$$ || die "redis-check-rdb did not report OK"
+  rm -f /tmp/rdbcheck.$$
   free_kb=$(df -Pk "$(docker inspect "$RD" --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}')" | awk 'NR==2{print $4}')
   [ "$free_kb" -gt 1048576 ] && pass "free space ${free_kb}KB (> 1 GiB)" || die "less than 1 GiB free"
   say "dbsize=$(rcli dbsize)"; census
@@ -114,8 +117,8 @@ backup() {
     _t=$((_t + 1)); [ "$_t" -ge 3 ] && die "dump.rdb kept changing while copying"; bgsave_and_wait
   done
   echo "$a  dump.rdb" > "$CHG/redis/dump.rdb.sha256"
-  docker exec "$RD" redis-check-rdb /data/dump.rdb | tail -2 > "$CHG/redis/redis-check-rdb.txt"
-  grep -q 'looks OK' "$CHG/redis/redis-check-rdb.txt" || die "redis-check-rdb did not report OK"
+  docker exec "$RD" redis-check-rdb /data/dump.rdb > "$CHG/redis/redis-check-rdb.txt"
+  grep -qE 'looks OK|Checksum OK' "$CHG/redis/redis-check-rdb.txt" || die "redis-check-rdb did not report OK"
   { echo "dbsize=$(rcli dbsize)"; rcli info keyspace; census; } > "$CHG/redis/pre-state.txt"
   touch "$CHG/redis/BACKUP_OK"
   pass "backup verified: $CHG/redis/dump.rdb sha256=$a"
@@ -133,8 +136,10 @@ enable() {
   mut rcli config set appendonly yes
   waitfor "AOF rewrite finished and healthy" 90 aof_ready
   [ "$(ifield persistence aof_last_write_status)" = ok ] || die "aof_last_write_status != ok"
-  docker exec "$RD" redis-check-aof /data/appendonlydir/appendonly.aof.manifest | tail -3
-  docker exec "$RD" redis-check-aof /data/appendonlydir/appendonly.aof.manifest | grep -q 'valid' || die "redis-check-aof did not validate the AOF"
+  docker exec "$RD" redis-check-aof /data/appendonlydir/appendonly.aof.manifest > /tmp/aofcheck.$$
+  cat /tmp/aofcheck.$$
+  grep -q 'valid' /tmp/aofcheck.$$ || die "redis-check-aof did not validate the AOF"
+  rm -f /tmp/aofcheck.$$
   n1=$(rcli dbsize)
   say "dbsize before=$n0 after=$n1 (live traffic may move this by a few keys; a large drop is a FAIL)"
   [ "$n1" -ge $((n0 - 50)) ] || die "dbsize dropped"
@@ -195,7 +200,10 @@ verify() {
   [ "$(cfg appendonly)" = yes ] && pass "appendonly=yes" || die "appendonly != yes"
   aof_ready && pass "aof_enabled=1, rewrite idle, last rewrite ok" || die "AOF not healthy"
   [ "$(ifield persistence aof_last_write_status)" = ok ] && pass "aof_last_write_status=ok" || die "AOF write status bad"
-  docker exec "$RD" redis-check-aof /data/appendonlydir/appendonly.aof.manifest | tail -2
+  docker exec "$RD" redis-check-aof /data/appendonlydir/appendonly.aof.manifest > /tmp/aofcheck.$$
+  cat /tmp/aofcheck.$$
+  grep -q 'valid' /tmp/aofcheck.$$ || die "redis-check-aof did not validate the AOF"
+  rm -f /tmp/aofcheck.$$
   say "dbsize=$(rcli dbsize)"; census
   say "publish: $(docker port "$RD" 2>&1)"
   errs=$(docker logs --since 10m "$BACK" 2>&1 | grep -c -E 'NOAUTH|WRONGPASS|ECONNREFUSED.*6379' || true)
@@ -210,7 +218,10 @@ rollback() {
   [ -f "$CHG/compose/docker-compose.yml.before" ] || die "no compose backup at $CHG/compose"
   live || { say "DRY-RUN: would BGSAVE (so dump.rdb contains everything the AOF has), restore compose, docker stop -t 60 $RD, compose up --no-deps redis; appendonlydir is KEPT"; return 0; }
   bgsave_and_wait
-  docker exec "$RD" redis-check-rdb /data/dump.rdb | tail -1
+  docker exec "$RD" redis-check-rdb /data/dump.rdb > /tmp/rdbcheck.$$
+  grep -qE 'looks OK|Checksum OK' /tmp/rdbcheck.$$ || die "redis-check-rdb did not report OK"
+  tail -2 /tmp/rdbcheck.$$
+  rm -f /tmp/rdbcheck.$$
   mut cp -p "$CHG/compose/docker-compose.yml.before" "$COMPOSE"
   docker compose -f "$COMPOSE" config -q || die "restored compose invalid"
   mut docker stop -t 60 "$RD"
