@@ -9,6 +9,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
   '063_drop_number_generator_and_balance_sync_triggers.sql',
   '064_drop_protection_and_validation_triggers.sql',
   '065_drop_period_audit_autopopulate_triggers.sql',
+  '638_sale_totals_trigger_ssot.sql',
   '417_customer_opening_balance.sql',
   '20251118_create_stock_counts.sql',
   '20260616_cutover_accounting.sql',
@@ -72,6 +73,7 @@ export async function verifyMigrationPostcondition(pool, filename) {
     case '063_drop_number_generator_and_balance_sync_triggers.sql':
     case '064_drop_protection_and_validation_triggers.sql':
     case '065_drop_period_audit_autopopulate_triggers.sql':
+    case '638_sale_totals_trigger_ssot.sql':
       return legacyTriggersAbsentForMigration(pool, filename);
     case '20251118_create_stock_counts.sql': {
       const [counts, lines] = await Promise.all([

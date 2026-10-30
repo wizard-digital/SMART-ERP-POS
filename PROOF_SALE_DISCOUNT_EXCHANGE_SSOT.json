@@ -1,6 +1,6 @@
 {
   "title": "PROOF_SALE_DISCOUNT_EXCHANGE_SSOT",
-  "runAt": "2026-10-27T22:02:12.556Z",
+  "runAt": "2026-10-30T12:15:49.078Z",
   "verdict": "PASS",
   "identity": {
     "unit": "rung_or_catalog",
@@ -96,6 +96,41 @@
         "charged": 300000,
         "creditTo2210": 6000,
         "lineDiscount": 0
+      }
+    },
+    {
+      "name": "refund-full-remaining-is-charged-not-list",
+      "ok": true,
+      "detail": {
+        "list": 3235000,
+        "charged": 3200000,
+        "refunded": 3200000,
+        "cart": 35000
+      }
+    },
+    {
+      "name": "refund-no-discount-qty-times-unit",
+      "ok": true,
+      "detail": {
+        "refunded": 40000,
+        "expected": 40000
+      }
+    },
+    {
+      "name": "refund-pg-strings-charged-not-list",
+      "ok": true,
+      "detail": {
+        "refunded": 3200000,
+        "list": 3235000
+      }
+    },
+    {
+      "name": "refund-last-slice-closes-charged",
+      "ok": true,
+      "detail": {
+        "first": 1483771.25,
+        "rest": 1716228.75,
+        "sum": 3200000
       }
     }
   ]

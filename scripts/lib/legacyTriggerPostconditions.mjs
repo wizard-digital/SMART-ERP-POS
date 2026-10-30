@@ -27,6 +27,9 @@ export const LEGACY_TRIGGERS_BY_MIGRATION = {
     ['products', 'trg_product_create_children'],
     ['inventory_batches', 'trg_log_stock_movement'],
   ],
+  '638_sale_totals_trigger_ssot.sql': [
+    ['sale_items', 'trg_sync_sale_totals'],
+  ],
 };
 
 export async function legacyTriggersAbsentForMigration(pool, filename) {

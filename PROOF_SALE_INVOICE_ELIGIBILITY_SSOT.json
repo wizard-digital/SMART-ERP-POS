@@ -1,0 +1,79 @@
+{
+  "title": "PROOF_SALE_INVOICE_ELIGIBILITY_SSOT",
+  "runAt": "2026-10-30T12:15:49.555Z",
+  "verdict": "PASS",
+  "identity": {
+    "quote": "always",
+    "credit": "header or CREDIT tender",
+    "outstanding": "amount_paid < charged total",
+    "blocked": "fully paid non-credit; voided/returned",
+    "tenants": "one rule, every database"
+  },
+  "checks": [
+    {
+      "name": "credit-sale-eligible",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "reason": "credit"
+      }
+    },
+    {
+      "name": "quote-eligible",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "reason": "quote"
+      }
+    },
+    {
+      "name": "cash-underpay-eligible",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "reason": "outstanding"
+      }
+    },
+    {
+      "name": "fully-paid-cash-blocked",
+      "ok": true,
+      "detail": {
+        "ok": false,
+        "reason": "fully_paid_cash"
+      }
+    },
+    {
+      "name": "voided-by-return-blocked",
+      "ok": true,
+      "detail": {
+        "ok": false,
+        "reason": "sale_not_live"
+      }
+    },
+    {
+      "name": "header-paid-fallback",
+      "ok": true,
+      "detail": {
+        "fallback": {
+          "amount": 1000000,
+          "method": "CASH"
+        },
+        "skippedWhenLinesPresent": true
+      }
+    },
+    {
+      "name": "picker-rows-same-eligibility",
+      "ok": true,
+      "detail": {
+        "underpay": {
+          "ok": true,
+          "reason": "outstanding"
+        },
+        "credit": {
+          "ok": true,
+          "reason": "credit"
+        }
+      }
+    }
+  ]
+}

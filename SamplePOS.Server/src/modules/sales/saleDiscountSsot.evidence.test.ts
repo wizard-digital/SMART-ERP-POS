@@ -17,6 +17,8 @@ import {
   presentSaleDiscounts,
   projectExchangeReplacementSale,
   projectSaleDiscountPersist,
+  projectSaleRefundCharged,
+  projectSaleRefundChargedFromSale,
   remainingCartDiscount,
 } from '../../../../shared/domain/saleDiscountSsot.js';
 import { POSSaleSchema } from '../../../../shared/zod/pos-sale.js';
@@ -248,6 +250,157 @@ describe('Sale discount + exchange SSOT (executed)', () => {
       charged: parsed.data.totalAmount,
       creditTo2210: parsed.data.discountAmount,
       lineDiscount: parsed.data.lineItems[0].discountAmount || 0,
+    });
+  });
+
+  it('full remaining return reverses charged total, not qty × list (35k cart)', () => {
+    const refund = projectSaleRefundCharged({
+      totalAmount: 3_200_000,
+      alreadyRefundedCharged: 0,
+      items: [
+        {
+          saleItemId: 'a',
+          quantity: 1,
+          remainingQty: 1,
+          unitPrice: 1_500_000,
+          lineNet: 1_500_000,
+          thisQty: 1,
+        },
+        {
+          saleItemId: 'b',
+          quantity: 1,
+          remainingQty: 1,
+          unitPrice: 1_735_000,
+          lineNet: 1_735_000,
+          thisQty: 1,
+        },
+      ],
+    });
+    expect(refund.cartDiscount).toBe(35_000);
+    expect(refund.thisMerchandise).toBe(3_235_000);
+    expect(refund.refundChargedTotal).toBe(3_200_000);
+    expect(refund.refundChargedTotal).not.toBe(3_235_000);
+    const lineSum = refund.lines.reduce((sum, line) => sum + line.lineCharged, 0);
+    expect(lineSum).toBe(3_200_000);
+    prove('refund-full-remaining-is-charged-not-list', {
+      list: 3_235_000,
+      charged: 3_200_000,
+      refunded: refund.refundChargedTotal,
+      cart: refund.cartDiscount,
+    });
+  });
+
+  it('no-discount refund stays qty × unit (Henber-class)', () => {
+    const refund = projectSaleRefundCharged({
+      totalAmount: 80_000,
+      alreadyRefundedCharged: 0,
+      items: [
+        {
+          saleItemId: 'a',
+          quantity: 2,
+          remainingQty: 2,
+          unitPrice: 40_000,
+          lineNet: 80_000,
+          thisQty: 1,
+        },
+      ],
+    });
+    expect(refund.cartDiscount).toBe(0);
+    expect(refund.refundChargedTotal).toBe(40_000);
+    expect(refund.lines[0].lineCharged).toBe(40_000);
+    prove('refund-no-discount-qty-times-unit', {
+      refunded: refund.refundChargedTotal,
+      expected: 40_000,
+    });
+  });
+
+  it('pg numeric strings (refundSale row shape) reverse charged, not list', () => {
+    const charged = projectSaleRefundChargedFromSale({
+      sale: {
+        total_amount: '3200000.00',
+        tax_amount: '0.00',
+      },
+      alreadyRefundedCharged: '0',
+      items: [
+        {
+          id: 'a',
+          quantity: '1.0000',
+          remainingQty: '1.0000',
+          unitPrice: '1500000.00',
+          totalPrice: '1500000.00',
+        },
+        {
+          id: 'b',
+          quantity: '1.0000',
+          remainingQty: '1.0000',
+          unitPrice: '1735000.00',
+          totalPrice: '1735000.00',
+        },
+      ],
+      thisQtyByItemId: new Map([
+        ['a', 1],
+        ['b', 1],
+      ]),
+    });
+    expect(charged.refundChargedTotal).toBe(3_200_000);
+    expect(charged.refundChargedTotal).not.toBe(3_235_000);
+    prove('refund-pg-strings-charged-not-list', {
+      refunded: charged.refundChargedTotal,
+      list: 3_235_000,
+    });
+  });
+
+  it('last remaining slice closes to remaining charged', () => {
+    const first = projectSaleRefundCharged({
+      totalAmount: 3_200_000,
+      alreadyRefundedCharged: 0,
+      items: [
+        {
+          saleItemId: 'a',
+          quantity: 1,
+          remainingQty: 1,
+          unitPrice: 1_500_000,
+          lineNet: 1_500_000,
+          thisQty: 1,
+        },
+        {
+          saleItemId: 'b',
+          quantity: 1,
+          remainingQty: 1,
+          unitPrice: 1_735_000,
+          lineNet: 1_735_000,
+          thisQty: 0,
+        },
+      ],
+    });
+    const rest = projectSaleRefundCharged({
+      totalAmount: 3_200_000,
+      alreadyRefundedCharged: first.refundChargedTotal,
+      items: [
+        {
+          saleItemId: 'a',
+          quantity: 1,
+          remainingQty: 0,
+          unitPrice: 1_500_000,
+          lineNet: 1_500_000,
+          thisQty: 0,
+        },
+        {
+          saleItemId: 'b',
+          quantity: 1,
+          remainingQty: 1,
+          unitPrice: 1_735_000,
+          lineNet: 1_735_000,
+          thisQty: 1,
+        },
+      ],
+    });
+    expect(first.refundChargedTotal + rest.refundChargedTotal).toBe(3_200_000);
+    expect(rest.refundChargedTotal).toBe(3_200_000 - first.refundChargedTotal);
+    prove('refund-last-slice-closes-charged', {
+      first: first.refundChargedTotal,
+      rest: rest.refundChargedTotal,
+      sum: first.refundChargedTotal + rest.refundChargedTotal,
     });
   });
 

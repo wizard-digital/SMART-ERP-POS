@@ -392,12 +392,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Trigger on sale_items for sale totals
+-- trg_sync_sale_totals is forbidden. Application layer (salesService +
+-- saleDiscountSsot) is SSOT for sale totals. Recreating this trigger overwrites
+-- cart/header discount on the charged total. 407 dropped it; 638 drops it again.
+-- This reference file must DROP only — never CREATE.
 DROP TRIGGER IF EXISTS trg_sync_sale_totals ON sale_items;
-CREATE TRIGGER trg_sync_sale_totals
-    AFTER INSERT OR UPDATE OR DELETE ON sale_items
-    FOR EACH ROW
-    EXECUTE FUNCTION fn_recalculate_sale_totals();
 
 -- ============================================================================
 -- 5. PURCHASE ORDER TOTALS TRIGGER

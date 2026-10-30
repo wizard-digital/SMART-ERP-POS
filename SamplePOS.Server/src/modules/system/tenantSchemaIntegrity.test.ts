@@ -1,12 +1,14 @@
 import type { Pool } from 'pg';
 import {
   CRITICAL_SCHEMA_COLUMNS,
+  FORBIDDEN_TRIGGERS,
   verifyTenantSchemaIntegrity,
 } from './tenantSchemaIntegrity.js';
 
 function mockPool(
   tables: string[],
-  columnsByTable: Record<string, string[]>
+  columnsByTable: Record<string, string[]>,
+  triggerRows: Array<{ table_name: string; trigger_name: string }> = [],
 ): Pool {
   return {
     query: async (sql: string, params?: unknown[]) => {
@@ -18,6 +20,9 @@ function mockPool(
         const table = params?.[0] as string;
         const cols = columnsByTable[table] ?? [];
         return { rows: cols.map((column_name) => ({ column_name })) };
+      }
+      if (sql.includes('pg_trigger')) {
+        return { rows: triggerRows };
       }
       throw new Error(`Unexpected query: ${sql.slice(0, 80)}`);
     },
@@ -80,6 +85,28 @@ describe('tenantSchemaIntegrity', () => {
     expect(result.missing).toContainEqual({
       table: 'system_settings',
       column: 'pos_session_policy',
+    });
+  });
+
+  it('forbids trg_sync_sale_totals on every tenant', () => {
+    expect(FORBIDDEN_TRIGGERS).toContainEqual(['sale_items', 'trg_sync_sale_totals']);
+  });
+
+  it('fails when trg_sync_sale_totals is still attached', async () => {
+    const tables = Object.keys(CRITICAL_SCHEMA_COLUMNS);
+    const columnsByTable: Record<string, string[]> = {};
+    for (const [table, cols] of Object.entries(CRITICAL_SCHEMA_COLUMNS)) {
+      columnsByTable[table] = [...cols];
+    }
+    const result = await verifyTenantSchemaIntegrity(
+      mockPool(tables, columnsByTable, [
+        { table_name: 'sale_items', trigger_name: 'trg_sync_sale_totals' },
+      ]),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.forbiddenTriggers).toContainEqual({
+      table: 'sale_items',
+      trigger: 'trg_sync_sale_totals',
     });
   });
 });

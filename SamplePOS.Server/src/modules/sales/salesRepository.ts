@@ -41,6 +41,7 @@ export interface SaleRecord {
   saleDate?: string;
   exchangeCreditApplied?: number;
   exchangeRefundNumber?: string;
+  refundedChargedTotal?: number;
 }
 
 export interface SaleItemRecord {
@@ -632,6 +633,9 @@ export const salesRepository = {
     );
 
     const sale = saleResult.rows[0] as SaleRecord & Record<string, unknown>;
+    const refundedChargedTotal = await this.getRefundedChargedTotal(pool, id);
+    sale.refundedChargedTotal = refundedChargedTotal;
+    sale.refunded_charged_total = refundedChargedTotal;
     if (exchangeResult.rows[0]) {
       const applied = Money.toNumber(Money.parseDb(exchangeResult.rows[0].exchange_applied_amount));
       sale.exchangeCreditApplied = applied;
@@ -1497,6 +1501,24 @@ export const salesRepository = {
     );
 
     return result.rows;
+  },
+
+  /**
+   * Charged amount already reversed on this sale (sum of refund documents).
+   * Used by saleDiscountSsot.projectSaleRefundCharged so a later slice
+   * closes to remaining charged, not remaining list.
+   */
+  async getRefundedChargedTotal(
+    pool: Pool | PoolClient,
+    saleId: string,
+  ): Promise<number> {
+    const result = await pool.query<{ charged: string }>(
+      `SELECT COALESCE(SUM(total_amount), 0)::text AS charged
+         FROM sale_refunds
+        WHERE sale_id = $1`,
+      [saleId],
+    );
+    return Money.toNumber(Money.parseDb(result.rows[0]?.charged ?? 0));
   },
 
   /**

@@ -35,6 +35,7 @@ export const SALE_DISCOUNT_SSOT = {
     'Allocate sales.discount_amount (cart+line) onto line.discount_amount',
     'Apply exchange store credit from header dump (cart+line) instead of cart only',
     'Treat exchange credit as a line markdown or invent a higher unit price',
+    'Refund qty × catalog unit when the customer was charged line-net minus cart',
   ],
 } as const;
 
@@ -500,4 +501,177 @@ export function buildCheckoutDiscountPayload(params: {
     exchangeCreditApplied: params.isExchangeCredit ? persist.cartDiscount : undefined,
     persist,
   };
+}
+
+export type SaleRefundChargedLineInput = {
+  saleItemId: string;
+  quantity: number;
+  remainingQty: number;
+  unitPrice: number;
+  lineNet: number;
+  thisQty: number;
+};
+
+export type SaleRefundChargedLine = {
+  saleItemId: string;
+  thisQty: number;
+  lineCharged: number;
+};
+
+export type SaleRefundChargedProjection = {
+  refundChargedTotal: number;
+  remainingChargedBefore: number;
+  remainingMerchandiseBefore: number;
+  thisMerchandise: number;
+  cartDiscount: number;
+  chargedTotal: number;
+  lines: SaleRefundChargedLine[];
+};
+
+function merchandiseSlice(lineNet: number, origQty: number, sliceQty: number): number {
+  if (!(origQty > 0) || !(sliceQty > 0)) return 0;
+  return new Decimal(lineNet || 0).times(sliceQty).dividedBy(origQty).toNumber();
+}
+
+/**
+ * Refund the amount the customer was charged, not qty × catalog unit.
+ * Cart stays on the header: remaining goods take remaining charged so a
+ * full remaining return closes to sales.total_amount − prior refunds.
+ * No-discount sales stay qty × unit (line net = list).
+ */
+export function projectSaleRefundCharged(params: {
+  totalAmount: number;
+  taxAmount?: number;
+  alreadyRefundedCharged: number;
+  items: SaleRefundChargedLineInput[];
+}): SaleRefundChargedProjection {
+  const presented = presentSaleDiscounts({
+    totalAmount: params.totalAmount,
+    taxAmount: params.taxAmount,
+    items: (params.items || []).map((item) => ({
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      lineNet: item.lineNet,
+    })),
+  });
+  const chargedTotal = roundSaleMoney(params.totalAmount);
+  const already = roundSaleMoney(Math.max(0, params.alreadyRefundedCharged || 0));
+  const remainingChargedBefore = roundSaleMoney(Math.max(0, chargedTotal - already));
+
+  const remainingMerchandiseBefore = roundSaleMoney(
+    (params.items || []).reduce(
+      (sum, item) =>
+        sum + merchandiseSlice(item.lineNet, item.quantity, item.remainingQty),
+      0,
+    ),
+  );
+  const thisMerchandise = roundSaleMoney(
+    (params.items || []).reduce(
+      (sum, item) => sum + merchandiseSlice(item.lineNet, item.quantity, item.thisQty),
+      0,
+    ),
+  );
+
+  let refundChargedTotal = 0;
+  if (thisMerchandise > SALE_DISCOUNT_MONEY_TOLERANCE) {
+    if (remainingMerchandiseBefore - thisMerchandise <= SALE_DISCOUNT_MONEY_TOLERANCE) {
+      refundChargedTotal = remainingChargedBefore;
+    } else if (remainingMerchandiseBefore > SALE_DISCOUNT_MONEY_TOLERANCE) {
+      refundChargedTotal = roundSaleMoney(
+        new Decimal(remainingChargedBefore)
+          .times(thisMerchandise)
+          .dividedBy(remainingMerchandiseBefore)
+          .toNumber(),
+      );
+    }
+  }
+
+  const refundLines = (params.items || []).filter((item) => (item.thisQty || 0) > 0);
+  const lineMerch = refundLines.map((item) =>
+    roundSaleMoney(merchandiseSlice(item.lineNet, item.quantity, item.thisQty)),
+  );
+  const merchSum = roundSaleMoney(lineMerch.reduce((sum, n) => sum + n, 0));
+  const lines: SaleRefundChargedLine[] = [];
+  let allocated = 0;
+  for (let i = 0; i < refundLines.length; i += 1) {
+    const isLast = i === refundLines.length - 1;
+    const share = isLast
+      ? roundSaleMoney(refundChargedTotal - allocated)
+      : merchSum <= 0
+        ? 0
+        : roundSaleMoney(
+            new Decimal(refundChargedTotal).times(lineMerch[i]).dividedBy(merchSum).toNumber(),
+          );
+    if (!isLast) allocated = roundSaleMoney(allocated + share);
+    lines.push({
+      saleItemId: refundLines[i].saleItemId,
+      thisQty: refundLines[i].thisQty,
+      lineCharged: share,
+    });
+  }
+
+  return {
+    refundChargedTotal,
+    remainingChargedBefore,
+    remainingMerchandiseBefore,
+    thisMerchandise,
+    cartDiscount: presented.cartDiscount,
+    chargedTotal,
+    lines,
+  };
+}
+
+function thisQtyLookup(
+  thisQtyByItemId: Map<string, number> | Record<string, number> | undefined,
+  id: string,
+): number {
+  if (!thisQtyByItemId) return 0;
+  if (thisQtyByItemId instanceof Map) return num(thisQtyByItemId.get(id));
+  return num(thisQtyByItemId[id]);
+}
+
+/**
+ * Persist / UI adapter: pg numeric strings, camel or snake, same charged total.
+ * refundSale and RefundSaleModal / ProductExchangeModal must both call this.
+ */
+export function projectSaleRefundChargedFromSale(params: {
+  sale: Record<string, unknown> | null | undefined;
+  items: Array<Record<string, unknown>>;
+  thisQtyByItemId: Map<string, number> | Record<string, number>;
+  alreadyRefundedCharged?: unknown;
+}): SaleRefundChargedProjection {
+  const sale = params.sale || {};
+  return projectSaleRefundCharged({
+    totalAmount: num(sale.totalAmount, sale.total_amount),
+    taxAmount: num(sale.taxAmount, sale.tax_amount),
+    alreadyRefundedCharged: num(
+      params.alreadyRefundedCharged,
+      sale.refundedChargedTotal,
+      sale.refunded_charged_total,
+    ),
+    items: (params.items || []).map((item) => {
+      const id = String(item.saleItemId || item.id || '');
+      const quantity = num(item.quantity, item.qty);
+      const remainingExplicit = item.remainingQty ?? item.remaining_qty;
+      const remainingQty =
+        remainingExplicit != null && remainingExplicit !== ''
+          ? num(remainingExplicit)
+          : num(item.maxRefundable) ||
+            Math.max(0, quantity - num(item.refundedQty, item.refunded_qty));
+      return {
+        saleItemId: id,
+        quantity,
+        remainingQty,
+        unitPrice: num(item.unitPrice, item.unit_price, item.price),
+        lineNet: num(
+          item.totalPrice,
+          item.total_price,
+          item.lineNet,
+          item.lineTotal,
+          item.line_total,
+        ),
+        thisQty: thisQtyLookup(params.thisQtyByItemId, id),
+      };
+    }),
+  });
 }

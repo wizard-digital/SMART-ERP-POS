@@ -93,6 +93,7 @@ async function fingerprint(pool: pg.Pool, label: string): Promise<SsotFingerprin
   const integrity = await verifyTenantSchemaIntegrity(pool).catch(() => ({
     ok: false,
     missing: [{ table: '(query)', column: '(failed)' }],
+    forbiddenTriggers: [],
   }));
   const missingCriticalColumns = integrity.missing.map((m) => `${m.table}.${m.column}`);
 
@@ -497,9 +498,9 @@ async function main() {
     'utf8'
   );
   const versionAligned =
-    CURRENT_SCHEMA_VERSION === 637 &&
+    CURRENT_SCHEMA_VERSION === 638 &&
     versionFile.includes('SELECT 621') &&
-    /CURRENT_SCHEMA_VERSION = 637/.test(versionConst);
+    /CURRENT_SCHEMA_VERSION = 638/.test(versionConst);
 
   const ok =
     jestResult.ok &&

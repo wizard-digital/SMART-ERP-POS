@@ -36,6 +36,7 @@ import {
   depositPaymentCap,
   money2,
 } from '@shared/domain/invoiceDepositPayment';
+import { saleRowIsInvoiceEligible } from '@shared/domain/saleInvoiceEligibility';
 // ── Local interfaces for Customer Detail page ──────────────────
 
 /** Raw invoice row from API (supports camelCase, snake_case, PascalCase keys) */
@@ -225,7 +226,14 @@ interface SaleRow {
   saleNumber?: string;
   saleDate?: string;
   totalAmount?: number | string;
+  total_amount?: number | string;
   paymentMethod?: string;
+  payment_method?: string;
+  amountPaid?: number | string;
+  amount_paid?: number | string;
+  status?: string;
+  quoteId?: string | null;
+  quote_id?: string | null;
 }
 
 type Tab = 'overview' | 'invoices' | 'transactions' | 'deposits' | 'credits' | 'quotations' | 'edit';
@@ -565,8 +573,11 @@ export default function CustomerDetailPage() {
       });
     }
 
-    // Filter out sales that already have invoices
-    return salesArray.filter(sale => !invoicedSaleIds.has(String(sale.id)));
+    return salesArray.filter(
+      (sale) =>
+        !invoicedSaleIds.has(String(sale.id)) &&
+        saleRowIsInvoiceEligible(sale).ok,
+    );
   }, [customerSales, invoices]);
 
   // Customer status management
@@ -1737,10 +1748,10 @@ export default function CustomerDetailPage() {
                 ) : salesWithoutInvoices.length === 0 ? (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <p className="text-sm text-blue-800">
-                      ℹ️ All credit sales for this customer already have invoices.
+                      ℹ️ No sales eligible for invoicing. Fully paid cash sales and returned sales cannot be invoiced.
                     </p>
                     <p className="text-xs text-blue-600 mt-2">
-                      Invoices are automatically created when credit sales are completed.
+                      Outstanding, credit, and quote-linked sales can be invoiced. Opening-balance invoices are separate.
                     </p>
                   </div>
                 ) : (

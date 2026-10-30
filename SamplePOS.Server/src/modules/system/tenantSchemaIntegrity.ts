@@ -49,13 +49,19 @@ export const CRITICAL_SCHEMA_COLUMNS: Readonly<Record<string, readonly string[]>
   expenses: ['employee_id'],
 };
 
+export const FORBIDDEN_TRIGGERS: ReadonlyArray<readonly [string, string]> = [
+  ['sale_items', 'trg_sync_sale_totals'],
+];
+
 export interface SchemaIntegrityResult {
   ok: boolean;
   missing: Array<{ table: string; column: string }>;
+  forbiddenTriggers: Array<{ table: string; trigger: string }>;
 }
 
 export async function verifyTenantSchemaIntegrity(pool: Pool): Promise<SchemaIntegrityResult> {
   const missing: Array<{ table: string; column: string }> = [];
+  const forbiddenTriggers: Array<{ table: string; trigger: string }> = [];
 
   for (const [table, columns] of Object.entries(CRITICAL_SCHEMA_COLUMNS)) {
     const { rows: tableExists } = await pool.query<{ exists: boolean }>(
@@ -86,25 +92,61 @@ export async function verifyTenantSchemaIntegrity(pool: Pool): Promise<SchemaInt
     }
   }
 
-  return { ok: missing.length === 0, missing };
+  if (FORBIDDEN_TRIGGERS.length > 0) {
+    const tables = FORBIDDEN_TRIGGERS.map(([table]) => table);
+    const names = FORBIDDEN_TRIGGERS.map(([, name]) => name);
+    const { rows } = await pool.query<{ table_name: string; trigger_name: string }>(
+      `SELECT c.relname AS table_name, t.tgname AS trigger_name
+         FROM pg_trigger t
+         JOIN pg_class c ON c.oid = t.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND NOT t.tgisinternal
+          AND (c.relname, t.tgname) IN (
+            SELECT * FROM unnest($1::text[], $2::text[]) AS u(relname, tgname)
+          )`,
+      [tables, names],
+    );
+    for (const row of rows) {
+      forbiddenTriggers.push({ table: row.table_name, trigger: row.trigger_name });
+    }
+  }
+
+  return {
+    ok: missing.length === 0 && forbiddenTriggers.length === 0,
+    missing,
+    forbiddenTriggers,
+  };
 }
 
 export async function assertTenantSchemaIntegrity(pool: Pool, tenantLabel: string): Promise<void> {
   const result = await verifyTenantSchemaIntegrity(pool);
   if (result.ok) return;
 
-  const summary = result.missing
+  const missingSummary = result.missing
     .slice(0, 12)
     .map((m) => `${m.table}.${m.column}`)
+    .join(', ');
+  const triggerSummary = result.forbiddenTriggers
+    .map((t) => `${t.table}.${t.trigger}`)
     .join(', ');
   const suffix = result.missing.length > 12 ? ` (+${result.missing.length - 12} more)` : '';
 
   logger.error(`Schema integrity check failed for "${tenantLabel}"`, {
     missing: result.missing,
+    forbiddenTriggers: result.forbiddenTriggers,
   });
 
+  const parts: string[] = [];
+  if (result.missing.length > 0) {
+    parts.push(`missing ${missingSummary}${suffix}`);
+  }
+  if (result.forbiddenTriggers.length > 0) {
+    parts.push(`forbidden trigger(s) still present: ${triggerSummary}`);
+  }
+
   throw new Error(
-    `Tenant "${tenantLabel}" database schema incomplete: missing ${summary}${suffix}. ` +
+    `Tenant "${tenantLabel}" database schema incomplete: ${parts.join('; ')}. ` +
       'Run tenant migrations or schema repair before provisioning.'
   );
 }

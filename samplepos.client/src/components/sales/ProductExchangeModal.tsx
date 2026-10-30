@@ -7,7 +7,7 @@ import { formatCurrency } from '../../utils/currency';
 import { useTransactionGuard, ZINDEX } from '../../hooks/useTransactionGuard';
 import type { GuardHandle } from '../../hooks/useTransactionGuard';
 import { formatSellingQuantityWithBaseHint } from '@shared/utils/sale-item-uom';
-import { projectExchangeReplacementSale } from '@shared/domain/saleDiscountSsot';
+import { projectExchangeReplacementSale, projectSaleRefundChargedFromSale } from '@shared/domain/saleDiscountSsot';
 
 type ResidualAction = 'REFUND_ORIGINAL_TENDER' | 'KEEP_VOUCHER';
 type Step = 'return' | 'replace' | 'settle' | 'done';
@@ -21,6 +21,7 @@ interface ReturnLine {
   maxRefundable: number;
   selected: boolean;
   refundQuantity: number;
+  lineNet: number;
   uomSymbol: string | null;
   uomName: string | null;
   baseUomSymbol: string | null;
@@ -40,6 +41,8 @@ interface ProductExchangeModalProps {
   saleId: string;
   saleNumber: string;
   totalAmount: number;
+  taxAmount?: number;
+  refundedChargedTotal?: number;
   paymentMethod?: string;
   customerId?: string | null;
   customerName?: string | null;
@@ -62,6 +65,10 @@ interface ProductExchangeModalProps {
     uom_name?: string | null;
     baseUomSymbol?: string | null;
     base_uom_symbol?: string | null;
+    totalPrice?: number | string;
+    total_price?: number | string;
+    lineTotal?: number | string;
+    line_total?: number | string;
   }>;
   cashRegisterSessionId?: string;
   onClose: () => void;
@@ -78,6 +85,8 @@ export function ProductExchangeModal({
   saleId,
   saleNumber,
   totalAmount,
+  taxAmount = 0,
+  refundedChargedTotal = 0,
   paymentMethod,
   customerId,
   customerName,
@@ -144,6 +153,9 @@ export function ProductExchangeModal({
           quantity: qty,
           refundedQty,
           unitPrice: Number(item.unitPrice || item.unit_price || item.price || 0),
+          lineNet: Number(
+            item.totalPrice || item.total_price || item.lineTotal || item.line_total || 0,
+          ),
           maxRefundable,
           selected: false,
           refundQuantity: maxRefundable > 0 ? maxRefundable : 0,
@@ -157,15 +169,25 @@ export function ProductExchangeModal({
   );
 
   const selectedReturns = useMemo(() => returnLines.filter((i) => i.selected), [returnLines]);
-  const creditTotal = useMemo(
-    () =>
-      selectedReturns.reduce(
-        (sum, item) =>
-          new Decimal(sum).plus(new Decimal(item.unitPrice).times(item.refundQuantity)).toNumber(),
-        0,
-      ),
-    [selectedReturns],
-  );
+  const creditCharged = useMemo(() => {
+    const thisQtyByItemId: Record<string, number> = {};
+    for (const item of selectedReturns) {
+      thisQtyByItemId[item.saleItemId] = item.refundQuantity;
+    }
+    return projectSaleRefundChargedFromSale({
+      sale: { totalAmount, taxAmount, refundedChargedTotal },
+      items: returnLines.map((item) => ({
+        id: item.saleItemId,
+        quantity: item.quantity,
+        remainingQty: item.maxRefundable,
+        unitPrice: item.unitPrice,
+        totalPrice: item.lineNet,
+      })),
+      thisQtyByItemId,
+      alreadyRefundedCharged: refundedChargedTotal,
+    });
+  }, [selectedReturns, returnLines, totalAmount, taxAmount, refundedChargedTotal]);
+  const creditTotal = creditCharged.refundChargedTotal;
 
   const replacementTotal = useMemo(
     () =>
@@ -417,9 +439,7 @@ export function ProductExchangeModal({
                           <span className="font-medium text-slate-900 truncate">{item.productName}</span>
                           <span className="text-sm font-semibold">
                             {formatCurrency(
-                              item.selected
-                                ? new Decimal(item.unitPrice).times(item.refundQuantity).toNumber()
-                                : 0,
+                              creditCharged.lines.find((line) => line.saleItemId === item.saleItemId)?.lineCharged || 0,
                             )}
                           </span>
                         </div>

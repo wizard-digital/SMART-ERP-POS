@@ -107,6 +107,8 @@ interface SaleRow {
   exchange_credit_applied?: number | string;
   exchangeRefundNumber?: string;
   exchange_refund_number?: string;
+  refundedChargedTotal?: number;
+  refunded_charged_total?: number;
 }
 
 interface SaleItemRow {
@@ -3080,6 +3082,10 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
           saleId={sale.id}
           saleNumber={sale.saleNumber || `Sale #${sale.id.slice(0, 8)}`}
           totalAmount={sale.totalAmount}
+          taxAmount={Number(saleDetails.taxAmount ?? sale.taxAmount ?? 0)}
+          refundedChargedTotal={Number(
+            saleDetails.refundedChargedTotal ?? saleDetails.refunded_charged_total ?? 0,
+          )}
           items={saleDetails.items || []}
           onClose={() => setShowRefundModal(false)}
           onSuccess={() => {
@@ -3159,6 +3165,10 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
           saleId={sale.id}
           saleNumber={sale.saleNumber || `Sale #${sale.id.slice(0, 8)}`}
           totalAmount={sale.totalAmount}
+          taxAmount={Number(saleDetails.taxAmount ?? sale.taxAmount ?? 0)}
+          refundedChargedTotal={Number(
+            saleDetails.refundedChargedTotal ?? saleDetails.refunded_charged_total ?? 0,
+          )}
           paymentMethod={sale.paymentMethod || saleDetails.paymentMethod}
           customerId={saleDetails.customerId || sale.customerId}
           customerName={saleDetails.customerName || sale.customerName}

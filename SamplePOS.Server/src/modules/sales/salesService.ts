@@ -83,6 +83,7 @@ import {
   assertSaleDiscountPersistClosed,
   cartDiscountProfitShares,
   projectExchangeReplacementSale,
+  projectSaleRefundChargedFromSale,
 } from '@shared/domain/saleDiscountSsot.js';
 import {
   DocumentTaxService,
@@ -3737,17 +3738,29 @@ export const salesService = {
           );
         }
 
-        // Calculate refund amounts using ORIGINAL unit_price and unit_cost
-        const unitPrice = new Decimal(saleItem.unitPrice);
         const unitCost = new Decimal(saleItem.unitCost);
-        const lineTotal = Money.round(refundQty.times(unitPrice), 2);
         const costTotal = Money.round(refundQty.times(unitCost), 2);
 
-        refundTotalAmount = refundTotalAmount.plus(lineTotal);
         refundTotalCost = refundTotalCost.plus(costTotal);
 
-        validatedItems.push({ saleItem, refundQty, lineTotal, costTotal });
+        validatedItems.push({ saleItem, refundQty, lineTotal: new Decimal(0), costTotal });
       }
+
+      const alreadyRefundedCharged = await salesRepository.getRefundedChargedTotal(client, saleId);
+      const thisQtyById = new Map(
+        validatedItems.map((row) => [row.saleItem.id, row.refundQty.toNumber()]),
+      );
+      const charged = projectSaleRefundChargedFromSale({
+        sale,
+        items: saleItems as unknown as Array<Record<string, unknown>>,
+        thisQtyByItemId: thisQtyById,
+        alreadyRefundedCharged,
+      });
+      const chargedById = new Map(charged.lines.map((line) => [line.saleItemId, line.lineCharged]));
+      for (const row of validatedItems) {
+        row.lineTotal = Money.round(new Decimal(chargedById.get(row.saleItem.id) ?? 0), 2);
+      }
+      refundTotalAmount = Money.round(new Decimal(charged.refundChargedTotal), 2);
 
       // ── 3. Create refund document ───────────────────────────────
 

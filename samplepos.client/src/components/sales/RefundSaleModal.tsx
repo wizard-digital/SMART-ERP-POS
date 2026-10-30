@@ -4,11 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../utils/api';
 import { extractApiError } from '../../utils/extractApiError';
 import { formatCurrency } from '../../utils/currency';
-import Decimal from 'decimal.js';
 import { useTransactionGuard, ZINDEX } from '../../hooks/useTransactionGuard';
 import type { GuardHandle } from '../../hooks/useTransactionGuard';
 
 import { formatSellingQuantityWithBaseHint, sellingQtyToBase } from '@shared/utils/sale-item-uom';
+import { projectSaleRefundChargedFromSale } from '@shared/domain/saleDiscountSsot';
 
 interface RefundItem {
     saleItemId: string;
@@ -19,6 +19,7 @@ interface RefundItem {
     maxRefundable: number;
     selected: boolean;
     refundQuantity: number;
+    lineNet: number;
     uomSymbol: string | null;
     uomName: string | null;
     baseUomSymbol: string | null;
@@ -29,6 +30,8 @@ interface RefundSaleModalProps {
     saleId: string;
     saleNumber: string;
     totalAmount: number;
+    taxAmount?: number;
+    refundedChargedTotal?: number;
     items: {
         id?: string;
         productName?: string;
@@ -50,6 +53,8 @@ interface RefundSaleModalProps {
         base_uom_symbol?: string | null;
         totalPrice?: number | string;
         total_price?: number | string;
+        lineTotal?: number | string;
+        line_total?: number | string;
     }[];
     /** refund = full/partial return; exchange = wrong-product swap (store credit + replacement) */
     mode?: 'refund' | 'exchange';
@@ -63,6 +68,8 @@ export function RefundSaleModal({
     saleId,
     saleNumber,
     totalAmount,
+    taxAmount = 0,
+    refundedChargedTotal = 0,
     items,
     mode = 'refund',
     customerId,
@@ -110,6 +117,9 @@ export function RefundSaleModal({
                     quantity: qty,
                     refundedQty,
                     unitPrice: Number(item.unitPrice || item.unit_price || item.price || 0),
+                    lineNet: Number(
+                        item.totalPrice || item.total_price || item.lineTotal || item.line_total || 0,
+                    ),
                     maxRefundable,
                     selected: false,
                     refundQuantity: maxRefundable,
@@ -164,11 +174,25 @@ export function RefundSaleModal({
 
     const selectedItems = useMemo(() => refundItems.filter((i) => i.selected), [refundItems]);
 
-    const refundTotal = useMemo(() => {
-        return selectedItems.reduce((sum, item) => {
-            return new Decimal(sum).plus(new Decimal(item.unitPrice).times(item.refundQuantity)).toNumber();
-        }, 0);
-    }, [selectedItems]);
+    const refundCharged = useMemo(() => {
+        const thisQtyByItemId: Record<string, number> = {};
+        for (const item of selectedItems) {
+            thisQtyByItemId[item.saleItemId] = item.refundQuantity;
+        }
+        return projectSaleRefundChargedFromSale({
+            sale: { totalAmount, taxAmount, refundedChargedTotal },
+            items: refundItems.map((item) => ({
+                id: item.saleItemId,
+                quantity: item.quantity,
+                remainingQty: item.maxRefundable,
+                unitPrice: item.unitPrice,
+                totalPrice: item.lineNet,
+            })),
+            thisQtyByItemId,
+            alreadyRefundedCharged: refundedChargedTotal,
+        });
+    }, [selectedItems, refundItems, totalAmount, taxAmount, refundedChargedTotal]);
+    const refundTotal = refundCharged.refundChargedTotal;
 
     const isFullRefund = useMemo(() => {
         return refundItems.length > 0 && refundItems.every(
@@ -388,7 +412,9 @@ export function RefundSaleModal({
                                                 <div className="flex items-center justify-between">
                                                     <span className="font-medium text-gray-900 truncate">{item.productName}</span>
                                                     <span className="text-sm font-semibold text-gray-900 ml-2 flex-shrink-0">
-                                                        {formatCurrency(new Decimal(item.unitPrice).times(item.selected ? item.refundQuantity : 0).toNumber())}
+                                                        {formatCurrency(
+                                                            refundCharged.lines.find((line) => line.saleItemId === item.saleItemId)?.lineCharged || 0,
+                                                        )}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-4 mt-1 text-xs text-gray-500 flex-wrap">

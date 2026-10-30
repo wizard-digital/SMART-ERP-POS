@@ -28,6 +28,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '627_tenant_banking_momo_column_ssot.sql',
     '628_drop_ledger_reference_unique_ssot.sql',
     '636_ownership_equity.sql',
+    '638_sale_totals_trigger_ssot.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -101,6 +102,7 @@ export async function verifyMigrationPostcondition(
         case '063_drop_number_generator_and_balance_sync_triggers.sql':
         case '064_drop_protection_and_validation_triggers.sql':
         case '065_drop_period_audit_autopopulate_triggers.sql':
+        case '638_sale_totals_trigger_ssot.sql':
             return legacyTriggersAbsentForMigration(pool, filename);
         case '20251118_create_stock_counts.sql': {
             const [counts, lines] = await Promise.all([

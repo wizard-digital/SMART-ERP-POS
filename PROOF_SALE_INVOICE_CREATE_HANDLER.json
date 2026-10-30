@@ -1,0 +1,53 @@
+{
+  "title": "PROOF_SALE_INVOICE_CREATE_HANDLER",
+  "runAt": "2026-10-30T12:15:42.922Z",
+  "verdict": "PASS",
+  "exercised": "invoiceService.createInvoice",
+  "checks": [
+    {
+      "name": "credit-sale-creates-full-invoice",
+      "ok": true,
+      "detail": {
+        "totalAmount": 100000,
+        "payments": 0
+      }
+    },
+    {
+      "name": "cash-underpay-header-paid",
+      "ok": true,
+      "detail": {
+        "invoiceTotal": 3200000,
+        "copiedPaid": 1000000
+      }
+    },
+    {
+      "name": "split-tender-no-double-count",
+      "ok": true,
+      "detail": {
+        "addPaymentCalls": 1,
+        "amount": 50000
+      }
+    },
+    {
+      "name": "fully-paid-cash-refused",
+      "ok": true,
+      "detail": {
+        "created": false
+      }
+    },
+    {
+      "name": "voided-by-return-refused",
+      "ok": true,
+      "detail": {
+        "created": false
+      }
+    },
+    {
+      "name": "quote-conversion-creates",
+      "ok": true,
+      "detail": {
+        "created": true
+      }
+    }
+  ]
+}

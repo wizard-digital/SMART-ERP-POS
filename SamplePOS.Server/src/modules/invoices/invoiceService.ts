@@ -20,6 +20,10 @@ import {
   assertDepositPaymentAmount,
   money2,
 } from '@shared/domain/invoiceDepositPayment.js';
+import {
+  invoicePaymentsFromSaleHeader,
+  saleIsInvoiceEligible,
+} from '@shared/domain/saleInvoiceEligibility.js';
 
 /** Raw DB row from payment_lines table as returned by salesRepository */
 interface PaymentLineRow {
@@ -38,6 +42,11 @@ interface RawSaleRow {
   subtotal?: string | number;
   tax_amount?: string | number;
   total_amount?: string | number;
+  amount_paid?: string | number;
+  amountPaid?: string | number;
+  payment_method?: string | null;
+  paymentMethod?: string | null;
+  status?: string | null;
   quote_id?: string | null;
   [key: string]: unknown;
 }
@@ -479,15 +488,48 @@ export const invoiceService = {
       // Check if this is a quote-linked sale (quote conversions should always create invoices)
       const isQuoteLinkedSale = input.quoteId || rawSale.quote_id;
 
-      // Invoice should only be created if there's a CREDIT payment OR if it's a quote conversion
-      if (!isQuoteLinkedSale && creditAmount.lessThanOrEqualTo(0)) {
-        logger.warn('Invoice creation blocked - no credit payment found', {
+      const headerPaid = Money.parseDb(rawSale.amount_paid ?? rawSale.amountPaid ?? 0).toNumber();
+      const headerMethod = String(rawSale.payment_method || rawSale.paymentMethod || 'CASH');
+      const headerPayment = invoicePaymentsFromSaleHeader({
+        amountPaid: headerPaid,
+        paymentMethod: headerMethod,
+        hasPaymentLines: nonCreditPaymentLines.length > 0,
+      });
+      if (headerPayment) {
+        nonCreditPaymentLinesForInvoice = [
+          {
+            id: 'sale-header',
+            payment_method: headerPayment.method,
+            amount: headerPayment.amount,
+            created_at: '',
+          },
+        ];
+        saleAmountPaid = headerPayment.amount;
+      }
+
+      const eligibility = saleIsInvoiceEligible({
+        status: String(rawSale.status || ''),
+        quoteId: input.quoteId || rawSale.quote_id || null,
+        paymentMethod: headerMethod,
+        amountPaid: headerPaid,
+        totalAmount: saleTotalAmount,
+        hasCreditTender: creditAmount.greaterThan(0),
+      });
+      if (!eligibility.ok) {
+        logger.warn('Invoice creation blocked', {
           saleId: input.saleId,
+          reason: eligibility.reason,
           saleTotalAmount,
-          amountPaid: Money.toNumber(amountPaid),
+          amountPaid: headerPaid,
           creditAmount: Money.toNumber(creditAmount),
         });
-        throw new Error('Cannot create invoice: no credit payment in sale');
+        const message =
+          eligibility.reason === 'sale_not_live'
+            ? 'Cannot create invoice: sale is voided or fully returned'
+            : eligibility.reason === 'fully_paid_cash'
+              ? 'Cannot create invoice: sale is fully paid with no outstanding credit'
+              : 'Cannot create invoice: sale is not eligible for invoicing';
+        throw new Error(message);
       }
 
       if (isQuoteLinkedSale) {

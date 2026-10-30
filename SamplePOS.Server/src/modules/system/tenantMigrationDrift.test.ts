@@ -100,8 +100,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     );
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–637 MoMo/banking/targets/expense/ownership/FEFO SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(637);
+  it('CURRENT_SCHEMA_VERSION matches 621–638 MoMo/banking/targets/expense/ownership/FEFO/sale-totals SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(638);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -170,6 +170,21 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(fefoColSql).toContain('ADD COLUMN IF NOT EXISTS status');
     expect(fefoColSql).toContain('product_valuation');
     expect(fefoColSql).toContain('SELECT 637');
+    const saleTotalsSql = fs.readFileSync(
+      path.join(sqlDir, '638_sale_totals_trigger_ssot.sql'),
+      'utf8',
+    );
+    expect(saleTotalsSql).toContain('DROP TRIGGER IF EXISTS trg_sync_sale_totals');
+    expect(saleTotalsSql).not.toContain('CREATE TRIGGER trg_sync_sale_totals');
+    expect(saleTotalsSql).toContain('SELECT 638');
+    const comprehensiveTriggers = fs.readFileSync(
+      path.join(sqlDir, 'comprehensive_data_triggers.sql'),
+      'utf8',
+    );
+    expect(comprehensiveTriggers).toContain('DROP TRIGGER IF EXISTS trg_sync_sale_totals');
+    expect(comprehensiveTriggers).not.toMatch(
+      /CREATE\s+TRIGGER\s+trg_sync_sale_totals/i,
+    );
     const sessionSql = fs.readFileSync(path.join(sqlDir, '620_pos_session_policy_ssot.sql'), 'utf8');
     expect(sessionSql).toMatch(/pg_constraint WHERE conname = 'chk_pos_session_policy'/);
     expect(sessionSql).not.toMatch(/^ALTER TABLE system_settings\s+ADD CONSTRAINT/m);
