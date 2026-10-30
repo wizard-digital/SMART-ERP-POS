@@ -167,8 +167,10 @@ describe('EVIDENCE — Quarantine lifecycle E2E (damage / expiry / return)', () 
     );
     gate(
       'CUSTOMER_RETURN_MS',
-      returnInv.includes('restoreCustomerReturn') && returnInv.includes('returnLot'),
-      'multistore customer refund → RETURN store path exists',
+      returnInv.includes('restoreCustomerReturn') &&
+        returnInv.includes('returnLot') &&
+        returnInv.includes('getActivePosSellingStore'),
+      'multistore customer refund restores to SELLING (POS sellable)',
     );
     gate(
       'SUPPLIER_NOT_QUARANTINE',

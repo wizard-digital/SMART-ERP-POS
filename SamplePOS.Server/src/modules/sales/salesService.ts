@@ -84,6 +84,7 @@ import {
   cartDiscountProfitShares,
   projectExchangeReplacementSale,
   projectSaleRefundChargedFromSale,
+  projectSaleRollupDecrement,
 } from '@shared/domain/saleDiscountSsot.js';
 import {
   DocumentTaxService,
@@ -190,6 +191,43 @@ export interface CompleteProductExchangeInput {
   topUpPaymentMethod?: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY';
   cashRegisterSessionId?: string;
   soldBy?: string;
+}
+
+/** Full return/void reverses the same charged total + discount increment posted. */
+function reverseDailySummaryFromSale(sale: {
+  sale_date: unknown;
+  payment_method: string;
+  total_amount?: unknown;
+  discount_amount?: unknown;
+  amount_paid?: unknown;
+  total_cost?: unknown;
+}): {
+  saleDate: string;
+  paymentMethod: string;
+  isCredit: boolean;
+  isPartial: boolean;
+  reverseAmount: number;
+  reverseDiscount: number;
+  cost: number | string;
+} {
+  const amountPaid = Money.toNumber(Money.parseDb(sale.amount_paid ?? 0));
+  const saleTotal = Money.toNumber(Money.parseDb(sale.total_amount ?? 0));
+  const isCredit = sale.payment_method === 'CREDIT';
+  const rollup = projectSaleRollupDecrement({
+    paymentMethod: String(sale.payment_method || ''),
+    headerTotal: saleTotal,
+    headerDiscount: Money.toNumber(Money.parseDb(sale.discount_amount ?? 0)),
+    amountPaid,
+  });
+  return {
+    saleDate: String(sale.sale_date).slice(0, 10),
+    paymentMethod: sale.payment_method,
+    isCredit,
+    isPartial: isCredit && amountPaid > 0 && amountPaid < saleTotal,
+    reverseAmount: rollup.reverseAmount,
+    reverseDiscount: rollup.reverseDiscount,
+    cost: (sale.total_cost as number | string | undefined) || 0,
+  };
 }
 
 export const salesService = {
@@ -3404,20 +3442,16 @@ export const salesService = {
       // ============================================================
       try {
         await client.query('SAVEPOINT void_daily_summary');
-        const voidSaleDate = String(sale.sale_date).slice(0, 10);
-        const isCredit = sale.payment_method === 'CREDIT';
-        const amountPaid = Money.toNumber(Money.parseDb(sale.amount_paid ?? 0));
-        const saleTotal = Money.toNumber(Money.parseDb(sale.total_amount ?? 0));
-        const isPartial = isCredit && amountPaid > 0 && amountPaid < saleTotal;
+        const reverse = reverseDailySummaryFromSale(sale);
         await salesRepository.decrementDailySummary(
           client,
-          voidSaleDate,
-          sale.payment_method,
-          sale.total_amount || 0,
-          sale.total_cost || 0,
-          sale.discount_amount || 0,
-          isCredit,
-          isPartial
+          reverse.saleDate,
+          reverse.paymentMethod,
+          reverse.reverseAmount,
+          reverse.cost,
+          reverse.reverseDiscount,
+          reverse.isCredit,
+          reverse.isPartial
         );
       } catch (summaryError: unknown) {
         await client.query('ROLLBACK TO SAVEPOINT void_daily_summary');
@@ -3859,6 +3893,7 @@ export const salesService = {
           unitCost,
           batchId,
           productLotId: saleItem.productLotId ?? null,
+          storeLocationId: saleItem.storeLocationId ?? null,
           referenceType: 'SALE_REFUND',
           referenceId: refund.id,
           notes: `Refund ${refund.refundNumber} for sale ${sale.sale_number}: ${input.reason}`,
@@ -4013,20 +4048,16 @@ export const salesService = {
         // SAVEPOINT: prevents PG aborted-transaction if this fails
         try {
           await client.query('SAVEPOINT refund_daily_summary');
-          const refundSaleDate = String(sale.sale_date).slice(0, 10);
-          const isCredit = sale.payment_method === 'CREDIT';
-          const amtPaid = Money.toNumber(Money.parseDb(sale.amount_paid ?? 0));
-          const saleTotalAmt = Money.toNumber(Money.parseDb(sale.total_amount ?? 0));
-          const isPartial = isCredit && amtPaid > 0 && amtPaid < saleTotalAmt;
+          const reverse = reverseDailySummaryFromSale(sale);
           await salesRepository.decrementDailySummary(
             client,
-            refundSaleDate,
-            sale.payment_method,
-            sale.total_amount || 0,
-            sale.total_cost || 0,
-            sale.discount_amount || 0,
-            isCredit,
-            isPartial
+            reverse.saleDate,
+            reverse.paymentMethod,
+            reverse.reverseAmount,
+            reverse.cost,
+            reverse.reverseDiscount,
+            reverse.isCredit,
+            reverse.isPartial
           );
         } catch (summaryError: unknown) {
           await client.query('ROLLBACK TO SAVEPOINT refund_daily_summary');

@@ -1,0 +1,155 @@
+{
+  "title": "PROOF_SALE_RETURN_ROLLUP_SSOT",
+  "runAt": "2026-10-30T20:27:31.525Z",
+  "verdict": "PASS",
+  "identity": {
+    "dashboard": "sales_daily_summary via getSalesSummaryFromRollup",
+    "fullReturn": "projectSaleRollupDecrement then decrementDailySummary",
+    "leftover": "full return must leave 0 amount and 0 discount"
+  },
+  "checks": [
+    {
+      "name": "old-list-decrement-leaves-minus-35000",
+      "ok": true,
+      "detail": {
+        "row": {
+          "transaction_count": 0,
+          "total_amount": "-35000.00",
+          "total_discounts": "35000.00",
+          "total_profit": "-35000.00"
+        },
+        "dash": {
+          "totalSales": 0,
+          "totalAmount": -35000,
+          "totalDiscounts": 35000,
+          "byPaymentMethod": [
+            {
+              "paymentMethod": "CASH",
+              "count": 0,
+              "totalAmount": -35000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ssot-0031-full-return-deletes-cash-row",
+      "ok": true,
+      "detail": {
+        "dash": {
+          "totalSales": 0,
+          "totalAmount": 0,
+          "totalDiscounts": 0,
+          "byPaymentMethod": []
+        }
+      }
+    },
+    {
+      "name": "dashboard-only-card-430000-after-cash-return",
+      "ok": true,
+      "detail": {
+        "dash": {
+          "totalSales": 1,
+          "totalAmount": 430000,
+          "totalDiscounts": 0,
+          "byPaymentMethod": [
+            {
+              "paymentMethod": "CARD",
+              "count": 1,
+              "totalAmount": 430000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "healthy-discount-return-zeros-rollup",
+      "ok": true,
+      "detail": {
+        "dash": {
+          "totalSales": 0,
+          "totalAmount": 0,
+          "totalDiscounts": 0,
+          "byPaymentMethod": []
+        }
+      }
+    },
+    {
+      "name": "henber-no-discount-return-no-leftover",
+      "ok": true,
+      "detail": {
+        "dash": {
+          "totalSales": 0,
+          "totalAmount": 0,
+          "totalDiscounts": 0,
+          "byPaymentMethod": []
+        }
+      }
+    },
+    {
+      "name": "credit-underpay-not-wiped-discount",
+      "ok": true,
+      "detail": {
+        "reverse": {
+          "reverseAmount": 500000,
+          "reverseDiscount": 0
+        }
+      }
+    },
+    {
+      "name": "same-day-remaining-cash-untouched",
+      "ok": true,
+      "detail": {
+        "row": {
+          "transaction_count": 1,
+          "total_amount": "100000.00",
+          "total_discounts": "0.00",
+          "total_profit": "60000.00"
+        },
+        "dash": {
+          "totalSales": 1,
+          "totalAmount": 100000,
+          "totalDiscounts": 0,
+          "byPaymentMethod": [
+            {
+              "paymentMethod": "CASH",
+              "count": 1,
+              "totalAmount": 100000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "empty-zero-row-hidden-leftover-visible",
+      "ok": true,
+      "detail": {
+        "emptyDash": {
+          "totalSales": 0,
+          "totalAmount": 0,
+          "totalDiscounts": 0,
+          "byPaymentMethod": []
+        },
+        "leftoverDash": {
+          "totalSales": 0,
+          "totalAmount": -35000,
+          "totalDiscounts": 35000,
+          "byPaymentMethod": [
+            {
+              "paymentMethod": "CASH",
+              "count": 0,
+              "totalAmount": -35000
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "rebuild-deletes-orphan-minus-35000",
+      "ok": true,
+      "detail": {
+        "date": "2026-10-07"
+      }
+    }
+  ]
+}

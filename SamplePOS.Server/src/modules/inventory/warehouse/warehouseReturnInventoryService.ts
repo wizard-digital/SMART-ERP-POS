@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { BusinessError } from '../../../middleware/errorHandler.js';
 import { syncProductQuantity } from '../../../utils/inventorySync.js';
 import { recordMovement } from '../../stock-movements/stockMovementRepository.js';
 import { storeLocationRepository } from './storeLocationRepository.js';
@@ -12,6 +13,7 @@ export interface CustomerReturnRestoreParams {
     unitCost: number;
     batchId?: string | null;
     productLotId?: string | null;
+    storeLocationId?: string | null;
     referenceType: string;
     referenceId: string;
     notes: string;
@@ -26,18 +28,6 @@ export interface CustomerReturnRestoreOutcome {
     unitCost: number;
 }
 
-async function ensureReturnStore(client: PoolClient) {
-    let store = await storeLocationRepository.getStoreByType(client, 'RETURN');
-    if (!store) {
-        store = await storeLocationRepository.upsertByCode(client, {
-            code: 'RETURN',
-            name: 'Customer Returns',
-            storeType: 'RETURN',
-        });
-    }
-    return store;
-}
-
 export const warehouseReturnInventoryService = {
     async restoreCustomerReturn(
         client: PoolClient,
@@ -47,7 +37,18 @@ export const warehouseReturnInventoryService = {
             return null;
         }
 
-        const returnStore = await ensureReturnStore(client);
+        const requestedStore = params.storeLocationId
+            ? await storeLocationRepository.getById(client, params.storeLocationId)
+            : null;
+        const sellingStore =
+            (requestedStore?.storeType === 'SELLING' ? requestedStore : null) ??
+            (await storeLocationRepository.getActivePosSellingStore(client));
+        if (!sellingStore) {
+            throw new BusinessError(
+                'Cannot restore returned stock: no POS selling store',
+                'ERR_REFUND_NO_SELLING_STORE',
+            );
+        }
 
         let batchId = params.batchId ?? null;
         if (!batchId && params.productLotId) {
@@ -63,7 +64,7 @@ export const warehouseReturnInventoryService = {
             batchId,
             quantity: params.quantity,
             costPrice: params.unitCost,
-            targetStoreLocationId: returnStore.id,
+            targetStoreLocationId: sellingStore.id,
             referenceType: params.referenceType,
             referenceId: params.referenceId,
             notes: params.notes,
@@ -82,13 +83,13 @@ export const warehouseReturnInventoryService = {
             unitCost: params.unitCost,
             referenceType: params.referenceType,
             referenceId: params.referenceId,
-            notes: `${params.notes} [store:${returnStore.code}]`,
+            notes: `${params.notes} [store:${sellingStore.code}]`,
         });
 
         return {
             batchId: lot.id,
             productLotId,
-            storeLocationId: returnStore.id,
+            storeLocationId: sellingStore.id,
             baseQty: params.quantity,
             unitCost: params.unitCost,
         };

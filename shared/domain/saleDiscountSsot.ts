@@ -36,6 +36,7 @@ export const SALE_DISCOUNT_SSOT = {
     'Apply exchange store credit from header dump (cart+line) instead of cart only',
     'Treat exchange credit as a line markdown or invent a higher unit price',
     'Refund qty × catalog unit when the customer was charged line-net minus cart',
+    'Leave cart discount in sales_daily_summary after a full return',
   ],
 } as const;
 
@@ -628,6 +629,38 @@ function thisQtyLookup(
   if (!thisQtyByItemId) return 0;
   if (thisQtyByItemId instanceof Map) return num(thisQtyByItemId.get(id));
   return num(thisQtyByItemId[id]);
+}
+
+/**
+ * Full return / void reverses the daily-summary increment: charged total AND cart discount.
+ * After a full return that sale must contribute 0 sales, 0 amount, 0 discount.
+ *
+ * Healthy header already stores charged + discount. A trigger-wiped cash/card header
+ * keeps list in total_amount, 0 discount, and charged on amount_paid — reverse those.
+ * CREDIT underpay is not a wiped discount.
+ */
+export function projectSaleRollupDecrement(input: {
+  paymentMethod: string;
+  headerTotal: number;
+  headerDiscount: number;
+  amountPaid: number;
+}): { reverseAmount: number; reverseDiscount: number } {
+  const headerTotal = roundSaleMoney(input.headerTotal);
+  const headerDiscount = roundSaleMoney(Math.max(0, input.headerDiscount || 0));
+  const amountPaid = roundSaleMoney(Math.max(0, input.amountPaid || 0));
+  const method = String(input.paymentMethod || '').toUpperCase();
+  if (
+    method !== 'CREDIT' &&
+    headerDiscount <= SALE_DISCOUNT_MONEY_TOLERANCE &&
+    amountPaid > SALE_DISCOUNT_MONEY_TOLERANCE &&
+    amountPaid + SALE_DISCOUNT_MONEY_TOLERANCE < headerTotal
+  ) {
+    return {
+      reverseAmount: amountPaid,
+      reverseDiscount: roundSaleMoney(headerTotal - amountPaid),
+    };
+  }
+  return { reverseAmount: headerTotal, reverseDiscount: headerDiscount };
 }
 
 /**

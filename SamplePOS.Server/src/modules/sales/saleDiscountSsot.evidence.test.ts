@@ -19,6 +19,7 @@ import {
   projectSaleDiscountPersist,
   projectSaleRefundCharged,
   projectSaleRefundChargedFromSale,
+  projectSaleRollupDecrement,
   remainingCartDiscount,
 } from '../../../../shared/domain/saleDiscountSsot.js';
 import { POSSaleSchema } from '../../../../shared/zod/pos-sale.js';
@@ -401,6 +402,46 @@ describe('Sale discount + exchange SSOT (executed)', () => {
       first: first.refundChargedTotal,
       rest: rest.refundChargedTotal,
       sum: first.refundChargedTotal + rest.refundChargedTotal,
+    });
+  });
+
+  it('full return reverses charged total AND cart discount (0031 leftover)', () => {
+    const wiped = projectSaleRollupDecrement({
+      paymentMethod: 'CASH',
+      headerTotal: 3_235_000,
+      headerDiscount: 0,
+      amountPaid: 3_200_000,
+    });
+    expect(wiped.reverseAmount).toBe(3_200_000);
+    expect(wiped.reverseDiscount).toBe(35_000);
+    const increment = { amount: 3_200_000, discount: 35_000 };
+    expect(increment.amount - wiped.reverseAmount).toBe(0);
+    expect(increment.discount - wiped.reverseDiscount).toBe(0);
+
+    const healthy = projectSaleRollupDecrement({
+      paymentMethod: 'CARD',
+      headerTotal: 395_000,
+      headerDiscount: 35_000,
+      amountPaid: 395_000,
+    });
+    expect(healthy.reverseAmount).toBe(395_000);
+    expect(healthy.reverseDiscount).toBe(35_000);
+
+    const credit = projectSaleRollupDecrement({
+      paymentMethod: 'CREDIT',
+      headerTotal: 500_000,
+      headerDiscount: 0,
+      amountPaid: 100_000,
+    });
+    expect(credit.reverseAmount).toBe(500_000);
+    expect(credit.reverseDiscount).toBe(0);
+
+    prove('full-return-reverses-discount-in-rollup', {
+      wiped,
+      leftoverIfListUsed: 3_200_000 - 3_235_000,
+      leftoverAfterSsot: increment.amount - wiped.reverseAmount,
+      healthy,
+      creditUnderpayNotTreatedAsDiscount: credit,
     });
   });
 

@@ -22,7 +22,7 @@ Verdict: **PASS** (21/21)
 - PASS `COUPLING_CALLS_POS_PROJECTION`: consistent layer then asserts POS projection
 - PASS `REASON_QUARANTINE`: classifies RETURN/DAMAGE/EXPIRED as quarantine (not broken projection)
 - PASS `PROJECTION_FILTER`: projection assert fails only NO_LOT / SELLING_ZERO_NO_BALANCES
-- PASS `RETURN_PATH_USES_RETURN_STORE`: customer return lands on RETURN store via returnLot
+- PASS `RETURN_PATH_USES_SELLING_STORE`: customer sale return restores to SELLING (POS sellable), same as void
 - PASS `ADJUST_MULTISTORE`: adjustBatch delegates to adjustAtStore when multistore on
 - PASS `ADJUST_ALIGN_BEFORE`: adjustAtStore aligns batch to balances before mutating
 - PASS `ADJUST_IN_RETURN_LOT`: ADJUSTMENT_IN mutates via lotService.returnLot (projection + balance)

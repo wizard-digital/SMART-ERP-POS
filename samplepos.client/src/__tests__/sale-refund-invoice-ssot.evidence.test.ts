@@ -3,7 +3,10 @@
  * Run: npx vitest run src/__tests__/sale-refund-invoice-ssot.evidence.test.ts
  */
 import { describe, expect, it } from 'vitest';
-import { projectSaleRefundChargedFromSale } from '../../../shared/domain/saleDiscountSsot';
+import {
+  projectSaleRefundChargedFromSale,
+  projectSaleRollupDecrement,
+} from '../../../shared/domain/saleDiscountSsot';
 import { saleRowIsInvoiceEligible } from '../../../shared/domain/saleInvoiceEligibility';
 
 describe('Client refund + invoice SSOT (executed)', () => {
@@ -83,5 +86,28 @@ describe('Client refund + invoice SSOT (executed)', () => {
         totalAmount: 3_200_000,
       }).ok,
     ).toBe(false);
+  });
+
+  it('dashboard leftover: list decrement paints CASH -35000; SSOT return does not', () => {
+    const leftover = { paymentMethod: 'CASH', count: 0, totalAmount: -35_000 };
+    const card = { paymentMethod: 'CARD', count: 1, totalAmount: 430_000 };
+    const brokenTotal = leftover.totalAmount + card.totalAmount;
+    expect(brokenTotal).toBe(395_000);
+
+    const reverse = projectSaleRollupDecrement({
+      paymentMethod: 'CASH',
+      headerTotal: 3_235_000,
+      headerDiscount: 0,
+      amountPaid: 3_200_000,
+    });
+    expect(reverse.reverseAmount).toBe(3_200_000);
+    expect(reverse.reverseDiscount).toBe(35_000);
+    const incrementCash = 3_200_000;
+    const incrementDiscount = 35_000;
+    expect(incrementCash - reverse.reverseAmount).toBe(0);
+    expect(incrementDiscount - reverse.reverseDiscount).toBe(0);
+    const after = [card];
+    expect(after.reduce((sum, row) => sum + row.totalAmount, 0)).toBe(430_000);
+    expect(after.some((row) => row.paymentMethod === 'CASH')).toBe(false);
   });
 });

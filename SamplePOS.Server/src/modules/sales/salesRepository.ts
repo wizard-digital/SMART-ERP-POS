@@ -2062,6 +2062,16 @@ export const salesRepository = {
         isPartialPayment ? 1 : 0,
       ]
     );
+    await client.query(
+      `DELETE FROM sales_daily_summary
+       WHERE sale_date = $1 AND payment_method = $2
+         AND transaction_count = 0
+         AND ABS(total_amount) < 0.01
+         AND ABS(total_discounts) < 0.01
+         AND ABS(total_profit) < 0.01
+         AND ABS(total_cost) < 0.01`,
+      [saleDate, paymentMethod]
+    );
   },
 
   /**
@@ -2122,6 +2132,9 @@ export const salesRepository = {
        FROM sales_daily_summary
        ${whereClause}
        GROUP BY payment_method
+       HAVING SUM(transaction_count) <> 0
+           OR ABS(COALESCE(SUM(total_amount), 0)) > 0.01
+           OR ABS(COALESCE(SUM(total_discounts), 0)) > 0.01
        ORDER BY total_amount DESC`,
       values
     );
@@ -2252,6 +2265,15 @@ export const salesRepository = {
           credit_count          = EXCLUDED.credit_count,
           partial_payment_count = EXCLUDED.partial_payment_count,
           updated_at            = NOW()
+    `);
+    await pool.query(`
+      DELETE FROM sales_daily_summary r
+      WHERE NOT EXISTS (
+        SELECT 1 FROM sales s
+        WHERE s.status = 'COMPLETED'
+          AND s.sale_date = r.sale_date
+          AND s.payment_method::text = r.payment_method::text
+      )
     `);
     return result.rowCount ?? 0;
   },

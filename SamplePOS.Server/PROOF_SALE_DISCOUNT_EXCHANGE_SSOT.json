@@ -1,6 +1,6 @@
 {
   "title": "PROOF_SALE_DISCOUNT_EXCHANGE_SSOT",
-  "runAt": "2026-10-30T12:15:49.078Z",
+  "runAt": "2026-10-30T20:27:17.115Z",
   "verdict": "PASS",
   "identity": {
     "unit": "rung_or_catalog",
@@ -131,6 +131,26 @@
         "first": 1483771.25,
         "rest": 1716228.75,
         "sum": 3200000
+      }
+    },
+    {
+      "name": "full-return-reverses-discount-in-rollup",
+      "ok": true,
+      "detail": {
+        "wiped": {
+          "reverseAmount": 3200000,
+          "reverseDiscount": 35000
+        },
+        "leftoverIfListUsed": -35000,
+        "leftoverAfterSsot": 0,
+        "healthy": {
+          "reverseAmount": 395000,
+          "reverseDiscount": 35000
+        },
+        "creditUnderpayNotTreatedAsDiscount": {
+          "reverseAmount": 500000,
+          "reverseDiscount": 0
+        }
       }
     }
   ]

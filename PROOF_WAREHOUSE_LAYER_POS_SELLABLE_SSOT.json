@@ -55,9 +55,9 @@
       "detail": "projection assert fails only NO_LOT / SELLING_ZERO_NO_BALANCES"
     },
     {
-      "id": "RETURN_PATH_USES_RETURN_STORE",
+      "id": "RETURN_PATH_USES_SELLING_STORE",
       "ok": true,
-      "detail": "customer return lands on RETURN store via returnLot"
+      "detail": "customer sale return restores to SELLING (POS sellable), same as void"
     },
     {
       "id": "ADJUST_MULTISTORE",
@@ -135,5 +135,5 @@
       "fix": "upsertProjection updates by inventory_batch_id; coupling groups by batch"
     }
   ],
-  "generatedAt": "2026-09-23T06:13:56.617Z"
+  "generatedAt": "2026-10-30T20:27:17.313Z"
 }

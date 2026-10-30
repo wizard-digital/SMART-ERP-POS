@@ -115,14 +115,17 @@ describe('PROOF: Warehouse layer + POS sellable SSOT', () => {
       'projection assert fails only NO_LOT / SELLING_ZERO_NO_BALANCES',
     );
     gate(
-      'RETURN_PATH_USES_RETURN_STORE',
+      'RETURN_PATH_USES_SELLING_STORE',
       readServer('src/modules/inventory/warehouse/warehouseReturnInventoryService.ts').includes(
-        "getStoreByType(client, 'RETURN')",
+        'getActivePosSellingStore',
       ) &&
+        !readServer('src/modules/inventory/warehouse/warehouseReturnInventoryService.ts').includes(
+          "getStoreByType(client, 'RETURN')",
+        ) &&
         readServer('src/modules/inventory-lot/lotService.ts').includes(
           'syncMultistoreProjectionAndBalance',
         ),
-      'customer return lands on RETURN store via returnLot',
+      'customer sale return restores to SELLING (POS sellable), same as void',
     );
   });
 
