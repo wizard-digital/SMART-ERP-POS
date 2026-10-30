@@ -1,5 +1,10 @@
 // System Settings TypeScript Interfaces
 
+import {
+    parsePosSessionPolicy,
+    type PosSessionPolicy,
+} from '../pos/posSessionPolicySsot.js';
+
 export interface TaxRate {
     name: string;
     rate: number;
@@ -55,7 +60,7 @@ export interface SystemSettings {
     invoiceDefaultPaymentTerms?: string;
 
     // POS Session Policy
-    posSessionPolicy: 'DISABLED' | 'PER_CASHIER_SESSION' | 'PER_COUNTER_SHARED_SESSION' | 'GLOBAL_STORE_SESSION';
+    posSessionPolicy: PosSessionPolicy;
 
     // POS Transaction Mode (SAP-style order→payment split)
     posTransactionMode: 'DirectSale' | 'OrderToPayment';
@@ -195,7 +200,7 @@ export interface UpdateSystemSettingsDto {
     invoiceShowLogo?: boolean;
     invoiceShowPaymentTerms?: boolean;
     invoiceDefaultPaymentTerms?: string;
-    posSessionPolicy?: 'DISABLED' | 'PER_CASHIER_SESSION' | 'PER_COUNTER_SHARED_SESSION' | 'GLOBAL_STORE_SESSION';
+    posSessionPolicy?: PosSessionPolicy;
     posTransactionMode?: 'DirectSale' | 'OrderToPayment';
     lowStockAlertsEnabled?: boolean;
     lowStockThreshold?: number;
@@ -252,7 +257,7 @@ export function normalizeSystemSettings(dbRow: SystemSettingsDbRow): SystemSetti
         invoiceShowLogo: dbRow.invoice_show_logo,
         invoiceShowPaymentTerms: dbRow.invoice_show_payment_terms,
         invoiceDefaultPaymentTerms: dbRow.invoice_default_payment_terms,
-        posSessionPolicy: (dbRow.pos_session_policy || 'DISABLED') as SystemSettings['posSessionPolicy'],
+        posSessionPolicy: parsePosSessionPolicy(dbRow.pos_session_policy),
         posTransactionMode: (dbRow.pos_transaction_mode || 'DirectSale') as SystemSettings['posTransactionMode'],
         lowStockAlertsEnabled: dbRow.low_stock_alerts_enabled,
         lowStockThreshold: dbRow.low_stock_threshold,

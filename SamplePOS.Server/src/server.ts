@@ -743,45 +743,21 @@ async function startServer() {
 
       // Register banking retry worker (requires Redis)
       try {
-        import('./services/bankingService.js')
-          .then(({ BankingService }) => {
-            jobQueue.processQueue('banking', async (job) => {
-              const payload = job.data.payload as {
-                saleId: string;
-                saleNumber: string;
-                saleDate: string;
-                payments: Array<{ amount: number; paymentMethod: string }>;
-                tenantId?: string;
-              };
-
-              // Resolve tenant pool for multi-tenant isolation
-              const workerPool = payload.tenantId
-                ? connectionManager.getPoolById(payload.tenantId)
-                : undefined;
-              if (payload.tenantId && !workerPool) {
-                logger.error('Banking retry: tenant pool not found, skipping job', {
-                  tenantId: payload.tenantId,
-                  saleId: payload.saleId,
-                });
-                return; // Don't retry — pool eviction means tenant hasn't been active
-              }
-
-              for (const payment of payload.payments) {
-                await BankingService.createFromSale(
-                  payload.saleId,
-                  payload.saleNumber,
-                  payment.amount,
-                  payment.paymentMethod,
-                  payload.saleDate,
-                  workerPool
-                );
-              }
-              logger.info('Banking retry succeeded', {
-                saleId: payload.saleId,
-                saleNumber: payload.saleNumber,
-                attempt: job.attemptsMade + 1,
-              });
-            });
+        Promise.all([
+          import('./services/bankingService.js'),
+          import('./services/bankingRetryWorker.js'),
+          import('./modules/notifications/tenantPoolResolver.js'),
+        ])
+          .then(([{ BankingService }, { processBankingJob }, { resolveNotificationWorkerPool }]) => {
+            // Processor lives in bankingRetryWorker.ts (tested): validates the payload, resolves the
+            // tenant pool from the registry, and THROWS (so Bull retries / keeps the job in 'failed')
+            // instead of silently returning when the pool cannot be resolved.
+            jobQueue.processQueue('banking', (job) =>
+              processBankingJob(job, {
+                resolveTenantPool: (tenantId) => resolveNotificationWorkerPool(tenantId, pool),
+                createFromSale: (...args) => BankingService.createFromSale(...args),
+              }),
+            );
             logger.info('Banking retry worker registered');
           })
           .catch((err) => {

@@ -58,6 +58,7 @@ const DEFAULT_CONFIG: TenantConfig = {
   features: {
     pharmacy_mode: false,
     restaurant_mode: false,
+    sales_targets: false,
     offline_pos: true,
     credit_sales: true,
     quotations: true,

@@ -5,6 +5,7 @@ import {
     normalizeSystemSettings,
     UpdateSystemSettingsDto,
 } from '../../../../shared/types/systemSettings.js';
+import { isPosSessionPolicy } from '@shared/pos/posSessionPolicySsot.js';
 
 export const systemSettingsRepository = {
     /**
@@ -159,6 +160,9 @@ export const systemSettingsRepository = {
             values.push(updates.invoiceDefaultPaymentTerms);
         }
         if (updates.posSessionPolicy !== undefined) {
+            if (!isPosSessionPolicy(updates.posSessionPolicy)) {
+                throw new Error(`Invalid POS session policy: ${String(updates.posSessionPolicy)}`);
+            }
             setClauses.push(`pos_session_policy = $${paramIndex++}`);
             values.push(updates.posSessionPolicy);
         }

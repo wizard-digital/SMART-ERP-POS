@@ -236,6 +236,7 @@ export function useStockLevelsByStore(storeLocationId: string | null, enabled: b
 
 export interface WarehouseLotRow {
   productLotId: string;
+  inventoryBatchId?: string | null;
   lotNumber: string;
   productId: string;
   productName: string;

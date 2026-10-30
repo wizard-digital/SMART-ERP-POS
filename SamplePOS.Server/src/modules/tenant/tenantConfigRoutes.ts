@@ -120,6 +120,7 @@ function buildConfigFromTenant(tenant: {
     features: fileConfig?.features || {
       pharmacy_mode: false,
       restaurant_mode: false,
+      sales_targets: false,
       offline_pos: true,
       credit_sales: true,
       quotations: true,
@@ -196,6 +197,7 @@ router.get('/config', (req: Request, res: Response) => {
         features: {
           pharmacy_mode: false,
           restaurant_mode: false,
+          sales_targets: false,
           offline_pos: true,
           credit_sales: true,
           quotations: true,

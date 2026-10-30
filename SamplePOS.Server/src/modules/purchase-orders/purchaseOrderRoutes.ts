@@ -283,7 +283,7 @@ export const purchaseOrderController = {
   async submitPO(req: Request, res: Response): Promise<void> {
     const pool = req.tenantPool || globalPool;
     const { id } = UuidParamSchema.parse(req.params);
-    const result = await purchaseOrderService.submitPO(pool, id);
+    const result = await purchaseOrderService.submitPO(pool, id, req.user?.id);
 
     res.json({
       success: true,
@@ -298,7 +298,7 @@ export const purchaseOrderController = {
   async cancelPO(req: Request, res: Response): Promise<void> {
     const pool = req.tenantPool || globalPool;
     const { id } = UuidParamSchema.parse(req.params);
-    const result = await purchaseOrderService.cancelPO(pool, id);
+    const result = await purchaseOrderService.cancelPO(pool, id, req.user?.id);
 
     res.json({
       success: true,

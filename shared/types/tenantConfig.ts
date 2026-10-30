@@ -44,6 +44,8 @@ export interface TenantTaxConfig {
 export interface TenantFeatureFlags {
   pharmacy_mode: boolean;
   restaurant_mode: boolean;
+  /** Runtime SSOT is system_settings.sales_targets_enabled (not this public config blob). */
+  sales_targets: boolean;
   offline_pos: boolean;
   credit_sales: boolean;
   quotations: boolean;

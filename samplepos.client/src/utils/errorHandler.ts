@@ -708,8 +708,9 @@ export function resolveUserFacingApiNotification(error: unknown): UserFacingApiN
       ? 'app-forbidden'
       : `app-api-${status ?? 'error'}-${(parsed.errorCode || message).slice(0, 48)}`;
 
+  const legalFormBlocked = parsed.errorCode === 'OWNERSHIP_LEGAL_FORM_BLOCKED';
   return {
-    title: ownership403 ? 'Table in use' : titleForHttpStatus(status),
+    title: ownership403 ? 'Table in use' : legalFormBlocked ? 'Cannot change legal form' : titleForHttpStatus(status),
     message,
     toastId,
     status,

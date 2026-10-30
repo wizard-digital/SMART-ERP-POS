@@ -33,6 +33,9 @@ installer/smart-erp-shell/dist/
 installer/service-helper/dist/
 *.local
 
+# Local Web Push VAPID pair (never commit)
+**/.vapid-local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

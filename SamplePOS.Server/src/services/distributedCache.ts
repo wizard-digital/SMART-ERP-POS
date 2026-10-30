@@ -1,5 +1,6 @@
 import { Redis } from 'ioredis';
 import logger from '../utils/logger.js';
+import { createThrottle, errorKey } from '../utils/throttledLog.js';
 
 /**
  * DISTRIBUTED CACHE SERVICE
@@ -26,8 +27,12 @@ export class DistributedCacheService {
             enableOfflineQueue: false, // Don't queue commands when disconnected
         });
 
+        // Throttled: ioredis emits 'error' on every reconnect attempt while Redis is down.
+        const throttle = createThrottle(30_000);
         this.redis.on('error', (err: Error) => {
-            logger.error('Redis connection error:', err);
+            throttle(errorKey('cache', err), (suppressed) =>
+                logger.error('Redis connection error:', err, suppressed > 0 ? { suppressed } : undefined),
+            );
         });
 
         this.redis.on('connect', () => {

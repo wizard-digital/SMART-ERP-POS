@@ -9,6 +9,9 @@ yarn-error.log*
 .env.local
 .env.*.local
 
+# Local Web Push VAPID pair (auto-generated in development)
+.vapid-local.json
+
 # Build output
 dist/
 build/

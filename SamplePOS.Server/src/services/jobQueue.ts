@@ -1,5 +1,7 @@
 import Bull, { Queue, Job } from 'bull';
 import logger from '../utils/logger.js';
+import { createThrottle, errorKey } from '../utils/throttledLog.js';
+import { createRedisBackoff } from '../utils/redisBackoff.js';
 
 /**
  * JOB QUEUE SERVICE
@@ -17,12 +19,13 @@ interface JobData {
     timestamp: string;
 }
 
-class JobQueueService {
+export class JobQueueService {
     private queues: Map<string, Queue> = new Map();
     private readonly REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
     /** Single dispatcher — Bull drops jobs when multiple process() compete on one queue. */
     private calculationsHandlers = new Map<string, (job: Job<JobData>) => Promise<unknown>>();
     private calculationsProcessorStarted = false;
+    private readonly throttle = createThrottle(30_000);
 
     constructor() {
         this.initializeQueues();
@@ -132,11 +135,21 @@ class JobQueueService {
     }
 
     private createQueue(name: string, options: Bull.QueueOptions = {}) {
-        const queue = new Bull(name, this.REDIS_URL, options);
+        // Bounded, jittered reconnect backoff that survives ioredis' premature "ready" reset
+        // (see utils/redisBackoff.ts — without it a rejected password caused ~60 reconnects/s per client).
+        const queue = new Bull(name, this.REDIS_URL, {
+            ...options,
+            redis: { ...(options.redis as object | undefined), retryStrategy: createRedisBackoff() },
+        });
 
-        // Event listeners
+        // Event listeners.
+        // Redis connection errors repeat on every reconnect attempt (several per second across all
+        // queues during an outage) — throttle them so an outage cannot flood the logs. The first
+        // occurrence is logged immediately; later ones are summarised with a suppressed count.
         queue.on('error', (error) => {
-            logger.error(`Queue ${name} error:`, error);
+            this.throttle(errorKey(`queue:${name}`, error), (suppressed) =>
+                logger.error(`Queue ${name} error:`, error, suppressed > 0 ? { suppressed } : undefined),
+            );
         });
 
         queue.on('failed', (job, error) => {
@@ -176,7 +189,21 @@ class JobQueueService {
             timestamp: new Date().toISOString(),
         };
 
-        const job = await queue.add(jobData, options);
+        // Bull's offline queue makes add() WAIT FOREVER while Redis is unreachable, which would hang
+        // the calling HTTP request (sale committed, response never sent -> cashier retries). Bound it so
+        // callers' existing catch/fallback paths (manual-remediation log, local notification
+        // processing) actually run. A late-completing add is harmless: callers' jobs are idempotent.
+        const timeoutMs = Number(process.env.JOB_ENQUEUE_TIMEOUT_MS) || 3000;
+        let timer: NodeJS.Timeout | undefined;
+        const job = await Promise.race([
+            queue.add(jobData, options),
+            new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                    () => reject(new Error(`Queue ${queueName} enqueue timed out after ${timeoutMs}ms (Redis unreachable?)`)),
+                    timeoutMs,
+                );
+            }),
+        ]).finally(() => clearTimeout(timer));
         logger.info(`Job ${job.id} added to queue ${queueName}`, { type: jobType });
 
         return job;

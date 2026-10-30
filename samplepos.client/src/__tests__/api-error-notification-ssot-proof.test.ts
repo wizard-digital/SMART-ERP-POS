@@ -135,6 +135,19 @@ describe('PROOF — API error notification SSOT (no status codes)', () => {
     expect(detail.message).toBe('Opening balance must be a number');
   });
 
+  it('E-06b legal-form block is not titled Invalid request', () => {
+    const n = resolveUserFacingApiNotification(
+      makeAxiosError(
+        400,
+        'Clear the following before the legal form can return to sole proprietor: 500 company shares are still issued.',
+        { error_code: 'OWNERSHIP_LEGAL_FORM_BLOCKED' }
+      )
+    );
+    expect(n.title).toBe('Cannot change legal form');
+    expect(n.message).toMatch(/500 company shares are still issued/);
+    expect(n.message).not.toMatch(/status code/i);
+  });
+
   it('E-06 prefers details.reason when present', () => {
     const n = resolveUserFacingApiNotification(
       makeAxiosError(400, 'Validation failed', {
