@@ -74,12 +74,16 @@ describe('store issue restaurant gate (executed)', () => {
     expect(audit).toMatch(/useRestaurantEnabled/);
     expect(audit).toMatch(/Restaurant mode is required/);
     expect(page).toMatch(/useRestaurantEnabled/);
+    expect(page).toMatch(/storeIssueUiGate/);
     expect(page).toMatch(/Restaurant mode is required/);
+    expect(page).not.toMatch(/issuesEnabled/);
+    expect(page).not.toMatch(/issues-enabled/);
     prove('ui-wiring-uses-filters', {
       reportsPage: true,
       inventoryLayout: true,
       auditPage: true,
       storeIssuePage: true,
+      storeIssueUiGateOnly: true,
     });
   });
 

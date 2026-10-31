@@ -1,6 +1,6 @@
 {
   "title": "PROOF_STORE_ISSUE_RESTAURANT_GATE",
-  "runAt": "2026-10-31T10:11:35.510Z",
+  "runAt": "2026-10-31T11:42:37.773Z",
   "verdict": "PASS",
   "exercised": "visibleInventoryReports + filterInventoryNavByTenantFlags",
   "checks": [
@@ -42,7 +42,8 @@
         "reportsPage": true,
         "inventoryLayout": true,
         "auditPage": true,
-        "storeIssuePage": true
+        "storeIssuePage": true,
+        "storeIssueUiGateOnly": true
       }
     }
   ]

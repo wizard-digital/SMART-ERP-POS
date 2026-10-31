@@ -18,6 +18,10 @@ import {
     parsePosSessionPolicy,
     type PosSessionPolicy,
 } from '@shared/pos/posSessionPolicySsot';
+import {
+    restaurantEnabledQueryKey,
+    writeCachedRestaurantEnabled,
+} from '../../../hooks/useRestaurantEnabled';
 
 interface TaxRate {
     name: string;
@@ -159,7 +163,13 @@ export default function SystemSettingsTab() {
                 void queryClient.invalidateQueries({ queryKey: ['treasury', 'enabled'] });
             }
             if (variables.restaurantModeEnabled !== undefined) {
-                void queryClient.invalidateQueries({ queryKey: ['restaurant', 'enabled'] });
+                writeCachedRestaurantEnabled(Boolean(variables.restaurantModeEnabled));
+                queryClient.setQueryData(
+                    restaurantEnabledQueryKey,
+                    Boolean(variables.restaurantModeEnabled),
+                );
+                void queryClient.invalidateQueries({ queryKey: restaurantEnabledQueryKey });
+                void queryClient.invalidateQueries({ queryKey: ['kitchen-production'] });
             }
             if (variables.salesTargetsEnabled !== undefined) {
                 void queryClient.invalidateQueries({ queryKey: ['sales-targets', 'enabled'] });

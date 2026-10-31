@@ -33,6 +33,7 @@ import {
   issuedExceedsAvailable,
   storeIssueEntryQty,
   storeIssueStepComplete,
+  storeIssueUiGate,
   type StoreIssueIssuedTo,
   type StoreIssueStatus,
 } from '@shared/store-issue/issuePlan';
@@ -159,17 +160,7 @@ export default function KitchenStoreIssuePage() {
   const [pickerSessionKey, setPickerSessionKey] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const enabledQuery = useQuery({
-    queryKey: ['kitchen-production', 'issues-enabled'],
-    queryFn: async () => {
-      const res = await api.kitchenProduction.issuesEnabled();
-      return Boolean(res.data.data?.enabled);
-    },
-    enabled: !!restaurantEnabled,
-  });
-
-  const enabled = Boolean(restaurantEnabled && enabledQuery.data);
-  const workspaceOn = enabled && canRead;
+  const workspaceOn = storeIssueUiGate(restaurantEnabled) === 'ok' && canRead;
 
   const listQuery = useQuery({
     queryKey: ['kitchen-production', 'issues'],
@@ -566,7 +557,7 @@ export default function KitchenStoreIssuePage() {
     },
   ], [canCreate, listQuery.data]);
 
-  if (flagLoading || (restaurantEnabled && enabledQuery.isLoading)) {
+  if (flagLoading) {
     return (
       <Layout>
         <div className="p-6 text-gray-500">Loading…</div>
@@ -574,7 +565,7 @@ export default function KitchenStoreIssuePage() {
     );
   }
 
-  if (!restaurantEnabled || !enabledQuery.data) {
+  if (storeIssueUiGate(restaurantEnabled) === 'restaurant-off') {
     return (
       <Layout>
         <div className="p-6">

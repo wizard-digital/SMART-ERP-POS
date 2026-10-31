@@ -66,6 +66,17 @@ export function canReverseStoreIssue(status: StoreIssueStatus): boolean {
   return status === 'POSTED';
 }
 
+/**
+ * Store Issue UI gate. Restaurant mode is the only tenant switch.
+ * Do not AND this with kitchen-production/issues/enabled — that endpoint can
+ * read the wrong database and lie that restaurant is off.
+ */
+export function storeIssueUiGate(
+  restaurantEnabled: boolean | undefined | null,
+): 'ok' | 'restaurant-off' {
+  return restaurantEnabled ? 'ok' : 'restaurant-off';
+}
+
 export function normalizeStoreIssueReversalReason(reason: string | null | undefined): string {
   const trimmed = String(reason ?? '').trim();
   if (trimmed.length < STORE_ISSUE_REVERSE_REASON_MIN) {

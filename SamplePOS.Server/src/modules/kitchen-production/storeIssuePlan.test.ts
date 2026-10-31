@@ -35,10 +35,18 @@ import {
   normalizeStoreIssueLines,
   storeIssueEntryQty,
   storeIssueStepComplete,
+  storeIssueUiGate,
   sumIssuableQty,
 } from '../../../../shared/store-issue/issuePlan.js';
 
 describe('store issue plan (pure)', () => {
+  it('shows Store Issue when restaurant is on — no second issues/enabled AND', () => {
+    expect(storeIssueUiGate(true)).toBe('ok');
+    expect(storeIssueUiGate(false)).toBe('restaurant-off');
+    expect(storeIssueUiGate(undefined)).toBe('restaurant-off');
+    expect(storeIssueUiGate(null)).toBe('restaurant-off');
+  });
+
   it('status gates draft only', () => {
     expect(canEditStoreIssue('DRAFT')).toBe(true);
     expect(canPostStoreIssue('DRAFT')).toBe(true);

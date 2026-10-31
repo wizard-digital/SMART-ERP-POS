@@ -1,0 +1,8 @@
+{
+  "title": "PROOF_STORE_ISSUE_TENANT_POOL_ENABLED",
+  "runAt": "2026-10-31T11:42:37.882Z",
+  "verdict": "PASS",
+  "exercised": "kitchenDb(req) + storeIssueService.isEnabled(tenant vs platform)",
+  "tenantEnabled": true,
+  "platformEnabled": false
+}

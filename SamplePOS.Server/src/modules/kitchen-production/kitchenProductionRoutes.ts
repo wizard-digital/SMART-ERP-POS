@@ -5,7 +5,6 @@
 
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { pool } from '../../db/pool.js';
 import { authenticate } from '../../middleware/auth.js';
 import { getAuthorizationService, requireAnyPermission, requirePermission } from '../../rbac/middleware.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
@@ -15,6 +14,7 @@ import { kitchenWasteService } from './kitchenWasteService.js';
 import { kitchenAnalyticsService } from './kitchenAnalyticsService.js';
 import { kitchenOpsService } from './kitchenOpsService.js';
 import { storeIssueService } from './storeIssueService.js';
+import { kitchenDb } from './kitchenDb.js';
 import {
   STORE_ISSUE_REVERSE_REASON_MAX,
   STORE_ISSUE_REVERSE_REASON_MIN,
@@ -47,8 +47,8 @@ const UpdateSchema = DraftSchema.partial().extend({
 /** GET /api/kitchen-production/enabled */
 router.get(
   '/enabled',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const enabled = await kitchenProductionService.isEnabled(pool);
+  asyncHandler(async (req: Request, res: Response) => {
+    const enabled = await kitchenProductionService.isEnabled(kitchenDb(req));
     res.json({ success: true, data: { enabled } });
   }),
 );
@@ -64,7 +64,7 @@ router.get(
         : true;
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const data = await kitchenProductionService.listProducibleProducts(pool, {
+    const data = await kitchenProductionService.listProducibleProducts(kitchenDb(req), {
       preparedOnly,
       search,
       limit,
@@ -80,7 +80,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const data = await kitchenProductionService.list(pool, { status, limit });
+    const data = await kitchenProductionService.list(kitchenDb(req), { status, limit });
     res.json({ success: true, data });
   }),
 );
@@ -90,7 +90,7 @@ router.get(
   '/batches/:id',
   requirePermission('kitchen.production.read'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await kitchenProductionService.getById(pool, req.params.id);
+    const data = await kitchenProductionService.getById(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -107,7 +107,7 @@ router.post(
       })
       .parse(req.body);
     const data = await kitchenProductionService.planFromRecipe(
-      pool,
+      kitchenDb(req),
       body.outputProductId,
       body.outputQtyBase,
     );
@@ -128,7 +128,7 @@ router.post(
       sortOrder: l.sortOrder,
     }));
     const data = await kitchenProductionService.createDraft(
-      pool,
+      kitchenDb(req),
       { ...body, lines },
       req.user!.id,
     );
@@ -148,7 +148,7 @@ router.patch(
       actualQtyBase: l.actualQtyBase,
       sortOrder: l.sortOrder,
     }));
-    const data = await kitchenProductionService.updateDraft(pool, req.params.id, {
+    const data = await kitchenProductionService.updateDraft(kitchenDb(req), req.params.id, {
       ...body,
       lines,
     });
@@ -161,7 +161,7 @@ router.post(
   '/batches/:id/post',
   requirePermission('kitchen.production.post'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await kitchenProductionService.post(pool, req.params.id, req.user!.id);
+    const data = await kitchenProductionService.post(kitchenDb(req), req.params.id, req.user!.id);
     res.json({ success: true, data });
   }),
 );
@@ -171,7 +171,7 @@ router.post(
   '/batches/:id/cancel',
   requirePermission('kitchen.production.create'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await kitchenProductionService.cancelDraft(pool, req.params.id);
+    const data = await kitchenProductionService.cancelDraft(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -205,7 +205,7 @@ router.get(
     const serviceDate =
       typeof req.query.serviceDate === 'string' ? req.query.serviceDate : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const data = await buffetSessionService.list(pool, { status, serviceDate, limit });
+    const data = await buffetSessionService.list(kitchenDb(req), { status, serviceDate, limit });
     res.json({ success: true, data });
   }),
 );
@@ -214,7 +214,7 @@ router.get(
   '/buffet-sessions/:id',
   requirePermission('kitchen.production.read'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await buffetSessionService.getById(pool, req.params.id);
+    const data = await buffetSessionService.getById(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -224,7 +224,7 @@ router.post(
   requirePermission('kitchen.production.create'),
   asyncHandler(async (req: Request, res: Response) => {
     const body = BuffetDraftSchema.parse(req.body);
-    const data = await buffetSessionService.createDraft(pool, body, req.user!.id);
+    const data = await buffetSessionService.createDraft(kitchenDb(req), body, req.user!.id);
     res.status(201).json({ success: true, data });
   }),
 );
@@ -234,7 +234,7 @@ router.patch(
   requirePermission('kitchen.production.create'),
   asyncHandler(async (req: Request, res: Response) => {
     const body = BuffetDraftSchema.partial().parse(req.body);
-    const data = await buffetSessionService.updateDraft(pool, req.params.id, body);
+    const data = await buffetSessionService.updateDraft(kitchenDb(req), req.params.id, body);
     res.json({ success: true, data });
   }),
 );
@@ -243,7 +243,7 @@ router.post(
   '/buffet-sessions/:id/open',
   requirePermission('kitchen.production.post'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await buffetSessionService.open(pool, req.params.id, req.user!.id);
+    const data = await buffetSessionService.open(kitchenDb(req), req.params.id, req.user!.id);
     res.json({ success: true, data });
   }),
 );
@@ -252,7 +252,7 @@ router.post(
   '/buffet-sessions/:id/close',
   requirePermission('kitchen.production.post'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await buffetSessionService.close(pool, req.params.id, req.user!.id);
+    const data = await buffetSessionService.close(kitchenDb(req), req.params.id, req.user!.id);
     res.json({ success: true, data });
   }),
 );
@@ -261,7 +261,7 @@ router.post(
   '/buffet-sessions/:id/cancel',
   requirePermission('kitchen.production.create'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await buffetSessionService.cancel(pool, req.params.id);
+    const data = await buffetSessionService.cancel(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -306,7 +306,7 @@ router.get(
     const buffetSessionId =
       typeof req.query.buffetSessionId === 'string' ? req.query.buffetSessionId : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const data = await kitchenWasteService.list(pool, { status, buffetSessionId, limit });
+    const data = await kitchenWasteService.list(kitchenDb(req), { status, buffetSessionId, limit });
     res.json({ success: true, data });
   }),
 );
@@ -315,7 +315,7 @@ router.get(
   '/waste/:id',
   requirePermission('kitchen.production.read'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await kitchenWasteService.getById(pool, req.params.id);
+    const data = await kitchenWasteService.getById(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -325,7 +325,7 @@ router.post(
   requirePermission('kitchen.production.create'),
   asyncHandler(async (req: Request, res: Response) => {
     const body = WasteDraftSchema.parse(req.body);
-    const data = await kitchenWasteService.createDraft(pool, body, req.user!.id);
+    const data = await kitchenWasteService.createDraft(kitchenDb(req), body, req.user!.id);
     res.status(201).json({ success: true, data });
   }),
 );
@@ -337,7 +337,7 @@ router.patch(
     const body = WasteDraftSchema.partial().extend({
       lines: z.array(WasteLineSchema).min(1).optional(),
     }).parse(req.body);
-    const data = await kitchenWasteService.updateDraft(pool, req.params.id, body);
+    const data = await kitchenWasteService.updateDraft(kitchenDb(req), req.params.id, body);
     res.json({ success: true, data });
   }),
 );
@@ -346,7 +346,7 @@ router.post(
   '/waste/:id/post',
   requirePermission('kitchen.production.post'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await kitchenWasteService.post(pool, req.params.id, req.user!.id);
+    const data = await kitchenWasteService.post(kitchenDb(req), req.params.id, req.user!.id);
     res.json({ success: true, data });
   }),
 );
@@ -355,7 +355,7 @@ router.post(
   '/waste/:id/cancel',
   requirePermission('kitchen.production.create'),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await kitchenWasteService.cancelDraft(pool, req.params.id);
+    const data = await kitchenWasteService.cancelDraft(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -367,7 +367,7 @@ router.post(
   asyncHandler(async (req: Request, res: Response) => {
     const body = CloseWithLeftoversSchema.parse(req.body ?? {});
     const data = await kitchenWasteService.closeBuffetWithLeftovers(
-      pool,
+      kitchenDb(req),
       req.params.id,
       req.user!.id,
       body,
@@ -385,7 +385,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const serviceDate =
       typeof req.query.serviceDate === 'string' ? req.query.serviceDate : undefined;
-    const data = await kitchenOpsService.getBoard(pool, { serviceDate });
+    const data = await kitchenOpsService.getBoard(kitchenDb(req), { serviceDate });
     res.json({ success: true, data });
   }),
 );
@@ -405,7 +405,7 @@ router.post(
         lines: z.array(LineSchema).optional(),
       })
       .parse(req.body);
-    const data = await kitchenOpsService.quickProduce(pool, body, req.user!.id);
+    const data = await kitchenOpsService.quickProduce(kitchenDb(req), body, req.user!.id);
     res.status(201).json({ success: true, data });
   }),
 );
@@ -416,7 +416,7 @@ router.post(
   requirePermission('kitchen.production.post'),
   asyncHandler(async (req: Request, res: Response) => {
     const body = BuffetDraftSchema.parse(req.body);
-    const data = await kitchenOpsService.startService(pool, body, req.user!.id);
+    const data = await kitchenOpsService.startService(kitchenDb(req), body, req.user!.id);
     res.status(201).json({ success: true, data });
   }),
 );
@@ -427,7 +427,7 @@ router.post(
   requirePermission('kitchen.production.post'),
   asyncHandler(async (req: Request, res: Response) => {
     const body = WasteDraftSchema.parse(req.body);
-    const data = await kitchenOpsService.quickWaste(pool, body, req.user!.id);
+    const data = await kitchenOpsService.quickWaste(kitchenDb(req), body, req.user!.id);
     res.status(201).json({ success: true, data });
   }),
 );
@@ -449,7 +449,7 @@ router.post(
       })
       .parse(req.body);
     const { sessionId, leftoverLines, reason, storeLocationId, notes } = body;
-    const data = await kitchenOpsService.endService(pool, sessionId, req.user!.id, {
+    const data = await kitchenOpsService.endService(kitchenDb(req), sessionId, req.user!.id, {
       leftoverLines,
       reason,
       storeLocationId,
@@ -467,7 +467,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const from = typeof req.query.from === 'string' ? req.query.from : undefined;
     const to = typeof req.query.to === 'string' ? req.query.to : undefined;
-    const data = await kitchenAnalyticsService.summary(pool, { from, to });
+    const data = await kitchenAnalyticsService.summary(kitchenDb(req), { from, to });
     res.json({ success: true, data });
   }),
 );
@@ -478,7 +478,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const from = typeof req.query.from === 'string' ? req.query.from : undefined;
     const to = typeof req.query.to === 'string' ? req.query.to : undefined;
-    const data = await kitchenAnalyticsService.productionVariance(pool, { from, to });
+    const data = await kitchenAnalyticsService.productionVariance(kitchenDb(req), { from, to });
     res.json({ success: true, data });
   }),
 );
@@ -489,7 +489,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const from = typeof req.query.from === 'string' ? req.query.from : undefined;
     const to = typeof req.query.to === 'string' ? req.query.to : undefined;
-    const data = await kitchenAnalyticsService.wasteBreakdown(pool, { from, to });
+    const data = await kitchenAnalyticsService.wasteBreakdown(kitchenDb(req), { from, to });
     res.json({ success: true, data });
   }),
 );
@@ -500,7 +500,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const from = typeof req.query.from === 'string' ? req.query.from : undefined;
     const to = typeof req.query.to === 'string' ? req.query.to : undefined;
-    const data = await kitchenAnalyticsService.buffetProfitability(pool, { from, to });
+    const data = await kitchenAnalyticsService.buffetProfitability(kitchenDb(req), { from, to });
     res.json({ success: true, data });
   }),
 );
@@ -534,8 +534,8 @@ const IssueDraftSchema = z.object({
 
 router.get(
   '/issues/enabled',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const enabled = await storeIssueService.isEnabled(pool);
+  asyncHandler(async (req: Request, res: Response) => {
+    const enabled = await storeIssueService.isEnabled(kitchenDb(req));
     res.json({ success: true, data: { enabled } });
   }),
 );
@@ -546,7 +546,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const data = await storeIssueService.listStockProducts(pool, { search, limit });
+    const data = await storeIssueService.listStockProducts(kitchenDb(req), { search, limit });
     res.json({ success: true, data });
   }),
 );
@@ -559,7 +559,7 @@ router.get(
     const storeLocationId = req.query.storeLocationId
       ? z.string().uuid().parse(req.query.storeLocationId)
       : null;
-    const data = await storeIssueService.previewAvailability(pool, productId, storeLocationId);
+    const data = await storeIssueService.previewAvailability(kitchenDb(req), productId, storeLocationId);
     res.json({ success: true, data });
   }),
 );
@@ -570,7 +570,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const data = await storeIssueService.list(pool, { status, limit });
+    const data = await storeIssueService.list(kitchenDb(req), { status, limit });
     res.json({ success: true, data });
   }),
 );
@@ -580,7 +580,7 @@ router.post(
   requireAnyPermission([...ISSUE_CREATE]),
   asyncHandler(async (req: Request, res: Response) => {
     const body = IssueDraftSchema.parse(req.body);
-    const data = await storeIssueService.createDraft(pool, body, req.user!.id);
+    const data = await storeIssueService.createDraft(kitchenDb(req), body, req.user!.id);
     res.status(201).json({ success: true, data });
   }),
 );
@@ -590,7 +590,7 @@ router.post(
   requireAnyPermission([...ISSUE_POST]),
   asyncHandler(async (req: Request, res: Response) => {
     const body = IssueDraftSchema.parse(req.body);
-    const data = await storeIssueService.postNow(pool, body, req.user!.id);
+    const data = await storeIssueService.postNow(kitchenDb(req), body, req.user!.id);
     res.status(201).json({ success: true, data });
   }),
 );
@@ -599,7 +599,7 @@ router.get(
   '/issues/:id',
   requireAnyPermission([...ISSUE_READ]),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await storeIssueService.getById(pool, req.params.id);
+    const data = await storeIssueService.getById(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -613,7 +613,7 @@ router.patch(
         lines: z.array(IssueLineSchema).min(1).optional(),
       })
       .parse(req.body);
-    const data = await storeIssueService.updateDraft(pool, req.params.id, body);
+    const data = await storeIssueService.updateDraft(kitchenDb(req), req.params.id, body);
     res.json({ success: true, data });
   }),
 );
@@ -622,7 +622,7 @@ router.post(
   '/issues/:id/post',
   requireAnyPermission([...ISSUE_POST]),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await storeIssueService.post(pool, req.params.id, req.user!.id);
+    const data = await storeIssueService.post(kitchenDb(req), req.params.id, req.user!.id);
     res.json({ success: true, data });
   }),
 );
@@ -631,7 +631,7 @@ router.post(
   '/issues/:id/cancel',
   requireAnyPermission([...ISSUE_CREATE]),
   asyncHandler(async (req: Request, res: Response) => {
-    const data = await storeIssueService.cancelDraft(pool, req.params.id);
+    const data = await storeIssueService.cancelDraft(kitchenDb(req), req.params.id);
     res.json({ success: true, data });
   }),
 );
@@ -650,7 +650,7 @@ router.post(
     const canOverrideFourEyes = subject
       ? await authz.hasPermission(subject, 'inventory.approve')
       : false;
-    const data = await storeIssueService.reverse(pool, req.params.id, req.user!.id, {
+    const data = await storeIssueService.reverse(kitchenDb(req), req.params.id, req.user!.id, {
       reason,
       canOverrideFourEyes,
     });

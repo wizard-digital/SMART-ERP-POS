@@ -69,6 +69,9 @@ describe('Store Issue to Expense architecture proof', () => {
     expect(routes).toMatch(/\/issues\/post-now/);
     expect(routes).toMatch(/\/issues\/availability/);
     expect(routes).toMatch(/\/issues\/:id\/reverse/);
+    expect(routes).toMatch(/storeIssueService\.isEnabled\(kitchenDb\(req\)\)/);
+    expect(routes).toMatch(/storeIssueService\.list\(kitchenDb\(req\)/);
+    expect(routes).not.toMatch(/storeIssueService\.isEnabled\(pool\)/);
     expect(routes).toMatch(/storeIssueService/);
     expect(routes).toMatch(/inventory\.adjust/);
     expect(routes).toMatch(/kitchen\.production\.reverse/);
