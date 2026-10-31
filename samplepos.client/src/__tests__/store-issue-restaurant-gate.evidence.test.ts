@@ -78,12 +78,17 @@ describe('store issue restaurant gate (executed)', () => {
     expect(page).toMatch(/Restaurant mode is required/);
     expect(page).not.toMatch(/issuesEnabled/);
     expect(page).not.toMatch(/issues-enabled/);
+    const withoutQueryEnabled = page.replace(/enabled:\s*workspaceOn/g, '');
+    expect(withoutQueryEnabled).not.toMatch(/\benabled\b/);
+    expect(page).toMatch(/canCreate && workspaceOn/);
+    expect(page).toMatch(/\[canCreate, workspaceOn,/);
     prove('ui-wiring-uses-filters', {
       reportsPage: true,
       inventoryLayout: true,
       auditPage: true,
       storeIssuePage: true,
       storeIssueUiGateOnly: true,
+      noDanglingEnabledIdentifier: true,
     });
   });
 

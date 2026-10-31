@@ -426,7 +426,7 @@ export default function KitchenStoreIssuePage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key.toLowerCase() === 'n' && canCreate && enabled) {
+      if (e.ctrlKey && e.key.toLowerCase() === 'n' && canCreate && workspaceOn) {
         e.preventDefault();
         resetWorkspace();
         setWorkspaceOpen(true);
@@ -438,7 +438,7 @@ export default function KitchenStoreIssuePage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [canCreate, enabled, workspaceOpen, composing, canIssueNow, resetWorkspace, postMutation]);
+  }, [canCreate, workspaceOn, workspaceOpen, composing, canIssueNow, resetWorkspace, postMutation]);
 
   const findDoc = (id: string) => (listQuery.data || []).find((d) => d.id === id);
 
