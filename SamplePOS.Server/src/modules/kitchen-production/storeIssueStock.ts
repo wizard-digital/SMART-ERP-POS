@@ -27,11 +27,11 @@ export async function previewStoreIssueAvailability(
 ): Promise<{ available: number; storeLabel: string }> {
   const consumeStoreId = consumeStoreIdForIssue(multistore, storeLocationId);
   const lots = consumeStoreId
-    ? await loadStoreSelectableLots(conn, productId, consumeStoreId, {
+    ? await loadStoreSelectableLots(conn as PoolClient, productId, consumeStoreId, {
         minDaysBeforeExpiry: 0,
         forUpdate: opts?.forUpdate === true,
       })
-    : await loadGlobalSelectableLots(conn, productId, {
+    : await loadGlobalSelectableLots(conn as PoolClient, productId, {
         minDaysBeforeExpiry: 0,
         forUpdate: opts?.forUpdate === true,
       });
