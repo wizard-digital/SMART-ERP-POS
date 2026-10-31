@@ -195,7 +195,7 @@ export function giftCoveredAmount(input: {
   giftAmount?: number | null;
   totalAmount?: number | null;
   paymentMethod?: string | null;
-  paymentLines?: ReadonlyArray<{ paymentMethod: string; amount?: number }> | null;
+  paymentLines?: ReadonlyArray<{ paymentMethod: string; amount?: number | string }> | null;
 }): number {
   const lines = input.paymentLines || [];
   if (lines.length > 0) {

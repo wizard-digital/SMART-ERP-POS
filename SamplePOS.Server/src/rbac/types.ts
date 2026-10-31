@@ -59,7 +59,8 @@ export type PermissionAction =
   | 'tax_override'
   | 'issue'
   | 'transfer'
-  | 'dividend_approve';
+  | 'dividend_approve'
+  | 'gift';
 
 export interface Permission {
   key: string;
