@@ -1,0 +1,85 @@
+{
+  "title": "PROOF_GIFT_DASHBOARD_REPORT_SSOT",
+  "runAt": "2026-10-31T19:24:25.973Z",
+  "verdict": "PASS",
+  "identity": {
+    "dashboard": "sales_daily_summary via getSalesSummaryFromRollup",
+    "liveSales": "getSalesSummary billedRevenueSql",
+    "pnl": "getProfitLossReport billedRevenueSql",
+    "salesReport": "getSalesReport billedRevenueSql (header, not line prices)"
+  },
+  "billedRevenue": 120000,
+  "giftMerchandise": 55000,
+  "cogsIncludingGift": 58000,
+  "dashboard": {
+    "totalSales": 2,
+    "totalAmount": 120000,
+    "totalCost": 58000,
+    "totalProfit": 62000,
+    "totalDiscounts": 0,
+    "giftAmount": 55000,
+    "giftCount": 2,
+    "giftCost": 8000,
+    "creditSalesCount": 0,
+    "partialPaymentCount": 0,
+    "byPaymentMethod": [
+      {
+        "paymentMethod": "CASH",
+        "count": 2,
+        "totalAmount": 120000
+      },
+      {
+        "paymentMethod": "GIFT",
+        "count": 2,
+        "totalAmount": 55000
+      }
+    ]
+  },
+  "live": {
+    "totalSales": 2,
+    "totalAmount": 120000,
+    "totalCost": 58000,
+    "totalProfit": 62000,
+    "totalDiscounts": 0,
+    "giftAmount": 55000,
+    "giftCount": 2,
+    "giftCost": 8000,
+    "creditSalesCount": 0,
+    "partialPaymentCount": 0,
+    "byPaymentMethod": [
+      {
+        "paymentMethod": "CASH",
+        "count": 2,
+        "totalAmount": 120000
+      },
+      {
+        "paymentMethod": "GIFT",
+        "count": 2,
+        "totalAmount": 55000
+      }
+    ]
+  },
+  "pnl": {
+    "totalRevenue": 120000,
+    "totalCOGS": 58000,
+    "grossProfit": 62000,
+    "grossProfitMargin": 51.67,
+    "totalExpenses": 0,
+    "operatingProfit": 62000,
+    "netProfit": 62000,
+    "netProfitMargin": 51.67,
+    "totalSupplierPayments": 0,
+    "supplierPaymentCount": 0
+  },
+  "salesReport": {
+    "totalSales": 120000,
+    "totalDiscounts": 0,
+    "netRevenue": 120000,
+    "totalCost": 58000,
+    "grossProfit": 62000,
+    "profitMargin": 51.67,
+    "totalTransactions": 2,
+    "averageDiscountRate": 0,
+    "totalQuantitySold": 0
+  }
+}

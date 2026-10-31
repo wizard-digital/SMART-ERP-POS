@@ -47,7 +47,7 @@ const CreateSaleSchema = z
     customerId: z.string().uuid().optional().nullable(),
     customerName: z.string().optional().nullable(),
     items: z.array(SaleItemSchema).min(1),
-    paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT']),
+    paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'GIFT']),
     paymentReceived: z.number().nonnegative(),
     // soldBy intentionally omitted — always forced from req.user.id (SECURITY LAW)
   })
@@ -65,7 +65,7 @@ const ListSalesQuerySchema = z.object({
   status: z.enum(['COMPLETED', 'CANCELLED', 'REFUNDED', 'VOID', 'PARTIALLY_RETURNED', 'VOIDED_BY_RETURN']).optional(),
   customerId: z.string().uuid().optional(),
   cashierId: z.string().uuid().optional(),
-  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT']).optional(),
+  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'GIFT']).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   search: z.string().optional(),
@@ -216,6 +216,7 @@ export const salesController = {
         exchangeRefundId: posData.exchangeRefundId || undefined,
         exchangeResidualAction: posData.exchangeResidualAction || undefined,
         taxOverride: posData.taxOverride,
+        giftReason: posData.giftReason,
       };
     } else {
       // Log POS validation errors

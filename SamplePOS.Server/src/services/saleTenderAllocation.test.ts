@@ -10,6 +10,7 @@ describe('allocateTenderToLiquidity', () => {
     expect(allocateTenderToLiquidity(100, [{ paymentMethod: 'CREDIT', amount: 100 }])).toBeNull();
     expect(allocateTenderToLiquidity(100, [{ paymentMethod: 'DEPOSIT', amount: 100 }, { paymentMethod: 'CASH', amount: 5 }])).toBeNull();
     expect(allocateTenderToLiquidity(100, [{ paymentMethod: 'CHEQUE', amount: 100 }])).toBeNull();
+    expect(allocateTenderToLiquidity(100, [{ paymentMethod: 'GIFT', amount: 100 }])).toBeNull();
     expect(allocateTenderToLiquidity(100, [{ paymentMethod: 'CASH', amount: -1 }])).toBeNull();
   });
 

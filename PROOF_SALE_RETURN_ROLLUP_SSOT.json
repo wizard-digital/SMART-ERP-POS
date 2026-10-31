@@ -1,6 +1,6 @@
 {
   "title": "PROOF_SALE_RETURN_ROLLUP_SSOT",
-  "runAt": "2026-10-30T20:27:31.525Z",
+  "runAt": "2026-10-31T19:24:29.560Z",
   "verdict": "PASS",
   "identity": {
     "dashboard": "sales_daily_summary via getSalesSummaryFromRollup",

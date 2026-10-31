@@ -56,7 +56,7 @@ export function allocateTenderToLiquidity(
   lines: readonly TenderLine[] | undefined | null,
 ): TenderAllocation | null {
   if (!lines || lines.length === 0) return null;
-  const tender = lines.filter((l) => l.paymentMethod !== 'CREDIT');
+  const tender = lines.filter((l) => l.paymentMethod !== 'CREDIT' && l.paymentMethod !== 'GIFT');
   if (tender.length === 0) return null;
   if (tender.some((l) => liquidityAccountForMethod(l.paymentMethod) === null)) return null; // DEPOSIT / unknown
   if (tender.some((l) => !Number.isFinite(Number(l.amount)) || Number(l.amount) < 0)) return null;

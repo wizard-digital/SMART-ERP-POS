@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DocumentTaxOverrideSchema } from './taxOverride.js';
+import { assertGiftSale, GIFT_REASON_MAX_LENGTH, isGiftSale } from '../domain/saleGiftFocSsot.js';
 
 // POS Sale Line Item Schema
 export const POSSaleLineItemSchema = z.object({
@@ -25,7 +26,7 @@ export const POSSaleLineItemSchema = z.object({
 // Payment Line Schema (for split payments)
 // MTN MoMo = MOBILE_MONEY; Airtel Money = AIRTEL_MONEY (must match POS UI + salesRoutes).
 export const PaymentLineSchema = z.object({
-  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'DEPOSIT']),
+  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'DEPOSIT', 'GIFT']),
   amount: z.number().nonnegative().finite(), // Allow 0 for full CREDIT sales
   reference: z.string().optional(),
 }).strict();
@@ -41,12 +42,14 @@ export const POSSaleSchema = z.object({
   discountAmount: z.number().nonnegative().finite().optional(), // Cart-level discount
   taxAmount: z.number().nonnegative().finite(),
   totalAmount: z.number().nonnegative().finite(),
-  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT']).optional(), // Legacy single payment
+  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'GIFT']).optional(), // Legacy single payment
   paymentLines: z.array(PaymentLineSchema).optional(), // New split payment support
   amountTendered: z.number().nonnegative().finite().optional(),
   changeGiven: z.number().nonnegative().finite().optional(),
   saleDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Sale date must be YYYY-MM-DD').optional(), // YYYY-MM-DD for backdated sales (DATE column — no time/timezone)
   notes: z.string().max(500).optional(),
+  /** SAP FD Grund — required when payment is GIFT. */
+  giftReason: z.string().max(GIFT_REASON_MAX_LENGTH).optional(),
   requiresApproval: z.boolean().optional(), // Flag for discount approvals or special pricing
   idempotencyKey: z.string().min(1).max(100).optional(), // Prevents duplicate sale creation
   /** Exchange refund document (REF-* with refund_type EXCHANGE) whose store credit is applied */
@@ -73,10 +76,11 @@ export const POSSaleSchema = z.object({
     const sum = data.paymentLines.reduce((acc, line) => acc + line.amount, 0);
     const hasCash = data.paymentLines.some(line => line.paymentMethod === 'CASH');
     const hasCredit = data.paymentLines.some(line => line.paymentMethod === 'CREDIT');
+    const hasGift = data.paymentLines.some(line => line.paymentMethod === 'GIFT');
 
     // Allow underpayment ONLY if there's a CREDIT payment (for invoices/credit sales)
     // Otherwise, require full payment or overpayment with cash
-    if (sum < data.totalAmount - 0.01 && !hasCredit) {
+    if (sum < data.totalAmount - 0.01 && !hasCredit && !hasGift) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['paymentLines'],
@@ -100,6 +104,22 @@ export const POSSaleSchema = z.object({
         code: z.ZodIssueCode.custom,
         path: ['paymentLines'],
         message: 'DEPOSIT payment requires a customer. Cannot apply deposit without a customer account.',
+      });
+    }
+  }
+
+  if (isGiftSale({ paymentMethod: data.paymentMethod, paymentLines: data.paymentLines })) {
+    const gift = assertGiftSale({
+      giftReason: data.giftReason,
+      paymentMethod: data.paymentMethod,
+      paymentLines: data.paymentLines,
+      totalAmount: data.totalAmount,
+    });
+    if (!gift.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: gift.code === 'ERR_GIFT_REASON' ? ['giftReason'] : ['paymentLines'],
+        message: gift.message,
       });
     }
   }

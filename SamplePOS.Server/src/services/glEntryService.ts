@@ -38,6 +38,10 @@ import { SYSTEM_USER_ID } from '../utils/constants.js';
 import { customerArLine, requireCustomerIdForAr } from '../modules/accounting-governance/arPostingHelpers.js';
 import { splitSupplierPaymentCredits, splitCustomerPaymentDebits } from '../modules/supplier-payments/supplierPaymentWht.js';
 import { allocateTenderToLiquidity, type TenderLine } from './saleTenderAllocation.js';
+import {
+  giftCoveredAmount,
+  shouldSkipSaleRevenueJournal,
+} from '@shared/domain/saleGiftFocSsot.js';
 
 // =============================================================================
 // ACCOUNT CODE CONSTANTS
@@ -95,6 +99,8 @@ export const AccountCodes = {
   EXPIRY: '5130',
   /** Near-expiry lot NRV write-down (qty unchanged). Not 5130 dispose. */
   CLEARANCE_MARKDOWN: '5140',
+  /** Store issue to expense (intended consumption, no BOM). Not sale COGS 5000. */
+  INTERNAL_ISSUE: '5150',
 
   // Bad Debt (ADR-006) — uncollectible AR expense (not inventory loss, not CN 4010)
   BAD_DEBT_EXPENSE: '5210',
@@ -137,7 +143,7 @@ export interface SaleData {
   saleDate: string;
   totalAmount: number;
   costAmount: number;
-  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'BANK_TRANSFER' | 'CREDIT' | 'DEPOSIT';
+  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'BANK_TRANSFER' | 'CREDIT' | 'DEPOSIT' | 'GIFT';
   amountPaid?: number;  // Amount actually paid (for partial payment tracking)
   /**
    * Split-tender payment lines. When present (and every non-CREDIT line is a liquidity tender), the journal
@@ -145,6 +151,8 @@ export interface SaleData {
    * Omitted → legacy single-account behaviour (repost/quotation paths, single-method sales).
    */
   paymentLines?: TenderLine[];
+  /** FOC remainder. Cash/revenue journals use totalAmount - giftAmount. */
+  giftAmount?: number;
   taxAmount?: number;   // Tax amount (posted to Tax Payable liability)
   customerId?: string;
   customerName?: string;
@@ -201,6 +209,15 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
     const totalAmount = Money.parseDb(sale.totalAmount);
     const amountPaid = Money.parseDb(sale.amountPaid ?? 0); // Default to zero if not specified (safest for AR calculation)
     const unpaidAmount = Money.subtract(totalAmount, amountPaid);
+    const giftCovered = Money.parseDb(
+      giftCoveredAmount({
+        giftAmount: sale.giftAmount,
+        totalAmount: sale.totalAmount,
+        paymentMethod: sale.paymentMethod,
+        paymentLines: sale.paymentLines,
+      }),
+    );
+    const billedTotal = Money.subtract(totalAmount, giftCovered);
 
     // NEW: Calculate revenue and cost split by product type using Decimal-safe Money utility
     let grossInventoryRevenue = Money.zero();
@@ -290,6 +307,16 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
       });
     }
 
+    if (
+      giftCovered.greaterThan(0.009) &&
+      billedTotal.greaterThan(0.009) &&
+      totalAmount.greaterThan(0.009)
+    ) {
+      const billedRatio = Money.divide(billedTotal, totalAmount);
+      inventoryRevenue = Money.round(Money.multiply(inventoryRevenue, billedRatio));
+      serviceRevenue = Money.round(Money.multiply(serviceRevenue, billedRatio));
+    }
+
     // Convert Decimal values to numbers at the boundary for JournalLine interface
     const invRevenueNum = inventoryRevenue.toNumber();
     const svcRevenueNum = serviceRevenue.toNumber();
@@ -312,10 +339,21 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
     // Create ledger entries for revenue recognition and COGS
     const ledgerLines: JournalLine[] = [];
 
+    const skipRevenueJournal = shouldSkipSaleRevenueJournal({
+      paymentMethod: sale.paymentMethod,
+      paymentLines: sale.paymentLines,
+    });
+
     // DEPOSIT sales: DR Accounts Receivable, CR Revenue
     // recordDepositApplicationToGL handles: DR Customer Deposits, CR AR
     // Net effect on AR = 0 (debit from sale, credit from deposit application)
-    if (sale.paymentMethod === 'DEPOSIT') {
+    if (skipRevenueJournal) {
+      logger.info('Skipping SALE revenue journal for FOC gift (COGS still posts)', {
+        saleNumber: sale.saleNumber,
+        saleId: sale.saleId,
+        paymentMethod: sale.paymentMethod,
+      });
+    } else if (sale.paymentMethod === 'DEPOSIT') {
       logger.info('DEPOSIT sale - debiting AR (cleared by deposit application)', {
         saleNumber: sale.saleNumber,
         totalAmount: sale.totalAmount
@@ -453,10 +491,10 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
 
       // Debit payment account only when tender moves (skip zero-total sales
       // fully covered by exchange store credit / 100% discount).
-      if (sale.totalAmount > 0.009) {
-        // Split tender: one liquidity debit per tender account (sum == total, cash absorbs change).
-        // Single-method / no lines / DEPOSIT-mixed → allocation is null → one debit to the header account.
-        const alloc = allocateTenderToLiquidity(sale.totalAmount, sale.paymentLines);
+      if (billedTotal.greaterThan(0.009)) {
+        // Split tender: one liquidity debit per tender account (sum == billed, cash absorbs change).
+        // Gift remainder is not liquidity. Single-method / no lines / DEPOSIT-mixed → header account.
+        const alloc = allocateTenderToLiquidity(billedTotal.toNumber(), sale.paymentLines);
         if (alloc && alloc.items.length > 0) {
           for (const it of alloc.items) {
             ledgerLines.push({
@@ -478,7 +516,7 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
           ledgerLines.push({
             accountCode: debitAccountCode,
             description: `${paymentDescription} for ${sale.saleNumber}`,
-            debitAmount: sale.totalAmount,
+            debitAmount: billedTotal.toNumber(),
             creditAmount: 0
           });
         }
@@ -510,13 +548,21 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
     // was not populated (e.g., stored as 0 in DB but totalAmount includes tax).
     // Example: totalAmount=9000, items sum=8100, sale.taxAmount=0 → effectiveTax=900 → balanced.
     // Fallback: when no gap exists (items are tax-inclusive), use explicit sale.taxAmount.
+    if (!skipRevenueJournal) {
     const revenueGap = Money.subtract(
-      Money.parseDb(sale.totalAmount),
+      billedTotal,
       Money.add(inventoryRevenue, serviceRevenue)
     );
+    const scaledTax =
+      giftCovered.greaterThan(0.009) && totalAmount.greaterThan(0.009)
+        ? Money.multiply(
+            Money.parseDb(sale.taxAmount ?? 0),
+            Money.divide(billedTotal, totalAmount),
+          ).toNumber()
+        : (sale.taxAmount ?? 0);
     const effectiveTaxAmount = revenueGap.greaterThan(0.005)
       ? revenueGap.toNumber()
-      : (sale.taxAmount ?? 0);
+      : scaledTax;
     if (effectiveTaxAmount > 0) {
       ledgerLines.push({
         accountCode: AccountCodes.TAX_PAYABLE,
@@ -524,6 +570,7 @@ export async function recordSaleToGL(sale: SaleData, pool?: pg.Pool, txClient?: 
         debitAmount: 0,
         creditAmount: effectiveTaxAmount
       });
+    }
     }
 
     // Record inventory cost (excludes service items)

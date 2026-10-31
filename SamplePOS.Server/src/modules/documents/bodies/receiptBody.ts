@@ -8,6 +8,7 @@
 import type { LayoutContext } from '../baseDocumentLayout.js';
 import { Layout } from '../baseDocumentLayout.js';
 import { Money } from '../../../utils/money.js';
+import { giftPaymentLabel } from '@shared/domain/saleGiftFocSsot.js';
 
 export interface ReceiptBodyData {
     sale: {
@@ -71,7 +72,7 @@ export function renderReceiptBody(ctx: LayoutContext, data: ReceiptBodyData): vo
             ['Date', formatDate(data.sale.saleDate)],
             ['Cashier', data.sale.cashierName ?? '—'],
             ...customerMetaRows(data.sale),
-            ['Payment', data.sale.paymentMethod],
+            ['Payment', giftPaymentLabel(data.sale.paymentMethod) || data.sale.paymentMethod],
         ];
         Layout.kvGrid(ctx, compact.map(([label, value]) => ({ label, value })), { columns: 1 });
 
@@ -103,7 +104,7 @@ export function renderReceiptBody(ctx: LayoutContext, data: ReceiptBodyData): vo
             { label: 'Sale Date', value: formatDate(data.sale.saleDate) },
             { label: 'Cashier', value: data.sale.cashierName ?? '—' },
             ...customerMetaRows(data.sale).map(([label, value]) => ({ label, value })),
-            { label: 'Payment Method', value: data.sale.paymentMethod },
+            { label: 'Payment Method', value: giftPaymentLabel(data.sale.paymentMethod) || data.sale.paymentMethod },
         ]);
 
         Layout.sectionTitle(ctx, 'Items');
@@ -129,7 +130,7 @@ export function renderReceiptBody(ctx: LayoutContext, data: ReceiptBodyData): vo
                 ctx,
                 data.paymentLines,
                 [
-                    { header: 'Method', key: 'paymentMethod' as const, width: 0.4 },
+                    { header: 'Method', key: 'paymentMethod' as const, width: 0.4, format: v => giftPaymentLabel(String(v || '')) || String(v || '') },
                     { header: 'Reference', key: 'reference' as const, width: 0.35, format: v => (v as string) || '—' },
                     { header: 'Amount', key: 'amount' as const, width: 0.25, align: 'right' as const, format: v => fmt(v as number) },
                 ],

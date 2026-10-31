@@ -576,7 +576,7 @@ async function repairSales(pool: pg.Pool): Promise<RepairTypeResult> {
                 saleDate: toDateString(sale.sale_date),
                 totalAmount: new Decimal(sale.total_amount || 0).toNumber(),
                 costAmount: new Decimal(sale.total_cost || 0).toNumber(),
-                paymentMethod: (sale.payment_method as 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'CREDIT' | 'DEPOSIT') || 'CASH',
+                paymentMethod: (sale.payment_method as 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'CREDIT' | 'DEPOSIT' | 'GIFT') || 'CASH',
                 amountPaid: sale.amount_paid != null ? new Decimal(sale.amount_paid).toNumber() : undefined,
                 taxAmount: sale.tax_amount != null ? new Decimal(sale.tax_amount).toNumber() : undefined,
                 customerId: sale.customer_id || undefined,

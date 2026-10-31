@@ -111,6 +111,8 @@ export type CatalogPermission = { key: string; module: string; action?: string }
 export function isSystemManagerPermission(permission: CatalogPermission): boolean {
   // Restaurant payment is cashier / accountant / admin only — not floor managers.
   if (permission.key === 'restaurant.pay') return false;
+  // Gift / FOC is Administrator only — never Manager.
+  if (permission.key === 'sales.gift') return false;
   return (SYSTEM_MANAGER_MODULES as readonly string[]).includes(permission.module);
 }
 

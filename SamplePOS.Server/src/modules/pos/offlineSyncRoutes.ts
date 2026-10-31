@@ -61,12 +61,13 @@ const SyncPayloadSchema = z.object({
         totalAmount: z.number().nonnegative(),
         paymentLines: z.array(
             z.object({
-                paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT']),
+                paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'GIFT']),
                 amount: z.number().nonnegative(),
                 reference: z.string().optional(),
             })
         ).min(1),
         saleDate: z.string().optional(),
+        giftReason: z.string().max(500).optional(),
     }).passthrough(),
 });
 
@@ -165,6 +166,7 @@ export function createOfflineSyncRoutes(pool: Pool): Router {
                 soldBy: userId || '00000000-0000-0000-0000-000000000000',
                 saleDate: saleData.saleDate,
                 paymentLines: saleData.paymentLines,
+                giftReason: saleData.giftReason,
                 idempotencyKey,
                 offlineId,
             };

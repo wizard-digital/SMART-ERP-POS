@@ -1,6 +1,6 @@
 # Full return daily-summary SSOT
 
-Run: 2026-10-30T20:27:31.525Z
+Run: 2026-10-31T19:24:29.560Z
 
 Verdict: **PASS** — executed increment/decrement/dashboard on real Postgres.
 

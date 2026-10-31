@@ -97,6 +97,8 @@ interface SaleRow {
   paymentMethod: string;
   status: string;
   notes?: string;
+  giftReason?: string;
+  gift_reason?: string;
   createdAt: string;
   items?: SaleItemRow[];
   paymentLines?: PaymentLine[];
@@ -951,6 +953,7 @@ export default function SalesPage() {
                         <option value="MOBILE_MONEY">MTN Mobile Money</option>
                         <option value="AIRTEL_MONEY">Airtel Money</option>
                         <option value="CREDIT">Credit</option>
+                        <option value="GIFT">Gift</option>
                       </select>
                     </div>
                     <div>
@@ -1341,7 +1344,7 @@ function SalesTable({
                 <div className="text-xs text-gray-500">{formatSaleDateTime(sale)}</div>
               </div>
               <div className="flex gap-1">
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${sale.paymentMethod === 'CASH' ? 'bg-green-100 text-green-800' : sale.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-800' : sale.paymentMethod === 'CREDIT' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-800'}`}>
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${sale.paymentMethod === 'CASH' ? 'bg-green-100 text-green-800' : sale.paymentMethod === 'CARD' ? 'bg-blue-100 text-blue-800' : sale.paymentMethod === 'CREDIT' ? 'bg-orange-100 text-orange-800' : sale.paymentMethod === 'GIFT' ? 'bg-pink-100 text-pink-800' : 'bg-gray-100 text-gray-800'}`}>
                   {sale.paymentMethod}
                 </span>
                 <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${sale.status === 'COMPLETED' ? 'bg-green-100 text-green-800' : sale.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : sale.status === 'VOID' ? 'bg-gray-100 text-gray-800' : sale.status === 'REFUNDED' ? 'bg-amber-100 text-amber-800' : sale.status === 'PARTIALLY_RETURNED' ? 'bg-orange-100 text-orange-800' : sale.status === 'VOIDED_BY_RETURN' ? 'bg-purple-100 text-purple-800' : 'bg-red-100 text-red-800'}`}>
@@ -1418,6 +1421,8 @@ function SalesTable({
                         ? 'bg-blue-100 text-blue-800'
                         : sale.paymentMethod === 'CREDIT'
                           ? 'bg-orange-100 text-orange-800'
+                          : sale.paymentMethod === 'GIFT'
+                            ? 'bg-pink-100 text-pink-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}
                   >
@@ -2569,12 +2574,22 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
                           ? 'bg-purple-100 text-purple-800'
                           : sale.paymentMethod === 'CREDIT'
                             ? 'bg-orange-100 text-orange-800'
+                            : sale.paymentMethod === 'GIFT'
+                              ? 'bg-pink-100 text-pink-800'
                             : 'bg-gray-100 text-gray-800'
                       }`}
                   >
-                    {sale.paymentMethod}
+                    {sale.paymentMethod === 'GIFT' ? 'Gift (no charge)' : sale.paymentMethod}
                   </span>
                 </div>
+                {(sale.paymentMethod === 'GIFT' || saleDetails?.giftReason || saleDetails?.gift_reason) && (
+                  <div className="flex justify-between py-2 border-b border-gray-100">
+                    <span className="text-gray-500">Gift reason</span>
+                    <span className="text-sm text-gray-800 text-right max-w-[60%]">
+                      {String(saleDetails?.giftReason || saleDetails?.gift_reason || sale.giftReason || sale.gift_reason || '—')}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-gray-500">Sale ID</span>
                   <span className="font-mono text-sm text-gray-600">{sale.id.slice(0, 8)}...</span>
@@ -2603,6 +2618,8 @@ function SaleDetailModal({ sale, onClose, onSaleUpdated }: SaleDetailModalProps)
                                 ? 'bg-purple-100 text-purple-800'
                                 : (payment.paymentMethod || payment.payment_method) === 'CREDIT'
                                   ? 'bg-orange-100 text-orange-800'
+                                  : (payment.paymentMethod || payment.payment_method) === 'GIFT'
+                                    ? 'bg-pink-100 text-pink-800'
                                   : 'bg-gray-100 text-gray-800'
                             }`}
                         >

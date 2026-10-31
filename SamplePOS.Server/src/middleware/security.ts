@@ -213,7 +213,7 @@ export const ValidationRules = {
 
   // Sale validations
   saleId: param('saleId').matches(/^SALE-\d{4}-\d{4}$/).withMessage('Invalid sale ID format'),
-  paymentMethod: body('paymentMethod').isIn(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT']).withMessage('Invalid payment method'),
+  paymentMethod: body('paymentMethod').isIn(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'GIFT']).withMessage('Invalid payment method'),
   amount: body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
 
   // Purchase Order validations

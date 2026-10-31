@@ -19,6 +19,12 @@ export const PERMISSIONS: Record<string, Permission> = {
   SALES_EXCHANGE: p('sales.exchange', 'sales', 'exchange', 'Exchange wrong products on completed sales'),
   SALES_EXPORT: p('sales.export', 'sales', 'export', 'Export sales data'),
   SALES_APPROVE: p('sales.approve', 'sales', 'approve', 'Approve sales requiring authorization'),
+  SALES_GIFT: p(
+    'sales.gift',
+    'sales',
+    'gift',
+    'Issue complimentary (gift / free of charge) sales without tender',
+  ),
   SALES_TAX_OVERRIDE: p(
     'sales.tax_override',
     'sales',

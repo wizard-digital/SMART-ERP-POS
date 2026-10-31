@@ -6,6 +6,13 @@ import { checkAccountingPeriodOpen } from '../../utils/periodGuard.js';
 import { getBusinessDate, getBusinessYear } from '../../utils/dateRange.js';
 import { pickSortColumn, sqlSortOrder } from '../../utils/enterpriseListQuery.js';
 import { allocateNextPrefixedDocumentNumber } from '../../utils/documentNumberAllocation.js';
+import {
+  billedRevenueSql,
+  billedSalesSql,
+  giftAmountSql,
+  giftSalesSql,
+  salesDailySummaryRebuildSelectSql,
+} from '@shared/domain/saleGiftFocSsot.js';
 
 const SALES_SORT_COLUMNS: Record<string, string> = {
   saleNumber: 's.sale_number',
@@ -183,6 +190,10 @@ export interface CreateSaleData {
   taxOverrideRate?: number | null;
   taxOverrideReason?: string | null;
   taxOverrideBy?: string | null;
+  /** SAP FD Grund when payment_method is GIFT */
+  giftReason?: string | null;
+  /** FOC remainder (full total for a pure gift). Billed revenue = totalAmount - giftAmount. */
+  giftAmount?: number | null;
 }
 
 export interface CreateSaleItemData {
@@ -273,9 +284,10 @@ export const salesRepository = {
         total_cost, profit, profit_margin,
         payment_method, amount_paid, change_amount, cashier_id, quote_id,
         idempotency_key, offline_id, cash_register_session_id,
-        tax_override_mode, tax_override_rate, tax_override_reason, tax_override_by
+        tax_override_mode, tax_override_rate, tax_override_reason, tax_override_by,
+        gift_reason, gift_amount
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                $19, $20, $21, $22)
+                $19, $20, $21, $22, $23, $24)
       RETURNING 
         id,
         sale_number as "saleNumber",
@@ -318,6 +330,8 @@ export const salesRepository = {
               data.taxOverrideRate != null ? data.taxOverrideRate : null,
               data.taxOverrideReason || null,
               data.taxOverrideBy || null,
+              data.giftReason || null,
+              new Decimal(data.giftAmount || 0).toFixed(2),
             ],
           );
           await pool.query('RELEASE SAVEPOINT sp_sale_number_insert');
@@ -871,11 +885,15 @@ export const salesRepository = {
     // Get overall summary
     const summaryResult = await pool.query(
       `SELECT 
-        COUNT(*) as total_sales,
-        COALESCE(SUM(total_amount), 0) as total_amount,
+        COUNT(*) FILTER (WHERE ${billedSalesSql()}) as total_sales,
+        COALESCE(SUM(${billedRevenueSql()}), 0) as total_amount,
         COALESCE(SUM(total_cost), 0) as total_cost,
-        COALESCE(SUM(total_amount - COALESCE(total_cost, 0)), 0) as total_profit,
-        COALESCE(SUM(discount_amount), 0) as total_discounts
+        COALESCE(SUM(${billedRevenueSql()}), 0)
+          - COALESCE(SUM(total_cost), 0) as total_profit,
+        COALESCE(SUM(discount_amount) FILTER (WHERE ${billedSalesSql()}), 0) as total_discounts,
+        COALESCE(SUM(${giftAmountSql()}), 0) as gift_amount,
+        COUNT(*) FILTER (WHERE ${giftAmountSql()} > 0.009) as gift_count,
+        COALESCE(SUM(total_cost) FILTER (WHERE ${giftSalesSql()}), 0) as gift_cost
        FROM sales
        WHERE ${whereClause}`,
       values
@@ -883,13 +901,24 @@ export const salesRepository = {
 
     // Get breakdown by payment method
     const paymentMethodResult = await pool.query(
-      `SELECT 
-        payment_method,
-        COUNT(*) as count,
-        COALESCE(SUM(total_amount), 0) as total_amount
-       FROM sales
-       WHERE ${whereClause}
-       GROUP BY payment_method
+      `SELECT payment_method, count, total_amount FROM (
+          SELECT
+            payment_method,
+            COUNT(*)::integer as count,
+            COALESCE(SUM(${billedRevenueSql()}), 0) as total_amount
+          FROM sales
+          WHERE ${whereClause}
+            AND ${billedSalesSql()}
+          GROUP BY payment_method
+          UNION ALL
+          SELECT
+            'GIFT'::payment_method as payment_method,
+            COUNT(*) FILTER (WHERE ${giftAmountSql()} > 0.009)::integer as count,
+            COALESCE(SUM(${giftAmountSql()}), 0) as total_amount
+          FROM sales
+          WHERE ${whereClause}
+        ) mix
+       WHERE count <> 0 OR ABS(total_amount) > 0.01
        ORDER BY total_amount DESC`,
       values
     );
@@ -910,6 +939,9 @@ export const salesRepository = {
       totalCost: parseFloat(summaryResult.rows[0].total_cost),
       totalProfit: parseFloat(summaryResult.rows[0].total_profit),
       totalDiscounts: parseFloat(summaryResult.rows[0].total_discounts),
+      giftAmount: parseFloat(summaryResult.rows[0].gift_amount),
+      giftCount: parseInt(summaryResult.rows[0].gift_count),
+      giftCost: parseFloat(summaryResult.rows[0].gift_cost),
       creditSalesCount: parseInt(creditResult.rows[0].credit_count),
       partialPaymentCount: parseInt(creditResult.rows[0].partial_count),
       byPaymentMethod: paymentMethodResult.rows.map((row) => ({
@@ -956,8 +988,9 @@ export const salesRepository = {
       JOIN sales s ON s.id = si.sale_id
     `;
 
-    // Only include completed sales
+    // Only include completed billed sales (FOC gift is not revenue)
     whereClauses.push(`s.status = 'COMPLETED'`);
+    whereClauses.push(billedSalesSql('s'));
 
     if (filters?.cashierId) {
       whereClauses.push(`s.cashier_id = $${paramIndex++}`);
@@ -1122,12 +1155,16 @@ export const salesRepository = {
       const cashierQuery = `
         SELECT
           ${dateFormatExpr} AS period,
-          COUNT(*)::integer AS transaction_count,
-          ROUND(COALESCE(SUM(s.total_amount), 0)::numeric, 2) AS total_revenue,
+          COUNT(*) FILTER (WHERE ${billedSalesSql('s')})::integer AS transaction_count,
+          ROUND(COALESCE(SUM(${billedRevenueSql('s')}), 0)::numeric, 2) AS total_revenue,
           ROUND(COALESCE(SUM(s.total_cost), 0)::numeric, 2) AS total_cost,
-          ROUND(COALESCE(SUM(s.total_amount - COALESCE(s.total_cost, 0)), 0)::numeric, 2) AS total_profit,
+          ROUND((
+            COALESCE(SUM(${billedRevenueSql('s')}), 0)
+            - COALESCE(SUM(s.total_cost), 0)
+          )::numeric, 2) AS total_profit,
           ROUND(
-            COALESCE(SUM(s.total_amount), 0) / NULLIF(COUNT(*), 0)::numeric
+            COALESCE(SUM(${billedRevenueSql('s')}), 0)
+            / NULLIF(COUNT(*) FILTER (WHERE ${billedSalesSql('s')}), 0)::numeric
           , 2) AS avg_transaction_value
         FROM sales s
         WHERE ${whereClauses.join(' AND ')}
@@ -1176,12 +1213,16 @@ export const salesRepository = {
     const query = `
       SELECT
         ${dateFormatExpr} AS period,
-        COALESCE(SUM(transaction_count), 0)::integer AS transaction_count,
-        ROUND(COALESCE(SUM(total_amount), 0)::numeric, 2) AS total_revenue,
+        COALESCE(SUM(transaction_count) FILTER (WHERE ${billedSalesSql()}), 0)::integer AS transaction_count,
+        ROUND(COALESCE(SUM(total_amount) FILTER (WHERE ${billedSalesSql()}), 0)::numeric, 2) AS total_revenue,
         ROUND(COALESCE(SUM(total_cost), 0)::numeric, 2) AS total_cost,
-        ROUND(COALESCE(SUM(total_profit), 0)::numeric, 2) AS total_profit,
+        ROUND((
+          COALESCE(SUM(total_amount) FILTER (WHERE ${billedSalesSql()}), 0)
+          - COALESCE(SUM(total_cost), 0)
+        )::numeric, 2) AS total_profit,
         ROUND(
-          COALESCE(SUM(total_amount), 0) / NULLIF(COALESCE(SUM(transaction_count), 0), 0)::numeric
+          COALESCE(SUM(total_amount) FILTER (WHERE ${billedSalesSql()}), 0)
+          / NULLIF(COALESCE(SUM(transaction_count) FILTER (WHERE ${billedSalesSql()}), 0), 0)::numeric
         , 2) AS avg_transaction_value
       FROM sales_daily_summary
       ${whereClause}
@@ -1200,7 +1241,7 @@ export const salesRepository = {
     pool: Pool,
     filters: Record<string, unknown> = {}
   ): Promise<Record<string, unknown>[]> {
-    const whereClauses = ['s.status = $1'];
+    const whereClauses = ['s.status = $1', billedSalesSql('s')];
     const values: unknown[] = ['COMPLETED'];
     let paramIndex = 2;
 
@@ -1253,7 +1294,7 @@ export const salesRepository = {
     pool: Pool,
     filters: Record<string, unknown> = {}
   ): Promise<Record<string, unknown>[]> {
-    const whereClauses = ["s.status = 'COMPLETED'"];
+    const whereClauses = ["s.status = 'COMPLETED'", billedSalesSql('s')];
     const values: unknown[] = [];
     let paramIndex = 1;
 
@@ -1319,7 +1360,7 @@ export const salesRepository = {
     pool: Pool,
     filters: Record<string, unknown> = {}
   ): Promise<Record<string, unknown>[]> {
-    const whereClauses = ["s.status = 'COMPLETED'"];
+    const whereClauses = ["s.status = 'COMPLETED'", billedSalesSql('s')];
     const values: unknown[] = [];
     let paramIndex = 1;
 
@@ -2112,13 +2153,17 @@ export const salesRepository = {
 
     const summaryResult = await pool.query(
       `SELECT
-        COALESCE(SUM(transaction_count), 0)     AS total_sales,
-        COALESCE(SUM(total_amount), 0)           AS total_amount,
-        COALESCE(SUM(total_cost), 0)             AS total_cost,
-        COALESCE(SUM(total_profit), 0)           AS total_profit,
-        COALESCE(SUM(total_discounts), 0)        AS total_discounts,
-        COALESCE(SUM(credit_count), 0)           AS credit_count,
-        COALESCE(SUM(partial_payment_count), 0)  AS partial_count
+        COALESCE(SUM(transaction_count) FILTER (WHERE ${billedSalesSql()}), 0) AS total_sales,
+        COALESCE(SUM(total_amount) FILTER (WHERE ${billedSalesSql()}), 0) AS total_amount,
+        COALESCE(SUM(total_cost), 0) AS total_cost,
+        COALESCE(SUM(total_amount) FILTER (WHERE ${billedSalesSql()}), 0)
+          - COALESCE(SUM(total_cost), 0) AS total_profit,
+        COALESCE(SUM(total_discounts) FILTER (WHERE ${billedSalesSql()}), 0) AS total_discounts,
+        COALESCE(SUM(total_amount) FILTER (WHERE ${giftSalesSql()}), 0) AS gift_amount,
+        COALESCE(SUM(transaction_count) FILTER (WHERE ${giftSalesSql()}), 0) AS gift_count,
+        COALESCE(SUM(total_cost) FILTER (WHERE ${giftSalesSql()}), 0) AS gift_cost,
+        COALESCE(SUM(credit_count), 0) AS credit_count,
+        COALESCE(SUM(partial_payment_count), 0) AS partial_count
        FROM sales_daily_summary
        ${whereClause}`,
       values
@@ -2145,6 +2190,9 @@ export const salesRepository = {
       totalCost: parseFloat(summaryResult.rows[0].total_cost),
       totalProfit: parseFloat(summaryResult.rows[0].total_profit),
       totalDiscounts: parseFloat(summaryResult.rows[0].total_discounts),
+      giftAmount: parseFloat(summaryResult.rows[0].gift_amount),
+      giftCount: parseInt(summaryResult.rows[0].gift_count),
+      giftCost: parseFloat(summaryResult.rows[0].gift_cost),
       creditSalesCount: parseInt(summaryResult.rows[0].credit_count),
       partialPaymentCount: parseInt(summaryResult.rows[0].partial_count),
       byPaymentMethod: paymentMethodResult.rows.map((row: Record<string, unknown>) => ({
@@ -2189,16 +2237,10 @@ export const salesRepository = {
 
     const result = await pool.query(
       `WITH actual AS (
-          SELECT
-            sale_date,
-            payment_method::text AS payment_method,
-            COUNT(*)::INTEGER AS transaction_count,
-            COALESCE(SUM(total_amount), 0) AS total_amount,
-            COALESCE(SUM(total_cost), 0) AS total_cost,
-            COALESCE(SUM(discount_amount), 0) AS total_discounts
-          FROM sales s
-          WHERE status = 'COMPLETED' ${saleWhere}
-          GROUP BY sale_date, payment_method
+          SELECT sale_date, payment_method::text AS payment_method,
+                 transaction_count, total_amount, total_cost, total_discounts
+          FROM (${salesDailySummaryRebuildSelectSql()}) split
+          WHERE 1=1 ${saleWhere.replace(/s\.sale_date/g, 'sale_date')}
        ),
        rollup AS (
           SELECT sale_date, payment_method, transaction_count,
@@ -2242,20 +2284,10 @@ export const salesRepository = {
       )
       SELECT
           sale_date,
-          payment_method,
-          COUNT(*)::INTEGER,
-          COALESCE(SUM(total_amount), 0),
-          COALESCE(SUM(total_cost), 0),
-          COALESCE(SUM(total_amount - COALESCE(total_cost, 0)), 0),
-          COALESCE(SUM(discount_amount), 0),
-          COUNT(*) FILTER (WHERE payment_method = 'CREDIT')::INTEGER,
-          COUNT(*) FILTER (WHERE payment_method = 'CREDIT'
-              AND amount_paid > 0
-              AND amount_paid < total_amount)::INTEGER,
-          NOW()
-      FROM sales
-      WHERE status = 'COMPLETED'
-      GROUP BY sale_date, payment_method
+          payment_method::payment_method,
+          transaction_count, total_amount, total_cost, total_profit, total_discounts,
+          credit_count, partial_payment_count, NOW()
+      FROM (${salesDailySummaryRebuildSelectSql()}) split
       ON CONFLICT (sale_date, payment_method) DO UPDATE SET
           transaction_count     = EXCLUDED.transaction_count,
           total_amount          = EXCLUDED.total_amount,
@@ -2272,7 +2304,13 @@ export const salesRepository = {
         SELECT 1 FROM sales s
         WHERE s.status = 'COMPLETED'
           AND s.sale_date = r.sale_date
-          AND s.payment_method::text = r.payment_method::text
+          AND (
+            s.payment_method::text = r.payment_method::text
+            OR (
+              r.payment_method::text = 'GIFT'
+              AND COALESCE(s.gift_amount, 0) > 0.009
+            )
+          )
       )
     `);
     return result.rowCount ?? 0;

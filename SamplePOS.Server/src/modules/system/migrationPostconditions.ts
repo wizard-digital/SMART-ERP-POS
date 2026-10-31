@@ -33,6 +33,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '640_store_issue_uom.sql',
     '641_store_issue_reversal.sql',
     '642_store_issue_reverse_governance.sql',
+    '643_sale_gift_foc.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -496,6 +497,34 @@ export async function verifyMigrationPostcondition(
                     WHERE table_schema = 'public'
                       AND table_name = 'store_issue_documents'
                       AND column_name = 'reversal_reason'
+                 ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '643_sale_gift_foc.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT (
+                    EXISTS (
+                      SELECT 1 FROM pg_enum e
+                      JOIN pg_type t ON t.oid = e.enumtypid
+                      WHERE t.typname = 'payment_method' AND e.enumlabel = 'GIFT'
+                    ) AND EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_schema = 'public'
+                        AND table_name = 'sales'
+                        AND column_name = 'gift_reason'
+                    ) AND EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_schema = 'public'
+                        AND table_name = 'sales'
+                        AND column_name = 'gift_amount'
+                    ) AND EXISTS (
+                      SELECT 1 FROM rbac_permissions_catalog WHERE key = 'sales.gift'
+                    ) AND EXISTS (
+                      SELECT 1 FROM pg_constraint
+                      WHERE conname = 'chk_sales_outstanding_has_customer'
+                        AND pg_get_constraintdef(oid) ILIKE '%GIFT%'
+                    )
                  ) AS ok`,
             );
             return rows[0]?.ok === true;

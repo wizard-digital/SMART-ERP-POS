@@ -104,6 +104,15 @@ import {
   resolveGl1300FromBatchSubledgerDelta,
 } from '../../services/inventorySubledgerCoupling.js';
 import { userHasPermission, assertUserPermission } from '../../authorization/serviceAuth.js';
+import {
+  assertGiftSale,
+  giftCoveredAmount,
+  GIFT_ADMIN_LOCK_PERMISSION,
+  GIFT_PERMISSION,
+  isGiftSale,
+  isPureGiftSale,
+  resolveGiftSettlement,
+} from '@shared/domain/saleGiftFocSsot.js';
 
 export interface SaleItemInput {
   productId: string;
@@ -119,7 +128,7 @@ export interface SaleItemInput {
 }
 
 export interface PaymentLineInput {
-  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT';
+  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'GIFT';
   amount: number;
   reference?: string;
 }
@@ -132,7 +141,7 @@ export interface CreateSaleInput {
   discountAmount?: number; // Discount amount applied to sale
   taxAmount?: number; // Tax amount
   totalAmount?: number; // Total amount (can be provided or calculated)
-  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'BANK_TRANSFER';
+  paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'BANK_TRANSFER' | 'GIFT';
   paymentReceived: number;
   soldBy: string;
   saleDate?: string; // ISO 8601 datetime for backdated sales
@@ -155,6 +164,8 @@ export interface CreateSaleInput {
   profileCheckout?: boolean;
   /** Phase 5 — privileged DocumentTax override (sales.tax_override + reason). */
   taxOverride?: DocumentTaxOverride;
+  /** SAP FD Grund — required when payment is GIFT. */
+  giftReason?: string;
 }
 
 export interface RefundItemInput {
@@ -200,6 +211,7 @@ function reverseDailySummaryFromSale(sale: {
   total_amount?: unknown;
   discount_amount?: unknown;
   amount_paid?: unknown;
+  gift_amount?: unknown;
   total_cost?: unknown;
 }): {
   saleDate: string;
@@ -208,16 +220,19 @@ function reverseDailySummaryFromSale(sale: {
   isPartial: boolean;
   reverseAmount: number;
   reverseDiscount: number;
+  giftAmount: number;
   cost: number | string;
 } {
   const amountPaid = Money.toNumber(Money.parseDb(sale.amount_paid ?? 0));
   const saleTotal = Money.toNumber(Money.parseDb(sale.total_amount ?? 0));
+  const giftAmount = Money.toNumber(Money.parseDb(sale.gift_amount ?? 0));
   const isCredit = sale.payment_method === 'CREDIT';
   const rollup = projectSaleRollupDecrement({
     paymentMethod: String(sale.payment_method || ''),
     headerTotal: saleTotal,
     headerDiscount: Money.toNumber(Money.parseDb(sale.discount_amount ?? 0)),
     amountPaid,
+    giftAmount,
   });
   return {
     saleDate: String(sale.sale_date).slice(0, 10),
@@ -226,6 +241,7 @@ function reverseDailySummaryFromSale(sale: {
     isPartial: isCredit && amountPaid > 0 && amountPaid < saleTotal,
     reverseAmount: rollup.reverseAmount,
     reverseDiscount: rollup.reverseDiscount,
+    giftAmount,
     cost: (sale.total_cost as number | string | undefined) || 0,
   };
 }
@@ -1208,7 +1224,7 @@ export const salesService = {
       // ============================================================
       const paymentReceived = hasPaymentLines
         ? (input.paymentLines
-          ?.filter((line) => line.paymentMethod !== 'CREDIT') // Exclude CREDIT
+          ?.filter((line) => line.paymentMethod !== 'CREDIT' && line.paymentMethod !== 'GIFT')
           .reduce((sum, line) => sum.plus(new Decimal(line.amount)), new Decimal(0)) ??
           new Decimal(0))
         : new Decimal(input.paymentReceived || 0);
@@ -1299,11 +1315,56 @@ export const salesService = {
       // ============================================================
       const actualAmountPaid = Money.round(paymentReceived, 2);
       const actualTotalAmount = Money.round(finalTotalAmount, 2);
-      const hasOutstandingBalance = actualAmountPaid.lessThan(actualTotalAmount);
+      const computedOutstanding = actualAmountPaid.lessThan(actualTotalAmount);
 
-      // Determine the effective payment method
-      // CREDIT if there's any outstanding balance, otherwise use the provided method
-      const effectivePaymentMethod = hasOutstandingBalance ? 'CREDIT' : input.paymentMethod;
+      const giftSale = isGiftSale({
+        paymentMethod: input.paymentMethod,
+        paymentLines: input.paymentLines,
+      });
+      const pureGiftSale = isPureGiftSale({
+        paymentMethod: input.paymentMethod,
+        paymentLines: input.paymentLines,
+      });
+      const giftAmountDec = Money.round(
+        new Decimal(
+          giftCoveredAmount({
+            paymentMethod: input.paymentMethod,
+            paymentLines: input.paymentLines,
+            totalAmount: Money.toNumber(actualTotalAmount),
+          }),
+        ),
+        2,
+      );
+      if (giftSale) {
+        const gift = assertGiftSale({
+          isGift: true,
+          giftReason: input.giftReason,
+          paymentMethod: input.paymentMethod,
+          paymentLines: input.paymentLines,
+          totalAmount: Money.toNumber(actualTotalAmount),
+        });
+        if (!gift.ok) {
+          throw new BusinessError(gift.message, gift.code, { paymentMethod: 'GIFT' });
+        }
+        await assertUserPermission(pool, input.soldBy, GIFT_PERMISSION, {
+          errorCode: 'ERR_GIFT_PERMISSION',
+          message: 'Gift sales can only be issued by an administrator',
+        });
+        await assertUserPermission(pool, input.soldBy, GIFT_ADMIN_LOCK_PERMISSION, {
+          errorCode: 'ERR_GIFT_ADMIN_ONLY',
+          message: 'Gift sales can only be issued by an administrator',
+        });
+      }
+
+      // FOC gift (full or remainder) is settled (not AR). Never rewrite GIFT to CREDIT.
+      const settlement = resolveGiftSettlement({
+        isGift: giftSale,
+        paymentMethod: input.paymentMethod,
+        paymentLines: input.paymentLines,
+        hasOutstandingBalance: computedOutstanding,
+      });
+      const effectivePaymentMethod = settlement.effectivePaymentMethod;
+      const hasOutstandingBalance = settlement.hasOutstandingBalance;
 
       // ============================================================
       // CRITICAL: PREVENT GHOST SALES/INVOICES
@@ -1405,10 +1466,14 @@ export const salesService = {
         // Store the actual amount received from the customer (cash tendered)
         // For fully-paid sales: this is the real tendered amount (may exceed totalAmount for cash change)
         // For credit/partial: this is what was actually received
-        paymentReceived: Money.toNumber(actualAmountPaid),
-        changeAmount: hasOutstandingBalance
-          ? 0 // No change for credit/partial payment sales
-          : Money.toNumber(changeAmount),
+        // Pure FOC: company received nothing. Mixed pay+gift: persist cash actually received.
+        paymentReceived: pureGiftSale ? 0 : Money.toNumber(actualAmountPaid),
+        changeAmount: pureGiftSale || hasOutstandingBalance
+          ? 0
+          : Money.toNumber(
+              Money.round(actualAmountPaid.minus(actualTotalAmount.minus(giftAmountDec)), 2),
+            ),
+        giftAmount: Money.toNumber(giftAmountDec),
         soldBy: input.soldBy,
         saleDate: input.saleDate, // Pass through backdated sale date if provided
         quoteId: input.quoteId || null, // Link to quotation for auto-conversion
@@ -1422,6 +1487,7 @@ export const salesService = {
             : null,
         taxOverrideReason: validatedTaxOverride?.reason ?? null,
         taxOverrideBy: validatedTaxOverride ? input.soldBy : null,
+        giftReason: giftSale ? (input.giftReason || '').trim() : null,
       };
 
       profiler.mark('line_prep');
@@ -1865,6 +1931,7 @@ export const salesService = {
             actualInventoryCost,
             paymentMethod: sale.paymentMethod as SaleData['paymentMethod'],
             amountPaid: sale.amountPaid ?? 0,
+            giftAmount: saleData.giftAmount || 0,
             // Split tender: one liquidity debit per tender (see saleTenderAllocation.ts)
             paymentLines: input.paymentLines?.map((l) => ({
               paymentMethod: l.paymentMethod,
@@ -2516,16 +2583,43 @@ export const salesService = {
         const paidNum = parseFloat(String(sale.amountPaid ?? 0));
         const totalNum = parseFloat(String(sale.totalAmount));
         const isPartial = isCredit && paidNum > 0 && paidNum < totalNum;
-        await salesRepository.incrementDailySummary(
-          client,
-          summaryDate,
-          sale.paymentMethod,
-          sale.totalAmount,
-          sale.totalCost || 0,
-          sale.discountAmount || 0,
-          isCredit,
-          isPartial
-        );
+        const giftForRollup = new Decimal(saleData.giftAmount || 0);
+        const billedForRollup = new Decimal(String(sale.totalAmount ?? 0)).minus(giftForRollup);
+        if (sale.paymentMethod === 'GIFT') {
+          await salesRepository.incrementDailySummary(
+            client,
+            summaryDate,
+            'GIFT',
+            giftForRollup.greaterThan(0) ? giftForRollup.toFixed(2) : String(sale.totalAmount ?? 0),
+            sale.totalCost || 0,
+            0,
+            false,
+            false,
+          );
+        } else {
+          await salesRepository.incrementDailySummary(
+            client,
+            summaryDate,
+            sale.paymentMethod,
+            billedForRollup.toFixed(2),
+            sale.totalCost || 0,
+            sale.discountAmount || 0,
+            isCredit,
+            isPartial,
+          );
+          if (giftForRollup.greaterThan(0.009)) {
+            await salesRepository.incrementDailySummary(
+              client,
+              summaryDate,
+              'GIFT',
+              giftForRollup.toFixed(2),
+              0,
+              0,
+              false,
+              false,
+            );
+          }
+        }
       } catch (summaryError: unknown) {
         await client.query('ROLLBACK TO SAVEPOINT daily_summary');
         logger.error('Daily summary rollup update failed — will be healed by reconciliation', {
@@ -2671,7 +2765,8 @@ export const salesService = {
               (line) =>
                 line.paymentMethod !== 'CASH' &&
                 line.paymentMethod !== 'CREDIT' &&
-                line.paymentMethod !== 'DEPOSIT'
+                line.paymentMethod !== 'DEPOSIT' &&
+                line.paymentMethod !== 'GIFT'
             )
             .map((line) => ({ amount: line.amount, paymentMethod: line.paymentMethod }));
 
@@ -2679,7 +2774,8 @@ export const salesService = {
         if (
           paymentLinesToProcess.length === 0 &&
           effectivePaymentMethod !== 'CASH' &&
-          effectivePaymentMethod !== 'CREDIT'
+          effectivePaymentMethod !== 'CREDIT' &&
+          effectivePaymentMethod !== 'GIFT'
         ) {
           pendingBankPayments.push({
             amount: Money.toNumber(actualTotalAmount),
@@ -3453,6 +3549,18 @@ export const salesService = {
           reverse.isCredit,
           reverse.isPartial
         );
+        if (reverse.giftAmount > 0.009 && reverse.paymentMethod !== 'GIFT') {
+          await salesRepository.decrementDailySummary(
+            client,
+            reverse.saleDate,
+            'GIFT',
+            reverse.giftAmount,
+            0,
+            0,
+            false,
+            false,
+          );
+        }
       } catch (summaryError: unknown) {
         await client.query('ROLLBACK TO SAVEPOINT void_daily_summary');
         logger.error('Daily summary rollup decrement failed — will be healed by reconciliation', {
@@ -4059,6 +4167,18 @@ export const salesService = {
             reverse.isCredit,
             reverse.isPartial
           );
+          if (reverse.giftAmount > 0.009 && reverse.paymentMethod !== 'GIFT') {
+            await salesRepository.decrementDailySummary(
+              client,
+              reverse.saleDate,
+              'GIFT',
+              reverse.giftAmount,
+              0,
+              0,
+              false,
+              false,
+            );
+          }
         } catch (summaryError: unknown) {
           await client.query('ROLLBACK TO SAVEPOINT refund_daily_summary');
           logger.error('Daily summary rollup decrement failed on full return — will be healed by reconciliation', {

@@ -129,6 +129,9 @@ export const MIGRATION_COLUMN_ANCHORS: Readonly<
     '642_store_issue_reverse_governance.sql': {
         store_issue_documents: ['reversal_reason'],
     },
+    '643_sale_gift_foc.sql': {
+        sales: ['gift_reason', 'gift_amount'],
+    },
     '523_products_stock_level_columns.sql': {
         products: ['max_stock_level', 'reorder_point', 'optimal_stock_level'],
     },

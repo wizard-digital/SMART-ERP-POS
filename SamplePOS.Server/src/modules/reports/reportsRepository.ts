@@ -10,6 +10,13 @@ import { demandForecastRepository, type ProductDemandStats } from './demandForec
 import { classifyReorderPriority } from './reorderDashboardLogic.js';
 import { poItemOpenQuantitySql } from '../purchase-orders/purchaseOrderNetReceived.js';
 import { alignSalesComparisonBuckets } from '../../../../shared/reports/salesComparisonSsot.js';
+import {
+  billedRevenueSql,
+  billedSalesSql,
+  giftAmountSql,
+  giftSalesSql,
+  isGiftPaymentMethod,
+} from '@shared/domain/saleGiftFocSsot.js';
 import { classifyExpiryUrgency } from '../../../../shared/reports/expiringItemsSsot.js';
 import { LEDGER_NET_ACTIVE_SQL } from '../../utils/ledgerNetActive.js';
 import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
@@ -710,10 +717,18 @@ export const reportsRepository = {
       }
     }
 
+    const dateStatusFilter = `
+          s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
+          AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
+          ${customerFilter}
+          ${sessionFilter}`;
+    const billedShareSql = `(${billedRevenueSql('s')} / NULLIF(s.total_amount, 0))`;
+
     // ── SQL summary (single row, no grouping overhead) ──
     const summaryQuery = `
       WITH filtered_sales AS (
-        SELECT s.id, s.total_amount, s.discount_amount
+        SELECT s.id, ${billedRevenueSql('s')} AS billed_amount, s.discount_amount, s.total_cost,
+               s.payment_method
         FROM sales s
         WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
           AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
@@ -722,22 +737,19 @@ export const reportsRepository = {
       ),
       sale_line_agg AS (
         SELECT si.sale_id,
-               SUM(si.total_price) AS total_sales,
-               SUM(si.quantity) AS total_qty,
-               SUM(si.quantity * si.unit_cost) AS total_cost,
-               SUM(si.profit) AS gross_profit
+               SUM(si.quantity) AS total_qty
         FROM sale_items si
         WHERE si.sale_id IN (SELECT id FROM filtered_sales)
         GROUP BY si.sale_id
       )
       SELECT
-        ROUND(COALESCE(SUM(sla.total_sales), 0)::numeric, 2) AS total_sales,
-        ROUND(COALESCE(SUM(fs.discount_amount), 0)::numeric, 2) AS total_discounts,
-        ROUND((COALESCE(SUM(sla.total_sales), 0) - COALESCE(SUM(fs.discount_amount), 0))::numeric, 2) AS net_revenue,
-        ROUND(COALESCE(SUM(sla.total_cost), 0)::numeric, 2) AS total_cost,
-        ROUND((COALESCE(SUM(sla.total_sales), 0) - COALESCE(SUM(fs.discount_amount), 0) - COALESCE(SUM(sla.total_cost), 0))::numeric, 2) AS gross_profit,
+        ROUND(COALESCE(SUM(fs.billed_amount), 0)::numeric, 2) AS total_sales,
+        ROUND(COALESCE(SUM(fs.discount_amount) FILTER (WHERE ${billedSalesSql('fs')}), 0)::numeric, 2) AS total_discounts,
+        ROUND(COALESCE(SUM(fs.billed_amount), 0)::numeric, 2) AS net_revenue,
+        ROUND(COALESCE(SUM(fs.total_cost), 0)::numeric, 2) AS total_cost,
+        ROUND((COALESCE(SUM(fs.billed_amount), 0) - COALESCE(SUM(fs.total_cost), 0))::numeric, 2) AS gross_profit,
         ROUND(COALESCE(SUM(sla.total_qty), 0)::numeric, 3) AS total_quantity_sold,
-        COUNT(fs.id)::integer AS total_transactions
+        COUNT(*) FILTER (WHERE ${billedSalesSql('fs')})::integer AS total_transactions
       FROM filtered_sales fs
       LEFT JOIN sale_line_agg sla ON sla.sale_id = fs.id
     `;
@@ -788,20 +800,18 @@ export const reportsRepository = {
         SELECT 
           COALESCE(p.name, si.product_name, 'Custom Item') as period,
           COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorized') as category,
-          COUNT(DISTINCT s.id) as transaction_count,
+          COUNT(DISTINCT s.id) FILTER (WHERE ${billedSalesSql('s')}) as transaction_count,
           SUM(si.quantity) as total_quantity_sold,
-          SUM(si.total_price) as total_sales,
+          COALESCE(SUM(si.total_price * ${billedShareSql}), 0) as total_sales,
           0 as total_discounts,
           SUM(si.quantity * si.unit_cost) as total_cost,
-          SUM(si.profit) as gross_profit,
-          AVG(si.total_price) as average_transaction_value
+          COALESCE(SUM(si.total_price * ${billedShareSql}), 0)
+            - COALESCE(SUM(si.quantity * si.unit_cost), 0) as gross_profit,
+          AVG(si.total_price * ${billedShareSql}) as average_transaction_value
         FROM sale_items si
         INNER JOIN sales s ON s.id = si.sale_id
         LEFT JOIN products p ON p.id = si.product_id
-        WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
-          AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
-          ${customerFilter}
-          ${sessionFilter}
+        WHERE ${dateStatusFilter}
         GROUP BY COALESCE(p.name, si.product_name, 'Custom Item'),
                  COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorized')
         ORDER BY period
@@ -811,55 +821,82 @@ export const reportsRepository = {
         SELECT 
           COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorized') as period,
           COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorized') as category,
-          COUNT(DISTINCT s.id) as transaction_count,
+          COUNT(DISTINCT s.id) FILTER (WHERE ${billedSalesSql('s')}) as transaction_count,
           SUM(si.quantity) as total_quantity_sold,
-          SUM(si.total_price) as total_sales,
+          COALESCE(SUM(si.total_price * ${billedShareSql}), 0) as total_sales,
           0 as total_discounts,
           SUM(si.quantity * si.unit_cost) as total_cost,
-          SUM(si.profit) as gross_profit,
-          AVG(si.total_price) as average_transaction_value
+          COALESCE(SUM(si.total_price * ${billedShareSql}), 0)
+            - COALESCE(SUM(si.quantity * si.unit_cost), 0) as gross_profit,
+          AVG(si.total_price * ${billedShareSql}) as average_transaction_value
         FROM sale_items si
         INNER JOIN sales s ON s.id = si.sale_id
         LEFT JOIN products p ON p.id = si.product_id
-        WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
-          AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
-          ${customerFilter}
-          ${sessionFilter}
+        WHERE ${dateStatusFilter}
         GROUP BY COALESCE(NULLIF(TRIM(p.category), ''), 'Uncategorized')
+        ORDER BY period
+      `;
+    } else if (options.groupBy === 'payment_method') {
+      rowQuery = `
+        SELECT period, transaction_count, total_quantity_sold, total_sales, total_discounts,
+               total_cost, gross_profit, average_transaction_value
+        FROM (
+          SELECT
+            s.payment_method::text as period,
+            COUNT(*)::integer as transaction_count,
+            0::numeric as total_quantity_sold,
+            COALESCE(SUM(${billedRevenueSql('s')}), 0) as total_sales,
+            COALESCE(SUM(s.discount_amount), 0) as total_discounts,
+            COALESCE(SUM(s.total_cost), 0) as total_cost,
+            COALESCE(SUM(${billedRevenueSql('s')}), 0) - COALESCE(SUM(s.total_cost), 0) as gross_profit,
+            AVG(${billedRevenueSql('s')}) as average_transaction_value
+          FROM sales s
+          WHERE ${dateStatusFilter}
+            AND ${billedSalesSql('s')}
+          GROUP BY s.payment_method
+          UNION ALL
+          SELECT
+            'GIFT' as period,
+            COUNT(*) FILTER (WHERE ${giftAmountSql('s')} > 0.009)::integer as transaction_count,
+            0::numeric as total_quantity_sold,
+            COALESCE(SUM(${giftAmountSql('s')}), 0) as total_sales,
+            0::numeric as total_discounts,
+            COALESCE(SUM(s.total_cost) FILTER (WHERE ${giftSalesSql('s')}), 0) as total_cost,
+            COALESCE(SUM(${giftAmountSql('s')}), 0)
+              - COALESCE(SUM(s.total_cost) FILTER (WHERE ${giftSalesSql('s')}), 0) as gross_profit,
+            AVG(${giftAmountSql('s')}) FILTER (WHERE ${giftAmountSql('s')} > 0.009) as average_transaction_value
+          FROM sales s
+          WHERE ${dateStatusFilter}
+        ) mix
+        WHERE transaction_count <> 0 OR ABS(total_sales) > 0.01
         ORDER BY period
       `;
     } else {
       rowQuery = `
         WITH filtered_sales AS (
           SELECT s.id, s.sale_date, s.customer_id, s.payment_method, s.cashier_id,
-                 s.total_amount, s.discount_amount
+                 ${billedRevenueSql('s')} AS billed_amount, s.discount_amount, s.total_cost
           FROM sales s
-          WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
-            AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
-            ${customerFilter}
-            ${sessionFilter}
+          WHERE ${dateStatusFilter}
         ),
         sale_line_agg AS (
           SELECT si.sale_id,
-                 SUM(si.quantity) as total_qty,
-                 SUM(si.total_price) as total_sales,
-                 SUM(si.quantity * si.unit_cost) as total_cost,
-                 SUM(si.profit) as gross_profit
+                 SUM(si.quantity) as total_qty
           FROM sale_items si
           WHERE si.sale_id IN (SELECT id FROM filtered_sales)
           GROUP BY si.sale_id
         )
         SELECT 
           ${selectClause},
-          COUNT(fs.id) as transaction_count,
-          SUM(sla.total_qty) as total_quantity_sold,
-          SUM(sla.total_sales) as total_sales,
-          SUM(fs.discount_amount) as total_discounts,
-          SUM(sla.total_cost) as total_cost,
-          SUM(sla.gross_profit) as gross_profit,
-          AVG(fs.total_amount) as average_transaction_value
+          COUNT(*) FILTER (WHERE ${billedSalesSql('fs')}) as transaction_count,
+          COALESCE(SUM(sla.total_qty), 0) as total_quantity_sold,
+          COALESCE(SUM(fs.billed_amount), 0) as total_sales,
+          COALESCE(SUM(fs.discount_amount) FILTER (WHERE ${billedSalesSql('fs')}), 0) as total_discounts,
+          COALESCE(SUM(fs.total_cost), 0) as total_cost,
+          COALESCE(SUM(fs.billed_amount), 0) - COALESCE(SUM(fs.total_cost), 0) as gross_profit,
+          AVG(fs.billed_amount) FILTER (WHERE ${billedSalesSql('fs')}) as average_transaction_value
         FROM filtered_sales fs
-        INNER JOIN sale_line_agg sla ON sla.sale_id = fs.id
+        LEFT JOIN sale_line_agg sla ON sla.sale_id = fs.id
         LEFT JOIN customers c ON c.id = fs.customer_id
         LEFT JOIN users u ON u.id = fs.cashier_id
         GROUP BY ${groupByClause}
@@ -895,7 +932,8 @@ export const reportsRepository = {
     const rows = rowResult.rows.map((row) => {
       const rowTotalSales = new Decimal(row.total_sales || 0);
       const rowTotalDiscounts = new Decimal(row.total_discounts || 0);
-      const rowNetRevenue = rowTotalSales.minus(rowTotalDiscounts);
+      // billed_amount is already net of cart discount and FOC remainder
+      const rowNetRevenue = rowTotalSales;
       const rowTotalCost = new Decimal(row.total_cost || 0);
       const rowGrossProfit = rowNetRevenue.minus(rowTotalCost);
       const rowProfitMargin = rowNetRevenue.isZero()
@@ -1347,10 +1385,11 @@ export const reportsRepository = {
         SELECT 
           s.payment_method,
           COUNT(*) as transaction_count,
-          SUM(s.total_amount) as total_amount
+          SUM(${billedRevenueSql('s')}) as total_amount
         FROM sales s
         WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
           AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
+          AND ${billedSalesSql('s')}
           ${methodFilter}
         GROUP BY s.payment_method
       ),
@@ -1665,9 +1704,10 @@ export const reportsRepository = {
     const query = `
       SELECT 
         ${dateGroup} as period,
-        SUM(s.total_amount) as revenue,
+        COALESCE(SUM(${billedRevenueSql('s')}), 0) as revenue,
         SUM(s.total_cost) as cost_of_goods_sold,
-        SUM(s.profit) as gross_profit
+        COALESCE(SUM(${billedRevenueSql('s')}), 0)
+          - COALESCE(SUM(s.total_cost), 0) as gross_profit
       FROM sales s
       WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
         AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
@@ -1677,11 +1717,15 @@ export const reportsRepository = {
 
     const summaryQuery = `
       SELECT 
-        COALESCE(SUM(s.total_amount), 0) as total_revenue,
+        COALESCE(SUM(${billedRevenueSql('s')}), 0) as total_revenue,
         COALESCE(SUM(s.total_cost), 0) as total_cogs,
-        COALESCE(SUM(s.profit), 0) as gross_profit,
-        CASE WHEN SUM(s.total_amount) > 0
-          THEN ROUND((SUM(s.profit) / SUM(s.total_amount)) * 100, 2)
+        COALESCE(SUM(${billedRevenueSql('s')}), 0)
+          - COALESCE(SUM(s.total_cost), 0) as gross_profit,
+        CASE WHEN SUM(${billedRevenueSql('s')}) > 0
+          THEN ROUND((
+            (SUM(${billedRevenueSql('s')}) - SUM(s.total_cost))
+            / SUM(${billedRevenueSql('s')})
+          ) * 100, 2)
           ELSE 0
         END as gross_profit_margin
       FROM sales s
@@ -2421,10 +2465,10 @@ export const reportsRepository = {
             'POS_RECEIPT'::text AS revenue_type,
             COUNT(s.id)::integer AS transaction_count,
             ROUND(SUM(COALESCE(s.amount_paid, 0))::numeric, 4) AS cash_amount,
-            ROUND(SUM(COALESCE(s.total_amount, 0))::numeric, 4) AS total_sales,
+            ROUND(SUM(${billedRevenueSql('s')})::numeric, 4) AS total_sales,
             ROUND(SUM(COALESCE(s.total_cost, 0))::numeric, 4) AS total_cost,
-            ROUND(SUM(COALESCE(s.profit, 0))::numeric, 4) AS gross_profit,
-            ROUND(SUM(GREATEST(COALESCE(s.total_amount, 0) - COALESCE(s.amount_paid, 0), 0))::numeric, 4) AS credit_created,
+            ROUND(SUM(${billedRevenueSql('s')} - COALESCE(s.total_cost, 0))::numeric, 4) AS gross_profit,
+            ROUND(SUM(GREATEST(${billedRevenueSql('s')} - COALESCE(s.amount_paid, 0), 0))::numeric, 4) AS credit_created,
             ROUND(AVG(COALESCE(s.amount_paid, 0))::numeric, 4) AS average_transaction_value
           FROM sales s
           WHERE (s.sale_date AT TIME ZONE '${TZ}')::date >= $1::date
@@ -2432,6 +2476,7 @@ export const reportsRepository = {
             AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
             AND COALESCE(s.amount_paid, 0) > 0.009
             AND UPPER(COALESCE(s.payment_method::text, '')) <> 'CREDIT'
+            AND ${billedSalesSql('s')}
             ${options.paymentMethod ? 'AND s.payment_method::text = $3' : ''}
           GROUP BY 1, 2
         ),
@@ -2457,6 +2502,7 @@ export const reportsRepository = {
           WHERE (s.sale_date AT TIME ZONE '${TZ}')::date >= $1::date
             AND (s.sale_date AT TIME ZONE '${TZ}')::date <= $2::date
             AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
+            AND ${billedSalesSql('s')}
             AND (
               UPPER(COALESCE(s.payment_method::text, '')) = 'CREDIT'
               OR COALESCE(s.total_amount, 0) - COALESCE(s.amount_paid, 0) > 0.009
@@ -2553,6 +2599,7 @@ export const reportsRepository = {
           WHERE (s.sale_date AT TIME ZONE '${TZ}')::date >= $1::date
             AND (s.sale_date AT TIME ZONE '${TZ}')::date <= $2::date
             AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
+            AND ${billedSalesSql('s')}
             ${options.paymentMethod ? 'AND s.payment_method::text = $3' : ''}
         ),
         ar AS (
@@ -2913,6 +2960,7 @@ export const reportsRepository = {
       `s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date`,
       `s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date`,
       `s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')`,
+      billedSalesSql('s'),
     ];
 
     if (options.minPurchaseAmount) {
@@ -3804,6 +3852,8 @@ export const reportsRepository = {
       params.push(options.paymentMethod);
       paymentFilter = `AND s.payment_method::text = $${params.length}`;
     }
+    const billedFilter =
+      options.paymentMethod === 'GIFT' ? '' : `AND ${billedSalesSql('s')}`;
 
     const query = `
       SELECT 
@@ -3821,6 +3871,7 @@ export const reportsRepository = {
       LEFT JOIN products p ON p.id = si.product_id
       WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
         AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
+        ${billedFilter}
         ${categoryFilter}
         ${paymentFilter}
       GROUP BY COALESCE(p.category, 'Uncategorized')
@@ -3882,7 +3933,7 @@ export const reportsRepository = {
         GROUP BY s.payment_method
       ),
       grand_total AS (
-        SELECT SUM(total_revenue) as grand_total_revenue FROM payment_totals
+        SELECT SUM(total_revenue) FILTER (WHERE ${billedSalesSql()}) as grand_total_revenue FROM payment_totals
       )
       SELECT 
         pt.payment_method,
@@ -3934,6 +3985,7 @@ export const reportsRepository = {
       FROM sales s
       WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
         AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
+        AND ${billedSalesSql('s')}
       GROUP BY EXTRACT(HOUR FROM s.sale_date AT TIME ZONE '${TZ}')
       ORDER BY hour
     `;
@@ -3996,6 +4048,7 @@ export const reportsRepository = {
       WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date
         AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
         AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
+        AND ${billedSalesSql('s')}
       GROUP BY ${groupByClause}
       ORDER BY period
     `;
@@ -4073,7 +4126,10 @@ export const reportsRepository = {
         to_char(s.sale_date, 'YYYY-MM-DD HH24:MI:SS') as sale_date,
         s.total_amount,
         COALESCE(i.amount_paid, s.amount_paid) as amount_paid,
-        COALESCE(i.amount_due, s.total_amount - s.amount_paid) as outstanding_balance,
+        CASE WHEN ${billedSalesSql('s')}
+          THEN COALESCE(i.amount_due, s.total_amount - s.amount_paid)
+          ELSE 0
+        END as outstanding_balance,
         s.payment_method,
         COUNT(si.id) as item_count,
         COALESCE(i.status, s.status::text) as status
@@ -4122,19 +4178,20 @@ export const reportsRepository = {
     // Complex multi-CTE query for comprehensive business metrics
     const query = `
       WITH daily_sales_metrics AS (
-        -- Today's sales performance
+        -- Today's sales performance (FOC gift is not billed revenue; COGS still includes gift cost)
         SELECT 
-          COUNT(s.id) as transactions_count,
-          COUNT(DISTINCT s.customer_id) as unique_customers,
-          SUM(s.total_amount) as total_revenue,
-          SUM(s.subtotal - s.discount_amount) as net_revenue,
+          COUNT(s.id) FILTER (WHERE ${billedSalesSql('s')}) as transactions_count,
+          COUNT(DISTINCT s.customer_id) FILTER (WHERE ${billedSalesSql('s')}) as unique_customers,
+          COALESCE(SUM(${billedRevenueSql('s')}), 0) as total_revenue,
+          COALESCE(SUM(${billedRevenueSql('s')}), 0) as net_revenue,
           SUM(s.total_cost) as total_cost,
-          SUM(s.profit) as gross_profit,
-          AVG(s.total_amount) as avg_transaction_value,
-          SUM(CASE WHEN s.customer_id IS NULL THEN s.total_amount ELSE 0 END) as walk_in_revenue,
-          SUM(CASE WHEN s.customer_id IS NOT NULL THEN s.total_amount ELSE 0 END) as customer_revenue,
-          SUM(s.amount_paid) as cash_collected,
-          SUM(s.total_amount - s.amount_paid) as credit_extended
+          COALESCE(SUM(${billedRevenueSql('s')}), 0)
+            - COALESCE(SUM(s.total_cost), 0) as gross_profit,
+          AVG(${billedRevenueSql('s')}) FILTER (WHERE ${billedSalesSql('s')}) as avg_transaction_value,
+          COALESCE(SUM(CASE WHEN s.customer_id IS NULL THEN ${billedRevenueSql('s')} ELSE 0 END), 0) as walk_in_revenue,
+          COALESCE(SUM(CASE WHEN s.customer_id IS NOT NULL THEN ${billedRevenueSql('s')} ELSE 0 END), 0) as customer_revenue,
+          COALESCE(SUM(s.amount_paid) FILTER (WHERE ${billedSalesSql('s')}), 0) as cash_collected,
+          COALESCE(SUM(s.total_amount - s.amount_paid) FILTER (WHERE ${billedSalesSql('s')}), 0) as credit_extended
         FROM sales s
         WHERE s.sale_date >= ($1::timestamptz AT TIME ZONE '${TZ}')::date AND s.sale_date < ($2::timestamptz AT TIME ZONE '${TZ}')::date
           AND s.status NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
@@ -4562,12 +4619,13 @@ export const reportsRepository = {
         customerName: row.customerName || 'Walk-in',
       }));
 
+      const billedSessionSales = sessionSales.filter((s2) => !isGiftPaymentMethod(s2.paymentMethod));
       const salesSummary = {
-        totalTransactions: sessionSales.length,
-        totalRevenue: sessionSales.reduce(
+        totalTransactions: billedSessionSales.length,
+        totalRevenue: billedSessionSales.reduce(
           (sum, s2) => sum.plus(new Decimal(s2.totalAmount)), new Decimal(0)
         ).toDecimalPlaces(2).toNumber(),
-        totalProfit: sessionSales.reduce(
+        totalProfit: billedSessionSales.reduce(
           (sum, s2) => sum.plus(new Decimal(s2.profit)), new Decimal(0)
         ).toDecimalPlaces(2).toNumber(),
       };

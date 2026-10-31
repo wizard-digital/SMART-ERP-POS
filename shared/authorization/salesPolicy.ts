@@ -93,6 +93,17 @@ export function shouldLockSalesToBusinessDay(
   return false;
 }
 
+/** Complimentary FOC sale — Administrator only (sales.gift + admin.update). */
+export function canIssueGiftSale(
+  permissions: Iterable<string>,
+  legacyRole?: string | null
+): boolean {
+  const role = (legacyRole || '').toUpperCase();
+  if (role === 'ADMIN') return true;
+  const keys = new Set(permissions);
+  return keys.has('sales.gift') && keys.has('admin.update');
+}
+
 export function canProcessRefundType(
   refundType: 'REFUND' | 'EXCHANGE',
   permissions: Iterable<string>,

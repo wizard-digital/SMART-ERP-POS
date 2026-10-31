@@ -644,11 +644,22 @@ export function projectSaleRollupDecrement(input: {
   headerTotal: number;
   headerDiscount: number;
   amountPaid: number;
+  giftAmount?: number;
 }): { reverseAmount: number; reverseDiscount: number } {
   const headerTotal = roundSaleMoney(input.headerTotal);
   const headerDiscount = roundSaleMoney(Math.max(0, input.headerDiscount || 0));
   const amountPaid = roundSaleMoney(Math.max(0, input.amountPaid || 0));
+  const giftAmount = roundSaleMoney(Math.max(0, input.giftAmount || 0));
   const method = String(input.paymentMethod || '').toUpperCase();
+  if (method === 'GIFT') {
+    return { reverseAmount: headerTotal, reverseDiscount: headerDiscount };
+  }
+  if (giftAmount > SALE_DISCOUNT_MONEY_TOLERANCE) {
+    return {
+      reverseAmount: roundSaleMoney(Math.max(0, headerTotal - giftAmount)),
+      reverseDiscount: headerDiscount,
+    };
+  }
   if (
     method !== 'CREDIT' &&
     headerDiscount <= SALE_DISCOUNT_MONEY_TOLERANCE &&

@@ -579,7 +579,7 @@ export async function repostMissingGL(dbPool?: pg.Pool): Promise<{
         saleDate: sale.sale_date || getBusinessDate(),
         totalAmount: parseFloat(sale.total_amount) || 0,
         costAmount: parseFloat(sale.total_cost) || 0,
-        paymentMethod: (sale.payment_method as 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT') || 'CASH',
+        paymentMethod: (sale.payment_method as 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'GIFT') || 'CASH',
         amountPaid: sale.amount_paid != null ? parseFloat(sale.amount_paid) : undefined,
         taxAmount: sale.tax_amount != null ? parseFloat(sale.tax_amount) : undefined,
         customerId: sale.customer_id || undefined,

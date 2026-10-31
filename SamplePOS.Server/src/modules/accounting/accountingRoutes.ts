@@ -31,6 +31,7 @@ import {
   buildCashFlowStatement,
   auditCashFlowClassification,
 } from '../../services/cashFlowService.js';
+import { billedRevenueSql, billedSalesSql } from '@shared/domain/saleGiftFocSsot.js';
 
 // Zod schemas for accounting routes
 const ChartOfAccountsQuerySchema = z.object({
@@ -832,13 +833,14 @@ router.get(
       COALESCE(SUM(gpb.credit_total), 0) as total_credits
     FROM gl_period_balances gpb
       `),
-      // Sales summary (last 30 days) — fallback to sales table
+      // Sales summary (last 30 days) — billed revenue only; COGS includes FOC gift cost
       pool.query(`
     SELECT 
-      COUNT(*)::integer as total_sales,
-      COALESCE(SUM(total_amount), 0) as total_revenue,
+      COUNT(*) FILTER (WHERE ${billedSalesSql()})::integer as total_sales,
+      COALESCE(SUM(${billedRevenueSql()}), 0) as total_revenue,
       COALESCE(SUM(total_cost), 0) as total_cogs,
-      COALESCE(SUM(profit), 0) as total_profit
+      COALESCE(SUM(${billedRevenueSql()}), 0)
+        - COALESCE(SUM(total_cost), 0) as total_profit
     FROM sales
     WHERE sale_date >= CURRENT_DATE - INTERVAL '30 days'
       AND status = 'COMPLETED'

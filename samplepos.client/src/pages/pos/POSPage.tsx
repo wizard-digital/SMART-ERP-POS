@@ -36,6 +36,10 @@ import {
 } from '../../services/offlineCatalogService';
 import { ProductCreateSchema } from '@shared/zod/product';
 import { POSSaleSchema } from '@shared/zod/pos-sale';
+import {
+  GIFT_PERMISSION,
+  GIFT_REASON_MIN_LENGTH,
+} from '@shared/domain/saleGiftFocSsot';
 import type { Customer } from '@shared/zod/customer';
 import { formatCurrency } from '../../utils/currency';
 import { resolvePosCustomerForSale, isPersistedCustomerId } from '../../utils/resolvePosCustomerId';
@@ -463,13 +467,15 @@ export default function POSPage() {
   const canAccessRoles = canAccessRolesUpdate || canAccessRolesAdmin;
   const canTaxOverride = useHasPermission('sales.tax_override');
   const canApproveSales = useHasPermission('sales.approve');
+  const canGiftPerm = useHasPermission(GIFT_PERMISSION);
+  const canGift = canGiftPerm && canAccessRolesAdmin;
   const { data: assignedStore } = usePosAssignedStore();
   const [showNavDrawer, setShowNavDrawer] = useState(false);
   const [items, setItems] = useState<LineItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<
-    'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT'
+    'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'GIFT'
   >('CASH');
 
   // Cash register session + policy + transaction mode (single API call, no dual queries)
@@ -497,7 +503,7 @@ export default function POSPage() {
     Array<{
       id: string;
       paymentMethodId: string;
-      paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT';
+      paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'GIFT';
       amount: number;
       reference?: string;
       createdAt: string;
@@ -506,6 +512,7 @@ export default function POSPage() {
 
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
+  const [giftReason, setGiftReason] = useState('');
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   /** Tenant tax_inclusive from /system-settings (SSOT beyond offline snapshot). */
   const [tenantTaxInclusive, setTenantTaxInclusive] = useState<boolean | null>(null);
@@ -1476,6 +1483,7 @@ export default function POSPage() {
       setPaymentLines([]);
       setPaymentAmount('');
       setPaymentReference('');
+      setGiftReason('');
       setSaleDate('');
       setShowDatePicker(false);
 
@@ -1838,6 +1846,64 @@ export default function POSPage() {
       });
       toast.success(`Line discount applied: ${discountAmount.toLocaleString()} UGX`);
     }
+  };
+
+  const applyRemainingAsDiscount = () => {
+    if (remainingBalance <= 0.01) return;
+    const newAmount = new Decimal(cartDiscountAmount).plus(remainingBalance).toNumber();
+    if (newAmount > subtotal + 0.01) {
+      alert('Remaining as discount cannot exceed the cart subtotal.');
+      return;
+    }
+    const discountPercentage =
+      subtotal > 0 ? new Decimal(newAmount).dividedBy(subtotal).times(100).toNumber() : 100;
+    const discount = {
+      type: 'FIXED_AMOUNT' as DiscountType,
+      scope: 'CART' as DiscountScope,
+      value: newAmount,
+      reason: 'Remainder after payment',
+    };
+    if (discountPercentage > discountLimitPercent) {
+      setPendingDiscount({
+        ...discount,
+        amount: newAmount,
+        originalAmount: subtotal,
+        discountPercentage,
+      });
+      setShowManagerApprovalDialog(true);
+      return;
+    }
+    applyDiscountToCart(discount, newAmount);
+  };
+
+  const applyRemainingAsGift = () => {
+    if (!canGift) {
+      alert('Gift can only be issued by an administrator.');
+      return;
+    }
+    if (giftReason.trim().length < GIFT_REASON_MIN_LENGTH) {
+      setPaymentMethod('GIFT');
+      alert('Enter who received the goods and why, then use Remaining as gift.');
+      return;
+    }
+    if (paymentLines.some((line) => line.paymentMethod === 'CREDIT')) {
+      alert('Gift cannot mix with credit. The remainder is complimentary, not an invoice.');
+      return;
+    }
+    if (remainingBalance <= 0.01) return;
+    if (paymentLines.some((line) => line.paymentMethod === 'GIFT')) return;
+    setPaymentLines((prev) => [
+      ...prev,
+      {
+        id: `payment_${Date.now()}_${Math.random()}`,
+        paymentMethodId: 'GIFT',
+        paymentMethod: 'GIFT' as const,
+        amount: remainingBalance,
+        reference: giftReason.trim(),
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    setPaymentMethod('GIFT');
   };
 
   const handleManagerApproval = async (pin: string) => {
@@ -2566,9 +2632,14 @@ export default function POSPage() {
 
   // Can complete if: paid exact amount OR overpaid with cash OR credit with remaining balance
   const canCompleteSale = useMemo(() => {
+    const giftReady =
+      canGift &&
+      giftReason.trim().length >= GIFT_REASON_MIN_LENGTH &&
+      (paymentMethod === 'GIFT' || paymentLines.some((line) => line.paymentMethod === 'GIFT'));
+
     // Allow full credit sale (0 payment) when customer is selected
     // handleFinalizeSale will auto-add CREDIT line for the full amount
-    if (paymentLines.length === 0 && !selectedCustomer) return false;
+    if (paymentLines.length === 0 && !selectedCustomer && !giftReady) return false;
 
     // Check if any payment is CREDIT
     const hasCreditPayment = paymentLines.some((line) => line.paymentMethod === 'CREDIT');
@@ -2580,6 +2651,7 @@ export default function POSPage() {
       selectedCustomerName: selectedCustomer?.name,
       remainingBalance,
       hasCashPayment,
+      giftReady,
     });
 
     // Exact payment (balance = 0)
@@ -2588,16 +2660,19 @@ export default function POSPage() {
     // Overpayment (negative balance) - only allowed if cash payment exists
     if (remainingBalance < -0.01 && hasCashPayment) return true;
 
+    // FOC gift covers remaining without tender
+    if (remainingBalance > 0.01 && giftReady) return true;
+
     // Underpayment (positive balance) - NEW LOGIC: allowed if customer is selected
     // System will auto-create CREDIT payment for remaining balance
-    if (remainingBalance > 0.01 && selectedCustomer) {
+    if (remainingBalance > 0.01 && selectedCustomer && paymentMethod !== 'GIFT') {
       console.log('✅ Customer selected with remaining balance - will auto-create credit/invoice');
       return true;
     }
 
     console.log('❌ No completion condition met');
     return false;
-  }, [paymentLines, remainingBalance, hasCashPayment, selectedCustomer]);
+  }, [paymentLines, remainingBalance, hasCashPayment, selectedCustomer, canGift, paymentMethod, giftReason]);
 
   // Debug logging
   useEffect(() => {
@@ -2672,6 +2747,21 @@ export default function POSPage() {
         `⚠️ Payment Exceeds Balance\n\n${paymentMethod} Payment: ${formatCurrency(amount)}\nRemaining Balance: ${formatCurrency(remainingBalance)}\nOverpayment: ${formatCurrency(amount - remainingBalance)}\n\n❌ Overpayment is only allowed with CASH\n(to give change to customer)\n\n💡 Options:\n1. Enter ${formatCurrency(remainingBalance)} to pay exact amount\n2. Switch to CASH if customer is paying more\n3. Split payment: pay ${formatCurrency(remainingBalance)} now`
       );
       return;
+    }
+
+    if (paymentMethod === 'GIFT') {
+      if (!canGift) {
+        alert('⚠️ Gift can only be issued by an administrator.');
+        return;
+      }
+      if (giftReason.trim().length < GIFT_REASON_MIN_LENGTH) {
+        alert('⚠️ Gift Reason Required\n\nEnter who received the goods and why.');
+        return;
+      }
+      if (paymentLines.some((line) => line.paymentMethod === 'CREDIT')) {
+        alert('⚠️ Gift cannot mix with credit. The remainder is complimentary, not an invoice.');
+        return;
+      }
     }
 
     if (paymentMethod === 'CREDIT' && !selectedCustomer) {
@@ -3140,7 +3230,8 @@ export default function POSPage() {
     // Validate payment lines
     // Allow 0 payment (full credit / "pay later") when customer is selected
     // The auto-credit logic below will create a CREDIT line for the full amount
-    if (paymentLines.length === 0 && !selectedCustomer) {
+    // Gift FOC auto-adds a GIFT line for the remaining amount (no customer required)
+    if (paymentLines.length === 0 && !selectedCustomer && paymentMethod !== 'GIFT') {
       isSubmittingRef.current = false;
       setIsProcessingSale(false);
       alert(
@@ -3154,8 +3245,40 @@ export default function POSPage() {
     const hasCashPayment = paymentLines.some((line) => line.paymentMethod === 'CASH');
     const finalPaymentLines = [...paymentLines];
     let finalRemainingBalance = remainingBalance; // Track updated balance
+    const issuingGift = paymentMethod === 'GIFT' || paymentLines.some((line) => line.paymentMethod === 'GIFT');
 
-    if (selectedCustomer && remainingBalance > 0.01) {
+    if (issuingGift) {
+      if (!canGift) {
+        isSubmittingRef.current = false;
+        setIsProcessingSale(false);
+        alert('❌ Cannot Complete Sale\n\nGift can only be issued by an administrator.');
+        return;
+      }
+      if (giftReason.trim().length < GIFT_REASON_MIN_LENGTH) {
+        isSubmittingRef.current = false;
+        setIsProcessingSale(false);
+        alert('❌ Cannot Complete Sale\n\nGift requires a reason (who received the goods and why).');
+        return;
+      }
+      if (paymentLines.some((line) => line.paymentMethod === 'CREDIT') ||
+          finalPaymentLines.some((line) => line.paymentMethod === 'CREDIT')) {
+        isSubmittingRef.current = false;
+        setIsProcessingSale(false);
+        alert('❌ Cannot Complete Sale\n\nGift cannot mix with credit. Use discount for a price cut, or gift the remainder without creating an invoice.');
+        return;
+      }
+      if (remainingBalance > 0.01) {
+        finalPaymentLines.push({
+          id: `payment_${Date.now()}_${Math.random()}`,
+          paymentMethodId: 'GIFT',
+          paymentMethod: 'GIFT' as const,
+          amount: remainingBalance,
+          reference: giftReason.trim(),
+          createdAt: new Date().toISOString(),
+        });
+        finalRemainingBalance = 0;
+      }
+    } else if (selectedCustomer && remainingBalance > 0.01) {
       // Customer owes remaining balance - automatically add as CREDIT
       const creditLine = {
         id: `payment_${Date.now()}_${Math.random()}`,
@@ -3386,6 +3509,7 @@ export default function POSPage() {
       exchangeRefundId: exchangeCredit?.refundId,
       exchangeResidualAction: exchangeCredit ? exchangeResidualAction : undefined,
       taxOverride: taxOverride ?? undefined,
+      giftReason: issuingGift ? giftReason.trim() : undefined,
       paymentLines: submitPaymentLines.map((line) => ({
         paymentMethod: line.paymentMethod,
         amount: line.amount,
@@ -3504,6 +3628,7 @@ export default function POSPage() {
       setPaymentLines([]);
       setPaymentAmount('');
       setPaymentReference('');
+      setGiftReason('');
       setSaleDate('');
       setShowDatePicker(false);
       presentSaleReceipt();
@@ -4791,6 +4916,40 @@ export default function POSPage() {
                   <span className="hidden sm:inline">📱 </span>Airtel Money
                 </button>
               </div>
+              {canGift && (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentMethod('GIFT');
+                      if (remainingBalance > 0.01) {
+                        setPaymentAmount(remainingBalance.toFixed(2));
+                      }
+                    }}
+                    className={`w-full py-3 sm:py-4 px-3 sm:px-4 rounded-lg font-semibold text-sm sm:text-base transition-all ${paymentMethod === 'GIFT'
+                      ? 'bg-pink-600 text-white ring-2 sm:ring-4 ring-pink-300 shadow-lg transform scale-105'
+                      : 'bg-pink-50 text-pink-800 hover:bg-pink-100 border-2 border-pink-400'
+                      }`}
+                  >
+                    🎁 Gift (no charge)
+                  </button>
+                </div>
+              )}
+              {paymentMethod === 'GIFT' && canGift && (
+                <div className="mt-3">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                    Gift reason <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={giftReason}
+                    onChange={(e) => setGiftReason(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    className="w-full px-3 py-2 sm:py-3 text-sm sm:text-base border border-pink-300 rounded focus:ring-2 focus:ring-pink-500"
+                    placeholder="Who received this and why (staff gift, sample, complimentary)"
+                  />
+                </div>
+              )}
               {/* Deposit Payment Option - Shows when customer is selected */}
               {selectedCustomer && (
                 <div className="mt-3">
@@ -5050,8 +5209,37 @@ export default function POSPage() {
               </div>
             </div>
 
+            {remainingBalance > 0.01 && paymentLines.length > 0 && (
+              <div className="mb-4 sm:mb-6 rounded-lg border-2 border-slate-200 bg-slate-50 p-3 sm:p-4">
+                <p className="text-sm font-semibold text-slate-800 mb-2">
+                  Remaining {formatCurrency(remainingBalance)} can be a discount or a gift
+                </p>
+                <p className="text-xs text-slate-600 mb-3">
+                  Discount lowers the selling price (revenue falls). Gift is free of charge — the company still did not receive that money.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={applyRemainingAsDiscount}
+                    className="py-3 px-3 rounded-lg font-semibold text-sm bg-green-600 text-white hover:bg-green-700"
+                  >
+                    Remaining as discount
+                  </button>
+                  {canGift && (
+                    <button
+                      type="button"
+                      onClick={applyRemainingAsGift}
+                      className="py-3 px-3 rounded-lg font-semibold text-sm bg-pink-600 text-white hover:bg-pink-700"
+                    >
+                      Remaining as gift
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Invoice Creation Indicator - Show when customer selected and has remaining balance */}
-            {selectedCustomer && remainingBalance > 0.01 && (
+            {selectedCustomer && remainingBalance > 0.01 && paymentMethod !== 'GIFT' && !paymentLines.some((l) => l.paymentMethod === 'GIFT') && (
               <div className="mb-4 sm:mb-6 bg-gradient-to-r from-orange-50 to-yellow-50 border-2 border-orange-300 rounded-lg p-3 sm:p-4 shadow-md">
                 <div className="flex items-start gap-2 sm:gap-3">
                   <div className="text-2xl sm:text-3xl">📋</div>

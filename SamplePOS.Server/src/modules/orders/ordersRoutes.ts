@@ -46,10 +46,10 @@ const CreateOrderSchema = z.object({
 });
 
 const CompleteOrderSchema = z.object({
-  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'DEPOSIT', 'BANK_TRANSFER']),
+  paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'DEPOSIT', 'BANK_TRANSFER', 'GIFT']),
   paymentReceived: z.number().nonnegative(),
   paymentLines: z.array(z.object({
-    paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'DEPOSIT']),
+    paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'DEPOSIT', 'GIFT']),
     amount: z.number().positive(),
     reference: z.string().optional(),
   })).optional(),
@@ -57,6 +57,8 @@ const CompleteOrderSchema = z.object({
   cashRegisterSessionId: z.string().uuid().optional(),
   // Optional additional discount the cashier can apply at payment time
   extraDiscountAmount: z.number().nonnegative().optional(),
+  /** SAP FD Grund — required when payment is GIFT. */
+  giftReason: z.string().max(500).optional(),
   /** Required for integrity: retries / double-submit must reuse the same key. */
   idempotencyKey: z.string().min(1).max(100),
 });
@@ -379,6 +381,7 @@ router.post(
       soldBy: userId,
       paymentLines: paymentData.paymentLines,
       cashRegisterSessionId: paymentData.cashRegisterSessionId,
+      giftReason: paymentData.giftReason,
       // Atomically mark the order COMPLETED within the same sale transaction
       fromOrderId: orderId,
       quoteId: order.quoteId ?? undefined,

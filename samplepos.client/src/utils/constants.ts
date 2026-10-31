@@ -89,6 +89,7 @@ export const PAYMENT_METHOD = {
   AIRTEL_MONEY: 'AIRTEL_MONEY',
   CREDIT: 'CREDIT',
   BANK_TRANSFER: 'BANK_TRANSFER',
+  GIFT: 'GIFT',
 } as const;
 
 /**

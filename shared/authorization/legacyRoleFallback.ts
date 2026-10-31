@@ -76,6 +76,7 @@ const LEGACY_ROLE_PERMISSIONS: Record<string, LegacyChecker> = {
   ADMIN: () => true,
   MANAGER: (key) =>
     key !== 'restaurant.pay' &&
+    key !== 'sales.gift' &&
     LEGACY_MANAGER_MODULES.includes(key.split('.')[0] as (typeof LEGACY_MANAGER_MODULES)[number]),
   CASHIER: (key) => (LEGACY_CASHIER_PERMISSIONS as readonly string[]).includes(key),
   STAFF: (key) =>

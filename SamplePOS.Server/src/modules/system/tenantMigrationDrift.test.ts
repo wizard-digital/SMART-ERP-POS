@@ -101,8 +101,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     );
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–642 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(642);
+  it('CURRENT_SCHEMA_VERSION matches 621–643 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue/gift SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(643);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -211,6 +211,17 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     );
     expect(MIGRATION_COLUMN_ANCHORS['642_store_issue_reverse_governance.sql']?.store_issue_documents).toEqual(
       expect.arrayContaining(['reversal_reason']),
+    );
+    const giftSql = fs.readFileSync(path.join(sqlDir, '643_sale_gift_foc.sql'), 'utf8');
+    expect(giftSql).toContain("ADD VALUE 'GIFT'");
+    expect(giftSql).toContain('gift_reason');
+    expect(giftSql).toContain('gift_amount');
+    expect(giftSql).toContain('sales.gift');
+    expect(giftSql).toContain("'administrator'");
+    expect(giftSql).not.toContain("'Manager'");
+    expect(giftSql).toContain('INSERT INTO schema_version (version) VALUES (643)');
+    expect(MIGRATION_COLUMN_ANCHORS['643_sale_gift_foc.sql']?.sales).toEqual(
+      expect.arrayContaining(['gift_reason', 'gift_amount']),
     );
     const comprehensiveTriggers = fs.readFileSync(
       path.join(sqlDir, 'comprehensive_data_triggers.sql'),

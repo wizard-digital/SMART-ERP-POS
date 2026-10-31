@@ -144,6 +144,57 @@ describe('split-tender GL posting on real Postgres', () => {
     expect(liquid(rows)).toEqual({ '1200': 40000 }); // unchanged legacy behaviour
   });
 
+  maybe('pay 20000 + gift remainder: cash and revenue for paid portion only; COGS for all goods', async () => {
+    const s = sale({
+      paymentMethod: 'CASH',
+      amountPaid: 20000,
+      giftAmount: 20000,
+      totalAmount: 40000,
+      costAmount: 12000,
+      actualInventoryCost: 12000,
+      taxAmount: 0,
+      saleItems: [{ productType: 'inventory', totalPrice: 40000, unitCost: 12000, quantity: 1 }],
+      paymentLines: [
+        { paymentMethod: 'CASH', amount: 20000 },
+        { paymentMethod: 'GIFT', amount: 20000 },
+      ],
+    });
+    await recordSaleToGL(s, db!.pool);
+    const revenue = await journalByAccount(db!.pool, { referenceType: 'SALE', referenceId: s.saleId });
+    const cogs = await journalByAccount(db!.pool, { referenceType: 'SALE_COGS', referenceId: s.saleId });
+    expect(liquid(revenue)).toEqual({ '1010': 20000 });
+    const revBy = Object.fromEntries(revenue.map((r) => [r.code, r]));
+    expect(revBy['4000']?.credit).toBe(20000);
+    expect(revBy['1200']).toBeUndefined();
+    const cogsBy = Object.fromEntries(cogs.map((r) => [r.code, r]));
+    expect(cogsBy['5000']?.debit).toBe(12000);
+    expect(cogsBy['1300']?.credit).toBe(12000);
+  });
+
+  maybe('GIFT FOC: no cash, no AR, no revenue; COGS still posts (company received nothing)', async () => {
+    const s = sale({
+      paymentMethod: 'GIFT',
+      amountPaid: 0,
+      totalAmount: 40000,
+      costAmount: 12000,
+      actualInventoryCost: 12000,
+      taxAmount: 0,
+      saleItems: [{ productType: 'inventory', totalPrice: 40000, unitCost: 12000, quantity: 1 }],
+      paymentLines: [{ paymentMethod: 'GIFT', amount: 40000 }],
+    });
+    await recordSaleToGL(s, db!.pool);
+    const revenue = await journalByAccount(db!.pool, { referenceType: 'SALE', referenceId: s.saleId });
+    const cogs = await journalByAccount(db!.pool, { referenceType: 'SALE_COGS', referenceId: s.saleId });
+    expect(revenue).toEqual([]);
+    expect(liquid(cogs)).toEqual({});
+    const byCode = Object.fromEntries(cogs.map((r) => [r.code, r]));
+    expect(byCode['5000']?.debit).toBe(12000);
+    expect(byCode['1300']?.credit).toBe(12000);
+    expect(byCode['1010']).toBeUndefined();
+    expect(byCode['1200']).toBeUndefined();
+    expect(byCode['4000']).toBeUndefined();
+  });
+
   maybe('replay is idempotent: same sale posted twice yields ONE journal', async () => {
     const s = sale({
       paymentMethod: 'CASH',

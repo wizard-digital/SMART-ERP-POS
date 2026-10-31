@@ -16,7 +16,11 @@ import { toast } from 'react-hot-toast';
 import type { Customer } from '@shared/zod/customer';
 import Decimal from 'decimal.js';
 import { useSubmitOnEnter } from '../../hooks/useSubmitOnEnter';
-import { useCanAccess } from '../../authorization/useAuthorization';
+import { useCanAccess, useHasPermission } from '../../authorization/useAuthorization';
+import {
+  GIFT_PERMISSION,
+  GIFT_REASON_MIN_LENGTH,
+} from '@shared/domain/saleGiftFocSsot';
 import {
   clearPayDesiredLines,
   markRestaurantCheckSettledInJournal,
@@ -119,7 +123,7 @@ interface OrderDetail {
   items: OrderItem[];
 }
 
-type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'BANK_TRANSFER';
+type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'DEPOSIT' | 'BANK_TRANSFER' | 'GIFT';
 
 // ── Component ────────────────────────────────────────────────────────
 
@@ -142,6 +146,9 @@ export default function OrderPaymentPage() {
   /** Restaurant FOH settlement requires restaurant.pay — orders.pay alone is not enough. */
   const canRestaurantPay = useCanAccess(undefined, ['restaurant.pay']);
   const canOrdersPay = useCanAccess(undefined, ['orders.pay']);
+  const canGiftPerm = useHasPermission(GIFT_PERMISSION);
+  const canGiftAdmin = useHasPermission('admin.update');
+  const canGift = canGiftPerm && canGiftAdmin;
   const canSettleThisOrder =
     returnToPath === '/restaurant' ? canRestaurantPay : canOrdersPay || canRestaurantPay;
 
@@ -161,6 +168,7 @@ export default function OrderPaymentPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentReference, setPaymentReference] = useState('');
+  const [giftReason, setGiftReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerInitialized, setCustomerInitialized] = useState(false);
@@ -299,17 +307,22 @@ export default function OrderPaymentPage() {
 
   const canCompleteSale = useMemo(() => {
     if (!canSettleThisOrder) return false;
-    if (paymentLines.length === 0) return false;
+    const giftReady =
+      canGift &&
+      giftReason.trim().length >= GIFT_REASON_MIN_LENGTH &&
+      (paymentMethod === 'GIFT' || paymentLines.some((l) => l.paymentMethod === 'GIFT'));
+    if (paymentLines.length === 0 && !giftReady) return false;
     const hasCreditPayment = paymentLines.some((l) => l.paymentMethod === 'CREDIT');
     // Exact payment
     if (Math.abs(remainingBalance) < 0.01) return true;
     // Overpaid with cash
     if (remainingBalance < -0.01 && hasCashPayment) return true;
+    if (remainingBalance > 0.01 && giftReady) return true;
     // Underpaid but has customer for auto-credit
     if (remainingBalance > 0.01 && hasCreditPayment) return true;
-    if (remainingBalance > 0.01 && selectedCustomer) return true;
+    if (remainingBalance > 0.01 && selectedCustomer && paymentMethod !== 'GIFT') return true;
     return false;
-  }, [canSettleThisOrder, paymentLines, remainingBalance, hasCashPayment, selectedCustomer]);
+  }, [canSettleThisOrder, paymentLines, remainingBalance, hasCashPayment, selectedCustomer, canGift, paymentMethod, giftReason]);
 
   // Add a payment line
   const handleAddPayment = () => {
@@ -346,6 +359,21 @@ export default function OrderPaymentPage() {
       }
     }
 
+    if (paymentMethod === 'GIFT') {
+      if (!canGift) {
+        toast.error('Gift can only be issued by an administrator');
+        return;
+      }
+      if (giftReason.trim().length < GIFT_REASON_MIN_LENGTH) {
+        toast.error('Gift requires a reason (who received it and why)');
+        return;
+      }
+      if (paymentLines.some((l) => l.paymentMethod === 'CREDIT')) {
+        toast.error('Gift cannot mix with credit');
+        return;
+      }
+    }
+
     const newLine = {
       id: `payment_${Date.now()}_${Math.random()}`,
       paymentMethod,
@@ -373,7 +401,28 @@ export default function OrderPaymentPage() {
 
       // Build final payment lines — auto-add CREDIT for remaining if customer selected
       const finalPaymentLines = [...paymentLines];
-      if (remainingBalance > 0.01 && selectedCustomer) {
+      if (paymentMethod === 'GIFT' || paymentLines.some((l) => l.paymentMethod === 'GIFT')) {
+        if (!canGift) {
+          toast.error('Gift can only be issued by an administrator');
+          throw new Error('Gift can only be issued by an administrator');
+        }
+        if (giftReason.trim().length < GIFT_REASON_MIN_LENGTH) {
+          toast.error('Gift requires a reason (who received it and why)');
+          throw new Error('Gift reason required');
+        }
+        if (paymentLines.some((l) => l.paymentMethod === 'CREDIT')) {
+          toast.error('Gift cannot mix with credit');
+          throw new Error('Gift cannot mix with credit');
+        }
+        if (remainingBalance > 0.01) {
+          finalPaymentLines.push({
+            id: `auto_gift_${Date.now()}`,
+            paymentMethod: 'GIFT' as PaymentMethod,
+            amount: remainingBalance,
+            reference: giftReason.trim(),
+          });
+        }
+      } else if (remainingBalance > 0.01 && selectedCustomer) {
         finalPaymentLines.push({
           id: `auto_credit_${Date.now()}`,
           paymentMethod: 'CREDIT' as PaymentMethod,
@@ -393,8 +442,11 @@ export default function OrderPaymentPage() {
         extraDiscountAmount?: number;
         cashRegisterSessionId?: string;
         idempotencyKey: string;
+        giftReason?: string;
       } = {
-        paymentMethod: effectiveMethod,
+        paymentMethod: finalPaymentLines.some((l) => l.paymentMethod === 'GIFT')
+          ? 'GIFT'
+          : effectiveMethod,
         paymentReceived: totalPaidAmount,
         customerId: effectiveCustomerId,
         paymentLines: finalPaymentLines.map((l) => ({
@@ -403,6 +455,9 @@ export default function OrderPaymentPage() {
           reference: l.reference,
         })),
         ...(cashierDiscount > 0 ? { extraDiscountAmount: cashierDiscount } : {}),
+        ...(paymentMethod === 'GIFT' || finalPaymentLines.some((l) => l.paymentMethod === 'GIFT')
+          ? { giftReason: giftReason.trim() }
+          : {}),
         ...(currentSession?.id ? { cashRegisterSessionId: currentSession.id } : {}),
         idempotencyKey: getOrCreateOrderCompleteIdempotencyKey(id!),
       };
@@ -525,7 +580,7 @@ export default function OrderPaymentPage() {
     const labels: Record<string, string> = {
       CASH: '💵 Cash', CARD: '💳 Card', MOBILE_MONEY: '📱 MTN MoMo',
       AIRTEL_MONEY: '📱 Airtel', DEPOSIT: '🏦 Deposit', CREDIT: '📝 Credit',
-      BANK_TRANSFER: '🏦 Transfer',
+      BANK_TRANSFER: '🏦 Transfer', GIFT: '🎁 Gift',
     };
     return labels[m] || m;
   };
@@ -538,6 +593,9 @@ export default function OrderPaymentPage() {
     { value: 'AIRTEL_MONEY', label: 'Airtel Money', icon: '📱', requiresCustomer: false },
     { value: 'DEPOSIT', label: 'Deposit', icon: '🏦', requiresCustomer: true },
     { value: 'CREDIT', label: 'Credit', icon: '📝', requiresCustomer: true },
+    ...(canGift
+      ? [{ value: 'GIFT' as const, label: 'Gift', icon: '🎁', requiresCustomer: false }]
+      : []),
   ];
 
   const paymentMethods = allPaymentMethods.filter(
@@ -793,7 +851,12 @@ export default function OrderPaymentPage() {
                     {paymentMethods.map((method) => (
                       <button
                         key={method.value}
-                        onClick={() => setPaymentMethod(method.value)}
+                        onClick={() => {
+                          setPaymentMethod(method.value);
+                          if (method.value === 'GIFT' && remainingBalance > 0.01) {
+                            setPaymentAmount(remainingBalance.toFixed(2));
+                          }
+                        }}
                         className={`px-3 py-2.5 rounded-lg text-sm font-medium border transition-colors flex items-center gap-2 ${paymentMethod === method.value
                           ? 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
@@ -808,6 +871,21 @@ export default function OrderPaymentPage() {
                     <p className="mt-2 text-xs text-gray-400">
                       Select a customer to enable Deposit & Credit options
                     </p>
+                  )}
+                  {paymentMethod === 'GIFT' && canGift && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                        Gift reason <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={giftReason}
+                        onChange={(e) => setGiftReason(e.target.value)}
+                        rows={2}
+                        maxLength={500}
+                        className="w-full px-3 py-2 text-sm border border-pink-300 rounded-lg focus:ring-2 focus:ring-pink-500"
+                        placeholder="Who received this and why (staff gift, sample, complimentary)"
+                      />
+                    </div>
                   )}
                 </div>
 
@@ -961,6 +1039,57 @@ export default function OrderPaymentPage() {
                     <div className="flex justify-between text-sm border-t border-gray-200 pt-2">
                       <span className="text-red-600 font-medium">Remaining</span>
                       <span className="font-bold text-red-700">{formatCurrency(remainingBalance)}</span>
+                    </div>
+                  )}
+                  {remainingBalance > 0.01 && paymentLines.length > 0 && (
+                    <div className="grid grid-cols-1 gap-2 pt-2">
+                      <p className="text-xs text-slate-600">
+                        Remaining can be a discount (price cut) or a gift (no money received).
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = new Decimal(cashierDiscount).plus(remainingBalance).toNumber();
+                          if (next > orderBaseTotal + 0.01) {
+                            toast.error('Remaining as discount cannot exceed the order total');
+                            return;
+                          }
+                          setCashierDiscount(next);
+                        }}
+                        className="w-full py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700"
+                      >
+                        Remaining as discount
+                      </button>
+                      {canGift && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (giftReason.trim().length < GIFT_REASON_MIN_LENGTH) {
+                              setPaymentMethod('GIFT');
+                              toast.error('Enter a gift reason, then use Remaining as gift');
+                              return;
+                            }
+                            if (paymentLines.some((l) => l.paymentMethod === 'CREDIT')) {
+                              toast.error('Gift cannot mix with credit');
+                              return;
+                            }
+                            if (paymentLines.some((l) => l.paymentMethod === 'GIFT')) return;
+                            setPaymentLines((prev) => [
+                              ...prev,
+                              {
+                                id: `gift_${Date.now()}`,
+                                paymentMethod: 'GIFT',
+                                amount: remainingBalance,
+                                reference: giftReason.trim(),
+                              },
+                            ]);
+                            setPaymentMethod('GIFT');
+                          }}
+                          className="w-full py-2 rounded-lg text-sm font-semibold bg-pink-600 text-white hover:bg-pink-700"
+                        >
+                          Remaining as gift
+                        </button>
+                      )}
                     </div>
                   )}
                   {changeAmount > 0 && (

@@ -71,7 +71,7 @@ export interface EventLine {
 export type RestaurantOrderChannel = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
 
 export interface EventPayment {
-    paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT';
+    paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'GIFT';
     amount: number;
     reference?: string;
 }
@@ -164,6 +164,7 @@ export type PosOfflineEvent =
         discountAmount: number;
         taxAmount: number;
         totalAmount: number;
+        giftReason?: string;
         /** Track which products/quantities to restore if the sale is cancelled */
         stockDeductions: Array<{ productId: string; quantity: number }>;
         ts: number;

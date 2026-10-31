@@ -39,7 +39,7 @@ const EventLineSchema = z.object({
 });
 
 const EventPaymentSchema = z.object({
-    paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT']),
+    paymentMethod: z.enum(['CASH', 'CARD', 'MOBILE_MONEY', 'AIRTEL_MONEY', 'CREDIT', 'GIFT']),
     amount: z.number().nonnegative(),
     reference: z.string().optional(),
 });
@@ -61,6 +61,7 @@ const SaleCompletedEventSchema = z.object({
     discountAmount: z.number().nonnegative().optional().default(0),
     taxAmount: z.number().nonnegative(),
     totalAmount: z.number().nonnegative(),
+    giftReason: z.string().max(500).optional(),
     stockDeductions: z.array(z.object({
         productId: z.string(),
         quantity: z.number(),

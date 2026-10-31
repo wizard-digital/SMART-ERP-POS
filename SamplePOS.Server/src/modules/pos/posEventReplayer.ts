@@ -44,7 +44,7 @@ export interface ReplayEventLine {
 }
 
 export interface ReplayEventPayment {
-    paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT';
+    paymentMethod: 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'AIRTEL_MONEY' | 'CREDIT' | 'GIFT';
     amount: number;
     reference?: string;
 }
@@ -61,6 +61,7 @@ export interface SaleCompletedEvent {
     discountAmount?: number;
     taxAmount: number;
     totalAmount: number;
+    giftReason?: string;
     ts: number;
     /** Phase 5.2 — when set, complete linked restaurant check + release table */
     tableId?: string;
@@ -574,6 +575,7 @@ export const posEventReplayer = {
             paymentReceived: event.totalAmount,
             soldBy: userId,
             paymentLines: event.payments,
+            giftReason: event.giftReason,
             idempotencyKey: event.key,
             offlineId: event.offlineId,
             fromOrderId,

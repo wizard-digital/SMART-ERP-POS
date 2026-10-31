@@ -10,7 +10,7 @@
  * Run: node --experimental-vm-modules ./node_modules/jest/bin/jest.js src/modules/sales/saleDailySummaryReturn.realpg.test.ts --no-coverage --forceExit
  */
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { projectSaleRollupDecrement } from '../../../../shared/domain/saleDiscountSsot.js';
@@ -27,6 +27,11 @@ beforeAll(async () => {
       'saleDailySummaryReturn.realpg: sp_template_local required. Run node scripts/ops/clone-template-local.mjs',
     );
   }
+  const giftSql = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../../../../shared/sql/643_sale_gift_foc.sql',
+  );
+  await db.pool.query(readFileSync(giftSql, 'utf8'));
 });
 
 afterAll(async () => {
