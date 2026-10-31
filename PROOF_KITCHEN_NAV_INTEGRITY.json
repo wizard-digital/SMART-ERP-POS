@@ -1,12 +1,12 @@
 {
   "proof": "KITCHEN_NAV_INTEGRITY",
   "objective": "Distinct Kitchen Display (KDS) vs Kitchen Production (ops hub) labels, routes, titles, and workspace class — no dual Kitchen menu",
-  "runAt": "2026-08-04T07:03:25.598Z",
+  "runAt": "2026-10-31T10:11:35.389Z",
   "result": "PASS",
   "summary": {
-    "pass": 43,
+    "pass": 53,
     "fail": 0,
-    "total": 43
+    "total": 53
   },
   "navSsot": [
     {
@@ -61,12 +61,12 @@
     {
       "id": "A7-no-duplicate-paths",
       "pass": true,
-      "detail": "count=23 unique=23"
+      "detail": "count=24 unique=24"
     },
     {
       "id": "A8-no-duplicate-names",
       "pass": true,
-      "detail": "[\"Dashboard\",\"Point of Sale\",\"Restaurant\",\"Kitchen Display\",\"Stations\",\"Printers\",\"Recipes\",\"Kitchen Production\",\"Order tags\",\"Orders Queue\",\"Inventory\",\"Customers\",\"Suppliers\",\"Sales\",\"Quotations\",\"CRM\",\"HR & Payroll\",\"Sales Orders\",\"Dispatch\",\"Pricing\",\"Accounting\",\"Reports\",\"Category Reports\"]"
+      "detail": "[\"Dashboard\",\"Point of Sale\",\"Restaurant\",\"Kitchen Display\",\"Stations\",\"Printers\",\"Recipes\",\"Kitchen Production\",\"Order tags\",\"Orders Queue\",\"Inventory\",\"Customers\",\"Suppliers\",\"Sales\",\"Sales Targets\",\"Quotations\",\"CRM\",\"HR & Payroll\",\"Sales Orders\",\"Dispatch\",\"Pricing\",\"Accounting\",\"Reports\",\"Category Reports\"]"
     },
     {
       "id": "A9-prod-requires-restaurant",
@@ -96,6 +96,14 @@
     },
     {
       "id": "B5-route-waste",
+      "pass": true
+    },
+    {
+      "id": "B5b-route-store-issues",
+      "pass": true
+    },
+    {
+      "id": "B5c-route-store-issue-audit",
       "pass": true
     },
     {
@@ -135,6 +143,30 @@
       "pass": true
     },
     {
+      "id": "C6b-store-issue-h1",
+      "pass": true
+    },
+    {
+      "id": "C6c-store-issue-document-grid",
+      "pass": true
+    },
+    {
+      "id": "C6d-store-issue-not-inline-selected",
+      "pass": true
+    },
+    {
+      "id": "C6e-store-issue-pdf-ssot",
+      "pass": true
+    },
+    {
+      "id": "C6f-store-issue-uom",
+      "pass": true
+    },
+    {
+      "id": "C6g-store-issue-display-reverse",
+      "pass": true
+    },
+    {
       "id": "C7-analytics-h1",
       "pass": true
     },
@@ -171,6 +203,10 @@
       "pass": true
     },
     {
+      "id": "D6b-runtime-store-issue-family",
+      "pass": true
+    },
+    {
       "id": "D7-layout-prod-requires-restaurant",
       "pass": true
     },
@@ -181,6 +217,11 @@
     {
       "id": "D9-server-requires-restaurant-mode",
       "pass": true
+    },
+    {
+      "id": "D10-inventory-store-issue-restaurant-only",
+      "pass": true,
+      "detail": "id: 'store-issue',\r\n    label: 'Store Issue',\r\n    path: '/kitchen/store-issues',\r\n    icon: '📤',\r\n    group: 'operations',\r\n    description: 'Issue store goods to kitchen/bar exp"
     },
     {
       "id": "E1-hub-ops-copy",

@@ -266,6 +266,12 @@ export default function KitchenWastePage() {
             >
               Production batches
             </Link>
+            <Link
+              to="/kitchen/store-issues"
+              className="font-medium text-amber-900 underline-offset-2 hover:underline"
+            >
+              Store issue
+            </Link>
           </div>
         </header>
 

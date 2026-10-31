@@ -1,0 +1,54 @@
+{
+  "title": "PROOF_STORE_ISSUE_REVERSE_HANDLER",
+  "runAt": "2026-10-31T10:11:33.379Z",
+  "verdict": "PASS",
+  "exercised": "storeIssueService.reverse",
+  "checks": [
+    {
+      "name": "restaurant-off-reverse-forbidden",
+      "ok": true,
+      "detail": {
+        "statusCode": 403,
+        "glCalled": false
+      }
+    },
+    {
+      "name": "short-reason-refused",
+      "ok": true,
+      "detail": {
+        "rollback": true,
+        "glCalled": false,
+        "returnLot": false
+      }
+    },
+    {
+      "name": "four-eyes-poster-forbidden",
+      "ok": true,
+      "detail": {
+        "statusCode": 403,
+        "glCalled": false
+      }
+    },
+    {
+      "name": "missing-movements-no-gl",
+      "ok": true,
+      "detail": {
+        "errorCode": "ERR_SI_REVERSE_MOVEMENTS",
+        "glCalled": false
+      }
+    },
+    {
+      "name": "happy-path-reverse-posted",
+      "ok": true,
+      "detail": {
+        "status": "REVERSED",
+        "returnLotQty": 5,
+        "movementType": "GOODS_ISSUE_REVERSAL",
+        "referenceType": "STORE_ISSUE_REVERSAL",
+        "originalJournalId": "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        "idempotencyKey": "STORE_ISSUE_REVERSAL-aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "reversalReason": "Entered wrong quantity"
+      }
+    }
+  ]
+}

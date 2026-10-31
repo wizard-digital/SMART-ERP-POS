@@ -7,13 +7,18 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { pool } from '../../db/pool.js';
 import { authenticate } from '../../middleware/auth.js';
-import { requirePermission } from '../../rbac/middleware.js';
+import { getAuthorizationService, requireAnyPermission, requirePermission } from '../../rbac/middleware.js';
 import { asyncHandler } from '../../middleware/errorHandler.js';
 import { kitchenProductionService } from './kitchenProductionService.js';
 import { buffetSessionService } from './buffetSessionService.js';
 import { kitchenWasteService } from './kitchenWasteService.js';
 import { kitchenAnalyticsService } from './kitchenAnalyticsService.js';
 import { kitchenOpsService } from './kitchenOpsService.js';
+import { storeIssueService } from './storeIssueService.js';
+import {
+  STORE_ISSUE_REVERSE_REASON_MAX,
+  STORE_ISSUE_REVERSE_REASON_MIN,
+} from '../../../../shared/store-issue/index.js';
 
 const router = Router();
 router.use(authenticate);
@@ -496,6 +501,159 @@ router.get(
     const from = typeof req.query.from === 'string' ? req.query.from : undefined;
     const to = typeof req.query.to === 'string' ? req.query.to : undefined;
     const data = await kitchenAnalyticsService.buffetProfitability(pool, { from, to });
+    res.json({ success: true, data });
+  }),
+);
+
+// ─── Store Issue to Expense (ADR-005 INGREDIENT_ISSUE) ───────────────────
+
+const ISSUE_READ = ['kitchen.production.read', 'inventory.read', 'inventory.adjust'] as const;
+const ISSUE_CREATE = ['kitchen.production.create', 'inventory.adjust'] as const;
+const ISSUE_POST = ['kitchen.production.post', 'inventory.adjust'] as const;
+const ISSUE_REVERSE = ['kitchen.production.reverse'] as const;
+
+const IssueLineSchema = z.object({
+  productId: z.string().uuid(),
+  requestedQtyBase: z.number().positive(),
+  issuedQtyBase: z.number().nonnegative(),
+  sortOrder: z.number().int().optional(),
+  notes: z.string().max(500).nullable().optional(),
+  uomId: z.string().uuid().nullable().optional(),
+  uomName: z.string().max(64).nullable().optional(),
+  conversionFactor: z.number().positive().max(1_000_000).optional(),
+});
+
+const IssueDraftSchema = z.object({
+  issueDate: z.string().optional(),
+  storeLocationId: z.string().uuid().nullable().optional(),
+  issuedTo: z.enum(['KITCHEN', 'BAR', 'HOUSEKEEPING', 'OTHER']).optional(),
+  requestedByName: z.string().max(120).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+  lines: z.array(IssueLineSchema).min(1),
+});
+
+router.get(
+  '/issues/enabled',
+  asyncHandler(async (_req: Request, res: Response) => {
+    const enabled = await storeIssueService.isEnabled(pool);
+    res.json({ success: true, data: { enabled } });
+  }),
+);
+
+router.get(
+  '/issues/stock-products',
+  requireAnyPermission([...ISSUE_READ]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const data = await storeIssueService.listStockProducts(pool, { search, limit });
+    res.json({ success: true, data });
+  }),
+);
+
+router.get(
+  '/issues/availability',
+  requireAnyPermission([...ISSUE_READ]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const productId = z.string().uuid().parse(req.query.productId);
+    const storeLocationId = req.query.storeLocationId
+      ? z.string().uuid().parse(req.query.storeLocationId)
+      : null;
+    const data = await storeIssueService.previewAvailability(pool, productId, storeLocationId);
+    res.json({ success: true, data });
+  }),
+);
+
+router.get(
+  '/issues',
+  requireAnyPermission([...ISSUE_READ]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const data = await storeIssueService.list(pool, { status, limit });
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/issues',
+  requireAnyPermission([...ISSUE_CREATE]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = IssueDraftSchema.parse(req.body);
+    const data = await storeIssueService.createDraft(pool, body, req.user!.id);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/issues/post-now',
+  requireAnyPermission([...ISSUE_POST]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = IssueDraftSchema.parse(req.body);
+    const data = await storeIssueService.postNow(pool, body, req.user!.id);
+    res.status(201).json({ success: true, data });
+  }),
+);
+
+router.get(
+  '/issues/:id',
+  requireAnyPermission([...ISSUE_READ]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await storeIssueService.getById(pool, req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
+router.patch(
+  '/issues/:id',
+  requireAnyPermission([...ISSUE_CREATE]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = IssueDraftSchema.partial()
+      .extend({
+        lines: z.array(IssueLineSchema).min(1).optional(),
+      })
+      .parse(req.body);
+    const data = await storeIssueService.updateDraft(pool, req.params.id, body);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/issues/:id/post',
+  requireAnyPermission([...ISSUE_POST]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await storeIssueService.post(pool, req.params.id, req.user!.id);
+    res.json({ success: true, data });
+  }),
+);
+
+router.post(
+  '/issues/:id/cancel',
+  requireAnyPermission([...ISSUE_CREATE]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const data = await storeIssueService.cancelDraft(pool, req.params.id);
+    res.json({ success: true, data });
+  }),
+);
+
+const ReverseIssueSchema = z.object({
+  reason: z.string().trim().min(STORE_ISSUE_REVERSE_REASON_MIN).max(STORE_ISSUE_REVERSE_REASON_MAX),
+});
+
+router.post(
+  '/issues/:id/reverse',
+  requireAnyPermission([...ISSUE_REVERSE]),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { reason } = ReverseIssueSchema.parse(req.body ?? {});
+    const authz = getAuthorizationService(req);
+    const subject = authz.subjectFromUser(req.user);
+    const canOverrideFourEyes = subject
+      ? await authz.hasPermission(subject, 'inventory.approve')
+      : false;
+    const data = await storeIssueService.reverse(pool, req.params.id, req.user!.id, {
+      reason,
+      canOverrideFourEyes,
+    });
     res.json({ success: true, data });
   }),
 );

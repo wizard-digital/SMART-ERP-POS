@@ -73,7 +73,9 @@ import {
   INVENTORY_LEDGER_REPORTS,
   INVENTORY_NETWORK_REPORTS,
   INVENTORY_OPERATIONAL_REPORTS,
+  visibleInventoryReports,
 } from '../config/inventoryReportCatalog';
+import { useRestaurantEnabled } from '../hooks/useRestaurantEnabled';
 
 /** Inclusive equal-length window immediately before [start, end] (YYYY-MM-DD). */
 function equalLengthPriorRange(startYmd: string, endYmd: string): { start: string; end: string } {
@@ -1079,6 +1081,7 @@ interface ReportData {
 export default function ReportsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { data: restaurantEnabled = false } = useRestaurantEnabled();
   /** Clearance markdown is ADMIN-only — UI mirrors server; inventory.adjust cannot unlock it. */
   const canClearanceMarkdown = canPerformLotWriteDown(user?.role);
   const [selectedReport, setSelectedReport] = useState<ReportType | null>(null);
@@ -5872,11 +5875,14 @@ export default function ReportsPage() {
                     {/* Inventory module reports — canonical paths under /reports/inventory/* */}
                     {category === 'Inventory' && (
                       <>
-                        {[
-                          ...INVENTORY_NETWORK_REPORTS,
-                          ...INVENTORY_LEDGER_REPORTS,
-                          ...INVENTORY_OPERATIONAL_REPORTS,
-                        ].map((card) => {
+                        {visibleInventoryReports(
+                          [
+                            ...INVENTORY_NETWORK_REPORTS,
+                            ...INVENTORY_LEDGER_REPORTS,
+                            ...INVENTORY_OPERATIONAL_REPORTS,
+                          ],
+                          { restaurantEnabled: !!restaurantEnabled },
+                        ).map((card) => {
                           const badgeColor =
                             card.badge === 'Finance'
                               ? 'bg-blue-100 text-blue-700'
@@ -5888,7 +5894,9 @@ export default function ReportsPage() {
                                     ? 'bg-violet-100 text-violet-700'
                                     : card.badge === 'Cross-Module'
                                       ? 'bg-indigo-100 text-indigo-700'
-                                      : 'bg-emerald-100 text-emerald-700';
+                                      : card.badge === 'Control'
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-emerald-100 text-emerald-700';
                           const borderAccent =
                             card.id === 'network'
                               ? 'border-violet-200 hover:border-violet-400'

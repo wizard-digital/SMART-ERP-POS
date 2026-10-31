@@ -11,6 +11,12 @@ import { generateValuation } from './valuationService.js';
 import { generateReconciliation } from './reconciliationService.js';
 import { generateAnalytics } from './analyticsService.js';
 import { generateMargins } from './marginService.js';
+import { generateStoreIssueAudit } from './storeIssueAuditService.js';
+import {
+  STORE_ISSUE_REVERSE_RATE_WATCH,
+  formatQtyWithUom,
+  storeIssueAuditMovementLabel,
+} from '../../../../../shared/store-issue/index.js';
 import {
   ReportPDFGenerator,
   PDFTableColumn,
@@ -28,6 +34,11 @@ function asOf(req: Request): string | undefined {
 
 function categoryId(req: Request): string | undefined {
   const v = req.query.categoryId;
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
+function queryString(req: Request, key: string): string | undefined {
+  const v = req.query[key];
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
@@ -255,6 +266,77 @@ export const inventoryReportsController = {
         marginFmt: `${r.marginPercent.toFixed(1)}%`,
         markupFmt: `${r.markupPercent.toFixed(1)}%`,
       })));
+
+      gen.end();
+      return;
+    }
+
+    res.json({ success: true, data: report });
+  },
+
+  async getStoreIssues(req: Request, res: Response, pool: Pool) {
+    const report = await generateStoreIssueAudit(pool, {
+      startDate: queryString(req, 'startDate'),
+      endDate: queryString(req, 'endDate'),
+      movement: queryString(req, 'movement'),
+      search: queryString(req, 'search'),
+    });
+
+    if (isPdf(req)) {
+      const company = await getCompanyName(pool);
+      const gen = new ReportPDFGenerator(company);
+      const doc = gen.getDocument();
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="store-issue-audit-${report.startDate}-${report.endDate}.pdf"`,
+      );
+      doc.pipe(res);
+
+      gen.addHeader({
+        companyName: company,
+        title: 'Store Issue Audit',
+        subtitle: `${report.startDate} to ${report.endDate}`,
+        generatedAt: now(),
+      });
+
+      gen.addSummaryCards([
+        { label: 'Issued', value: formatCurrencyPDF(report.totals.issuedAmount), color: PDFColors.primary },
+        {
+          label: 'Reversed',
+          value: formatCurrencyPDF(report.totals.reversedAmount),
+          color: PDFColors.warning,
+        },
+        { label: 'Net', value: formatCurrencyPDF(report.totals.netAmount), color: PDFColors.success },
+        {
+          label: 'Reverse rate',
+          value: `${(report.totals.reverseRate * 100).toFixed(1)}%`,
+          color: report.totals.reverseRate >= STORE_ISSUE_REVERSE_RATE_WATCH ? PDFColors.danger : PDFColors.info,
+        },
+      ]);
+
+      const columns: PDFTableColumn[] = [
+        { header: 'Date', key: 'postingDate', width: 0.10 },
+        { header: 'Document', key: 'documentNumber', width: 0.14 },
+        { header: 'Movement', key: 'movementLabel', width: 0.10 },
+        { header: 'Product', key: 'productName', width: 0.20 },
+        { header: 'Qty', key: 'qtyFmt', width: 0.12, align: 'right' },
+        { header: 'Amount', key: 'amountFmt', width: 0.12, align: 'right' },
+        { header: 'Posted by', key: 'postedByName', width: 0.12 },
+        { header: 'Reason', key: 'reversalReason', width: 0.10 },
+      ];
+
+      gen.addTable(
+        columns,
+        report.rows.map((r) => ({
+          ...r,
+          movementLabel: storeIssueAuditMovementLabel(r.movementType),
+          qtyFmt: formatQtyWithUom(r.quantity, r.uomName),
+          amountFmt: formatCurrencyPDF(r.amount),
+          postedByName: r.postedByName ?? '—',
+          reversalReason: r.reversalReason ?? '—',
+        })),
+      );
 
       gen.end();
       return;

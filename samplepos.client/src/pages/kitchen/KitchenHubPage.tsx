@@ -276,6 +276,13 @@ export default function KitchenHubPage() {
             <strong>Enable Kitchen Production</strong> in system settings. Pure retail tenants leave
             restaurant mode off — this module will not appear or run.
           </p>
+          <p className="mt-3 text-stone-600">
+            To consume store goods without recipes or production batches, use{' '}
+            <Link to="/kitchen/store-issues" className="font-medium text-amber-900 underline">
+              Store Issue to Expense
+            </Link>
+            .
+          </p>
         </div>
       </Layout>
     );
@@ -303,9 +310,17 @@ export default function KitchenHubPage() {
               rounds for produce, service, waste, or close.
             </p>
           </div>
-          <p className="text-sm text-stone-500">
-            Business day <span className="font-medium text-stone-800">{board?.serviceDate || '…'}</span>
-          </p>
+          <div className="flex flex-col items-end gap-1">
+            <p className="text-sm text-stone-500">
+              Business day <span className="font-medium text-stone-800">{board?.serviceDate || '…'}</span>
+            </p>
+            <Link
+              to="/kitchen/store-issues"
+              className="text-sm font-medium text-amber-900 underline-offset-2 hover:underline"
+            >
+              Store issue to expense
+            </Link>
+          </div>
         </header>
 
         {next && (
@@ -626,6 +641,9 @@ export default function KitchenHubPage() {
           </Link>
           <Link to="/kitchen/waste" className="text-amber-900 underline-offset-2 hover:underline">
             Waste drafts
+          </Link>
+          <Link to="/kitchen/store-issues" className="text-amber-900 underline-offset-2 hover:underline">
+            Store issue to expense
           </Link>
           <Link to="/kitchen/analytics" className="text-amber-900 underline-offset-2 hover:underline">
             Analytics detail

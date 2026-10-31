@@ -24,6 +24,7 @@ import { quotationService } from '../quotations/quotationService.js';
 import { purchaseOrderService } from '../purchase-orders/purchaseOrderService.js';
 import { PricingEngine } from '../../utils/pricingEngine.js';
 import { goodsReceiptService } from '../goods-receipts/goodsReceiptService.js';
+import { storeIssueService } from '../kitchen-production/storeIssueService.js';
 import { deliveryNoteRepository } from '../delivery-notes/deliveryNoteRepository.js';
 import {
     creditDebitNoteService,
@@ -52,6 +53,10 @@ import {
     renderGoodsReceiptBody,
     type GoodsReceiptBodyData,
 } from './bodies/goodsReceiptBody.js';
+import {
+    renderStoreIssueBody,
+    toStoreIssueBodyData,
+} from './bodies/storeIssueBody.js';
 import {
     renderDeliveryNoteBody,
     type DeliveryNoteBodyData,
@@ -125,6 +130,7 @@ export type DocumentType =
     | 'QUOTATION'
     | 'PURCHASE_ORDER'
     | 'GOODS_RECEIPT'
+    | 'STORE_ISSUE'
     | 'DELIVERY_NOTE'
     | 'CREDIT_NOTE'
     | 'CUSTOMER_STATEMENT'
@@ -179,6 +185,8 @@ export async function render(
             return renderPurchaseOrder(pool, req, theme, output);
         case 'GOODS_RECEIPT':
             return renderGoodsReceipt(pool, req, theme, output);
+        case 'STORE_ISSUE':
+            return renderStoreIssue(pool, req, theme, output);
         case 'DELIVERY_NOTE':
             return renderDeliveryNote(pool, req, theme, output);
         case 'CREDIT_NOTE':
@@ -698,6 +706,33 @@ async function renderGoodsReceipt(
     finalizeDocument(ctx, meta);
 
     return { filename: `gr-${grNumber || req.id}.pdf`, contentType: 'application/pdf' };
+}
+
+// =============================================================================
+// STORE ISSUE (GOODS ISSUE)
+// =============================================================================
+
+async function renderStoreIssue(
+    pool: Pool,
+    req: RenderRequest,
+    theme: DocumentTheme,
+    output: Writable,
+): Promise<RenderResult> {
+    const doc = await storeIssueService.getById(pool, req.id);
+    const status = String(doc.status || 'DRAFT').toUpperCase();
+    const meta: DocumentMeta = {
+        title: 'GOODS ISSUE',
+        number: doc.documentNumber,
+        subtitle: doc.issuedTo,
+        watermark:
+            status === 'CANCELLED' ? 'CANCELLED' : status === 'DRAFT' ? 'DRAFT' : undefined,
+    };
+
+    const ctx = createDocument(meta, theme, output, { paperSize: req.paperSize ?? 'A4' });
+    renderStoreIssueBody(ctx, toStoreIssueBodyData(doc));
+    finalizeDocument(ctx, meta);
+
+    return { filename: `${doc.documentNumber || `gi-${req.id}`}.pdf`, contentType: 'application/pdf' };
 }
 
 // =============================================================================

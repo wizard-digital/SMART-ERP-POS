@@ -1,0 +1,136 @@
+{
+  "title": "PROOF_STORE_ISSUE_REVERSE_REALPG",
+  "runAt": "2026-10-31T09:42:47.792Z",
+  "verdict": "PASS",
+  "exercised": "storeIssueService.postNow + reverse + generateStoreIssueAudit",
+  "database": "sp_scratch_ddece5a3",
+  "checks": [
+    {
+      "name": "account-5150-present",
+      "ok": true,
+      "detail": {
+        "rows": 1
+      }
+    },
+    {
+      "name": "two-users",
+      "ok": true,
+      "detail": {
+        "poster": "21bf0bae",
+        "reverser": "43bf8f37"
+      }
+    },
+    {
+      "name": "lot-received",
+      "ok": true,
+      "detail": {
+        "remainingBefore": 10,
+        "storeLocationId": null,
+        "multistore": false
+      }
+    },
+    {
+      "name": "posted-gi-201",
+      "ok": true,
+      "detail": {
+        "documentNumber": "GI-2026-00001",
+        "status": "POSTED",
+        "totalCost": 1000,
+        "remainingAfterPost": 6,
+        "movements": {
+          "GOODS_ISSUE": {
+            "count": 1,
+            "qty": 4
+          }
+        },
+        "journals": [
+          {
+            "ref": "STORE_ISSUE",
+            "status": "POSTED",
+            "code": "1300",
+            "debit": 0,
+            "credit": 1000
+          },
+          {
+            "ref": "STORE_ISSUE",
+            "status": "POSTED",
+            "code": "5150",
+            "debit": 1000,
+            "credit": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "self-reverse-forbidden",
+      "ok": true,
+      "detail": {
+        "status": "POSTED"
+      }
+    },
+    {
+      "name": "reversed-gi-202",
+      "ok": true,
+      "detail": {
+        "status": "REVERSED",
+        "reversalReason": "Posted to the wrong kitchen",
+        "remainingAfterReverse": 10,
+        "movements": {
+          "GOODS_ISSUE": {
+            "count": 1,
+            "qty": 4
+          },
+          "GOODS_ISSUE_REVERSAL": {
+            "count": 1,
+            "qty": 4
+          }
+        },
+        "journals": [
+          {
+            "ref": "REVERSAL",
+            "status": "POSTED",
+            "code": "1300",
+            "debit": 1000,
+            "credit": 0
+          },
+          {
+            "ref": "REVERSAL",
+            "status": "POSTED",
+            "code": "5150",
+            "debit": 0,
+            "credit": 1000
+          },
+          {
+            "ref": "STORE_ISSUE",
+            "status": "REVERSED",
+            "code": "1300",
+            "debit": 0,
+            "credit": 1000
+          },
+          {
+            "ref": "STORE_ISSUE",
+            "status": "REVERSED",
+            "code": "5150",
+            "debit": 1000,
+            "credit": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "audit-union-both-rows",
+      "ok": true,
+      "detail": {
+        "rows": 2,
+        "types": [
+          "GOODS_ISSUE",
+          "GOODS_ISSUE_REVERSAL"
+        ],
+        "issuedAmount": 1000,
+        "reversedAmount": 1000,
+        "reverseRate": 1,
+        "search": "GI-2026-00001"
+      }
+    }
+  ]
+}

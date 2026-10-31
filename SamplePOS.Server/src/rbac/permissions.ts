@@ -233,6 +233,12 @@ export const PERMISSIONS: Record<string, Permission> = {
     'post',
     'Post production batches (issue ingredients + receive finished food)',
   ),
+  KITCHEN_PRODUCTION_REVERSE: p(
+    'kitchen.production.reverse',
+    'kitchen',
+    'void',
+    'Reverse posted store issues (restore stock and reverse 5150/1300)',
+  ),
   INVENTORY_TRANSFER_REQUEST: p(
     'inventory.transfer.request',
     'inventory',

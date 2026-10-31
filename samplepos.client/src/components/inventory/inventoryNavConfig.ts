@@ -25,6 +25,8 @@ export interface InventoryNavItem {
   matchPrefix?: string;
   /** When set, tab is hidden unless the user holds any of these RBAC keys. */
   requiredPermissions?: readonly string[];
+  /** Kitchen/store-issue family — hidden unless restaurant_mode_enabled. */
+  restaurantOnly?: boolean;
 }
 
 export const INVENTORY_MORE_GROUP_LABELS: Record<InventoryMoreNavGroup, string> = {
@@ -99,6 +101,21 @@ export const INVENTORY_MORE_NAV: InventoryNavItem[] = [
     group: 'operations',
     description:
       'Expired / damaged quarantine aging (soft or hard) — still on inventory until dispose',
+  },
+  {
+    id: 'store-issue',
+    label: 'Store Issue',
+    path: '/kitchen/store-issues',
+    icon: '📤',
+    group: 'operations',
+    description: 'Issue store goods to kitchen/bar expense without a recipe (account 5150)',
+    restaurantOnly: true,
+    requiredPermissions: [
+      'kitchen.production.read',
+      'kitchen.production.create',
+      'kitchen.production.post',
+      'inventory.adjust',
+    ],
   },
   {
     id: 'stock-movements',
@@ -275,6 +292,18 @@ export function filterInventoryNavByPermissions(
   userRole?: string,
 ): InventoryNavItem[] {
   return tabs.filter((tab) => canSeeNavItem(tab, permissions, userRole));
+}
+
+/** Hide multistore / restaurant-only inventory tabs when those flags are off. */
+export function filterInventoryNavByTenantFlags(
+  tabs: InventoryNavItem[],
+  flags: { isMultistoreEnabled: boolean; restaurantEnabled: boolean },
+): InventoryNavItem[] {
+  return tabs.filter((tab) => {
+    if (tab.multistoreOnly && !flags.isMultistoreEnabled) return false;
+    if (tab.restaurantOnly && !flags.restaurantEnabled) return false;
+    return true;
+  });
 }
 
 export {

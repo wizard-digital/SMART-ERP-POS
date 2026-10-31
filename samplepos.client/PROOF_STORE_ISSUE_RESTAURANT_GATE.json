@@ -1,0 +1,49 @@
+{
+  "title": "PROOF_STORE_ISSUE_RESTAURANT_GATE",
+  "runAt": "2026-10-31T10:11:35.510Z",
+  "verdict": "PASS",
+  "exercised": "visibleInventoryReports + filterInventoryNavByTenantFlags",
+  "checks": [
+    {
+      "name": "report-catalog-hidden-when-restaurant-off",
+      "ok": true,
+      "detail": {
+        "offIds": [
+          "network",
+          "valuation",
+          "reconciliation",
+          "analytics",
+          "margins",
+          "reorder",
+          "category-intelligence"
+        ],
+        "onHasStoreIssues": true
+      }
+    },
+    {
+      "name": "inventory-nav-hidden-when-restaurant-off",
+      "ok": true,
+      "detail": {
+        "offIds": [
+          "uoms",
+          "batches",
+          "quarantine",
+          "stock-movements",
+          "barcode-lookup",
+          "reports"
+        ],
+        "onHasStoreIssue": true
+      }
+    },
+    {
+      "name": "ui-wiring-uses-filters",
+      "ok": true,
+      "detail": {
+        "reportsPage": true,
+        "inventoryLayout": true,
+        "auditPage": true,
+        "storeIssuePage": true
+      }
+    }
+  ]
+}

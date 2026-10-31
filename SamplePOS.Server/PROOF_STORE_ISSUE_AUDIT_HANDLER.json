@@ -1,0 +1,45 @@
+{
+  "title": "PROOF_STORE_ISSUE_AUDIT_HANDLER",
+  "runAt": "2026-10-31T10:11:34.521Z",
+  "verdict": "PASS",
+  "exercised": "generateStoreIssueAudit",
+  "checks": [
+    {
+      "name": "filter-reverse-keeps-period-kpis",
+      "ok": true,
+      "detail": {
+        "visibleRows": 1,
+        "visibleType": "GOODS_ISSUE_REVERSAL",
+        "issuedAmount": 5000,
+        "reversedAmount": 5000,
+        "reverseRate": 1
+      }
+    },
+    {
+      "name": "inverted-dates-swapped",
+      "ok": true,
+      "detail": {
+        "startDate": "2026-10-01",
+        "endDate": "2026-10-31",
+        "sqlStart": "2026-10-01",
+        "sqlEnd": "2026-10-31"
+      }
+    },
+    {
+      "name": "restaurant-off-audit-forbidden",
+      "ok": true,
+      "detail": {
+        "statusCode": 403,
+        "sqlRan": false
+      }
+    },
+    {
+      "name": "like-wildcards-escaped",
+      "ok": true,
+      "detail": {
+        "returnedSearch": "GI_1%",
+        "sqlSearch": "GI\\_1\\%"
+      }
+    }
+  ]
+}

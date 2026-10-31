@@ -195,6 +195,9 @@ export default function RestaurantRecipesPage() {
             <Link to="/kitchen" className="text-amber-900 underline">
               Kitchen Production
             </Link>
+            <Link to="/kitchen/store-issues" className="text-amber-900 underline">
+              Issue without recipe
+            </Link>
             <Link to="/restaurant" className="text-amber-800 underline">
               Back to Restaurant POS
             </Link>

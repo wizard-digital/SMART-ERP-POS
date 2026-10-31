@@ -1,8 +1,8 @@
 # PROOF: Kitchen nav integrity & label consistency
 
-- Run: 2026-08-04T07:03:25.598Z
+- Run: 2026-10-31T10:11:35.389Z
 - Command: `npx vitest run src/__tests__/kitchen-nav-integrity.proof.test.ts src/__tests__/adaptive-pwa-phase1-workspace.evidence.test.ts`
-- Result: **PASS** — 43 pass / 0 fail / 43 total
+- Result: **PASS** — 53 pass / 0 fail / 53 total
 
 ## Objective
 
@@ -26,8 +26,8 @@ Distinct Kitchen Display (KDS) vs Kitchen Production (ops hub) labels, routes, t
 - **PASS** A4-prod-label — Kitchen Production
 - **PASS** A5-no-bare-Kitchen — []
 - **PASS** A6-labels-differ
-- **PASS** A7-no-duplicate-paths — count=23 unique=23
-- **PASS** A8-no-duplicate-names — ["Dashboard","Point of Sale","Restaurant","Kitchen Display","Stations","Printers","Recipes","Kitchen Production","Order tags","Orders Queue","Inventory","Customers","Suppliers","Sales","Quotations","CRM","HR & Payroll","Sales Orders","Dispatch","Pricing","Accounting","Reports","Category Reports"]
+- **PASS** A7-no-duplicate-paths — count=24 unique=24
+- **PASS** A8-no-duplicate-names — ["Dashboard","Point of Sale","Restaurant","Kitchen Display","Stations","Printers","Recipes","Kitchen Production","Order tags","Orders Queue","Inventory","Customers","Suppliers","Sales","Sales Targets","Quotations","CRM","HR & Payroll","Sales Orders","Dispatch","Pricing","Accounting","Reports","Category Reports"]
 - **PASS** A9-prod-requires-restaurant — name: 'Kitchen Production',
       path: '/kitchen',
       icon: '🍲',
@@ -43,6 +43,8 @@ Distinct Kitchen Display (KDS) vs Kitchen Production (ops hub) labels, routes, t
 - **PASS** B3-route-batches
 - **PASS** B4-route-buffet
 - **PASS** B5-route-waste
+- **PASS** B5b-route-store-issues
+- **PASS** B5c-route-store-issue-audit
 - **PASS** B6-route-analytics
 - **PASS** B7-layout-kds-perm
 - **PASS** B8-layout-prod-perm
@@ -52,6 +54,12 @@ Distinct Kitchen Display (KDS) vs Kitchen Production (ops hub) labels, routes, t
 - **PASS** C4-batches-not-confused-as-menu-only
 - **PASS** C5-buffet-h1
 - **PASS** C6-waste-h1
+- **PASS** C6b-store-issue-h1
+- **PASS** C6c-store-issue-document-grid
+- **PASS** C6d-store-issue-not-inline-selected
+- **PASS** C6e-store-issue-pdf-ssot
+- **PASS** C6f-store-issue-uom
+- **PASS** C6g-store-issue-display-reverse
 - **PASS** C7-analytics-h1
 - **PASS** C8-analytics-no-ambiguous
 - **PASS** C9-recipes-link-hub
@@ -61,9 +69,16 @@ Distinct Kitchen Display (KDS) vs Kitchen Production (ops hub) labels, routes, t
 - **PASS** D4-runtime-kds-family
 - **PASS** D5-runtime-hub-family
 - **PASS** D6-runtime-batch-family
+- **PASS** D6b-runtime-store-issue-family
 - **PASS** D7-layout-prod-requires-restaurant
 - **PASS** D8-settings-kitchen-tied-to-restaurant
 - **PASS** D9-server-requires-restaurant-mode
+- **PASS** D10-inventory-store-issue-restaurant-only — id: 'store-issue',
+    label: 'Store Issue',
+    path: '/kitchen/store-issues',
+    icon: '📤',
+    group: 'operations',
+    description: 'Issue store goods to kitchen/bar exp
 - **PASS** E1-hub-ops-copy
 - **PASS** E2-hub-not-kds
 - **PASS** E3-layout-primary-path-is-hub

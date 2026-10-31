@@ -2009,6 +2009,84 @@ export const api = {
       apiClient.get<ApiResponse>('kitchen-production/analytics/waste', { params }),
     analyticsBuffet: (params?: { from?: string; to?: string }) =>
       apiClient.get<ApiResponse>('kitchen-production/analytics/buffet', { params }),
+
+    issuesEnabled: () =>
+      apiClient.get<ApiResponse<{ enabled: boolean }>>('kitchen-production/issues/enabled'),
+    listIssueStockProducts: (params?: { search?: string; limit?: number }) =>
+      apiClient.get<ApiResponse>('kitchen-production/issues/stock-products', { params }),
+    issueAvailability: (productId: string, storeLocationId?: string | null) =>
+      apiClient.get<
+        ApiResponse<{
+          productId: string;
+          productName: string;
+          availableQty: number;
+          storeLabel: string;
+        }>
+      >('kitchen-production/issues/availability', {
+        params: { productId, storeLocationId: storeLocationId || undefined },
+      }),
+    listIssues: (params?: { status?: string; limit?: number }) =>
+      apiClient.get<ApiResponse>('kitchen-production/issues', { params }),
+    getIssue: (id: string) => apiClient.get<ApiResponse>(`kitchen-production/issues/${id}`),
+    createIssue: (data: {
+      issueDate?: string;
+      storeLocationId?: string | null;
+      issuedTo?: 'KITCHEN' | 'BAR' | 'HOUSEKEEPING' | 'OTHER';
+      requestedByName?: string | null;
+      notes?: string | null;
+      lines: Array<{
+        productId: string;
+        requestedQtyBase: number;
+        issuedQtyBase: number;
+        sortOrder?: number;
+        notes?: string | null;
+        uomId?: string | null;
+        uomName?: string | null;
+        conversionFactor?: number;
+      }>;
+    }) => apiClient.post<ApiResponse>('kitchen-production/issues', data),
+    postIssueNow: (data: {
+      issueDate?: string;
+      storeLocationId?: string | null;
+      issuedTo?: 'KITCHEN' | 'BAR' | 'HOUSEKEEPING' | 'OTHER';
+      requestedByName?: string | null;
+      notes?: string | null;
+      lines: Array<{
+        productId: string;
+        requestedQtyBase: number;
+        issuedQtyBase: number;
+        sortOrder?: number;
+        notes?: string | null;
+        uomId?: string | null;
+        uomName?: string | null;
+        conversionFactor?: number;
+      }>;
+    }) => apiClient.post<ApiResponse>('kitchen-production/issues/post-now', data),
+    updateIssue: (
+      id: string,
+      data: {
+        issueDate?: string;
+        storeLocationId?: string | null;
+        issuedTo?: 'KITCHEN' | 'BAR' | 'HOUSEKEEPING' | 'OTHER';
+        requestedByName?: string | null;
+        notes?: string | null;
+        lines?: Array<{
+          productId: string;
+          requestedQtyBase: number;
+          issuedQtyBase: number;
+          sortOrder?: number;
+          notes?: string | null;
+          uomId?: string | null;
+          uomName?: string | null;
+          conversionFactor?: number;
+        }>;
+      },
+    ) => apiClient.patch<ApiResponse>(`kitchen-production/issues/${id}`, data),
+    postIssue: (id: string) => apiClient.post<ApiResponse>(`kitchen-production/issues/${id}/post`),
+    cancelIssue: (id: string) =>
+      apiClient.post<ApiResponse>(`kitchen-production/issues/${id}/cancel`),
+    reverseIssue: (id: string, reason: string) =>
+      apiClient.post<ApiResponse>(`kitchen-production/issues/${id}/reverse`, { reason }),
   },
 
   /** Print Job SSOT — enqueue on server; device agent delivers via :1811 */

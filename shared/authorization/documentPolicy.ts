@@ -10,6 +10,7 @@ export const DOCUMENT_TYPE_PERMISSIONS: Record<string, readonly string[]> = {
   QUOTATION: ['quotations.read'],
   PURCHASE_ORDER: ['purchasing.read'],
   GOODS_RECEIPT: ['purchasing.read'],
+  STORE_ISSUE: ['kitchen.production.read', 'inventory.read', 'inventory.adjust'],
   DELIVERY_NOTE: ['delivery.read'],
   CREDIT_NOTE: ['customers.read', 'sales.read'],
   CUSTOMER_STATEMENT: ['customers.read', 'reports.customers_view'],

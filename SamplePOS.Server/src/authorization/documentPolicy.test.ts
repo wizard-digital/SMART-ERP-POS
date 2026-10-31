@@ -17,6 +17,12 @@ describe('documentPolicy', () => {
     );
   });
 
+  it('maps store issue PDFs to kitchen/inventory read', () => {
+    expect(permissionsForDocumentType('STORE_ISSUE')).toEqual(
+      expect.arrayContaining(['kitchen.production.read', 'inventory.read']),
+    );
+  });
+
   it('maps document flow entities to module read permissions', () => {
     expect(permissionsForEntityFlow('PURCHASE_ORDER')).toContain('purchasing.read');
     expect(permissionsForEntityFlow('SALE')).toContain('sales.read');

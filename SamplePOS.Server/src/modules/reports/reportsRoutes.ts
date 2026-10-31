@@ -75,6 +75,12 @@ export function createReportsRouter(pool: Pool) {
     requirePermission('reports.read'),
     asyncHandler(async (req, res) => inventoryReportsController.getMargins(req, res, p(req)))
   );
+  // Store issue audit = posted GI + reverse list (who / why / reverse rate)
+  router.get(
+    '/inventory/store-issues',
+    requirePermission('reports.read'),
+    asyncHandler(async (req, res) => inventoryReportsController.getStoreIssues(req, res, p(req)))
+  );
 
   router.get(
     '/inventory-adjustments',

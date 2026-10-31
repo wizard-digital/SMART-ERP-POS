@@ -10,6 +10,7 @@ export interface InventoryReportLink {
   path: string;
   icon: string;
   multistoreOnly?: boolean;
+  restaurantOnly?: boolean;
   badge?: string;
 }
 
@@ -46,6 +47,16 @@ export const INVENTORY_LEDGER_REPORTS: InventoryReportLink[] = [
     path: '/reports/inventory/margins',
     icon: '📈',
     badge: 'Commercial',
+  },
+  {
+    id: 'store-issues',
+    title: 'Store Issue Audit',
+    description:
+      'Posted warehouse issues and reversals — who posted, who reversed, reason, and reverse rate.',
+    path: '/reports/inventory/store-issues',
+    icon: '🧾',
+    badge: 'Control',
+    restaurantOnly: true,
   },
 ];
 
@@ -89,3 +100,11 @@ export const ALL_INVENTORY_REPORTS: InventoryReportLink[] = [
   ...INVENTORY_LEDGER_REPORTS,
   ...INVENTORY_OPERATIONAL_REPORTS,
 ];
+
+/** Hide restaurant-only reports (Store Issue Audit) when restaurant mode is off. */
+export function visibleInventoryReports(
+  reports: InventoryReportLink[],
+  flags: { restaurantEnabled: boolean },
+): InventoryReportLink[] {
+  return reports.filter((report) => !report.restaurantOnly || flags.restaurantEnabled);
+}

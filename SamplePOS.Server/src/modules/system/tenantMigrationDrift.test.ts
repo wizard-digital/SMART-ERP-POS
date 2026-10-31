@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { describe, expect, it } from '@jest/globals';
 import {
   decideCopyMigrationLedgerRow,
   findDriftedMigrationFiles,
@@ -100,8 +101,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     );
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–638 MoMo/banking/targets/expense/ownership/FEFO/sale-totals SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(638);
+  it('CURRENT_SCHEMA_VERSION matches 621–642 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(642);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -177,6 +178,40 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(saleTotalsSql).toContain('DROP TRIGGER IF EXISTS trg_sync_sale_totals');
     expect(saleTotalsSql).not.toContain('CREATE TRIGGER trg_sync_sale_totals');
     expect(saleTotalsSql).toContain('SELECT 638');
+    const storeIssueSql = fs.readFileSync(
+      path.join(sqlDir, '639_store_issue_to_expense.sql'),
+      'utf8',
+    );
+    expect(storeIssueSql).toContain('store_issue_documents');
+    expect(storeIssueSql).toContain('INSERT INTO schema_version (version) VALUES (639)');
+    const storeIssueUomSql = fs.readFileSync(path.join(sqlDir, '640_store_issue_uom.sql'), 'utf8');
+    expect(storeIssueUomSql).toContain('uom_id');
+    expect(storeIssueUomSql).toContain('uom_name');
+    expect(storeIssueUomSql).toContain('conversion_factor');
+    expect(storeIssueUomSql).toContain('INSERT INTO schema_version (version) VALUES (640)');
+    const storeIssueReverseSql = fs.readFileSync(
+      path.join(sqlDir, '641_store_issue_reversal.sql'),
+      'utf8',
+    );
+    expect(storeIssueReverseSql).toContain('GOODS_ISSUE_REVERSAL');
+    expect(storeIssueReverseSql).toContain('REVERSED');
+    expect(storeIssueReverseSql).toContain('INSERT INTO schema_version (version) VALUES (641)');
+    const storeIssueGovSql = fs.readFileSync(
+      path.join(sqlDir, '642_store_issue_reverse_governance.sql'),
+      'utf8',
+    );
+    expect(storeIssueGovSql).toContain('reversal_reason');
+    expect(storeIssueGovSql).toContain('kitchen.production.reverse');
+    expect(storeIssueGovSql).toContain('INSERT INTO schema_version (version) VALUES (642)');
+    expect(MIGRATION_COLUMN_ANCHORS['640_store_issue_uom.sql']?.store_issue_lines).toEqual(
+      expect.arrayContaining(['uom_id', 'uom_name', 'conversion_factor']),
+    );
+    expect(MIGRATION_COLUMN_ANCHORS['641_store_issue_reversal.sql']?.store_issue_documents).toEqual(
+      expect.arrayContaining(['reversed_by', 'reversed_at', 'reversal_journal_id']),
+    );
+    expect(MIGRATION_COLUMN_ANCHORS['642_store_issue_reverse_governance.sql']?.store_issue_documents).toEqual(
+      expect.arrayContaining(['reversal_reason']),
+    );
     const comprehensiveTriggers = fs.readFileSync(
       path.join(sqlDir, 'comprehensive_data_triggers.sql'),
       'utf8',

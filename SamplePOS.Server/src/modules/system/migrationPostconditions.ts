@@ -29,6 +29,10 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '628_drop_ledger_reference_unique_ssot.sql',
     '636_ownership_equity.sql',
     '638_sale_totals_trigger_ssot.sql',
+    '639_store_issue_to_expense.sql',
+    '640_store_issue_uom.sql',
+    '641_store_issue_reversal.sql',
+    '642_store_issue_reverse_governance.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -428,6 +432,70 @@ export async function verifyMigrationPostcondition(
                       WHERE schemaname = 'public'
                         AND indexname = 'idx_ledger_transactions_reference'
                     )
+                 ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '639_store_issue_to_expense.sql': {
+            const tableOk = await tableExists(pool, 'store_issue_documents');
+            const linesOk = await tableExists(pool, 'store_issue_lines');
+            const { rows: acct } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM accounts
+                    WHERE "AccountCode" = '5150'
+                      AND "AllowManualPosting" = false
+                      AND 'INVENTORY_MOVE' = ANY(COALESCE("AllowedSources", '{}'::text[]))
+                ) AS ok`,
+            );
+            return tableOk && linesOk && acct[0]?.ok === true;
+        }
+        case '640_store_issue_uom.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT (
+                    EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_schema = 'public'
+                        AND table_name = 'store_issue_lines'
+                        AND column_name = 'uom_id'
+                    ) AND EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_schema = 'public'
+                        AND table_name = 'store_issue_lines'
+                        AND column_name = 'uom_name'
+                    ) AND EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_schema = 'public'
+                        AND table_name = 'store_issue_lines'
+                        AND column_name = 'conversion_factor'
+                    )
+                 ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '641_store_issue_reversal.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT (
+                    EXISTS (
+                      SELECT 1 FROM pg_constraint
+                      WHERE conrelid = 'store_issue_documents'::regclass
+                        AND pg_get_constraintdef(oid) ILIKE '%REVERSED%'
+                    ) AND EXISTS (
+                      SELECT 1 FROM information_schema.columns
+                      WHERE table_schema = 'public'
+                        AND table_name = 'store_issue_documents'
+                        AND column_name = 'reversed_at'
+                    )
+                 ) AS ok`,
+            );
+            return rows[0]?.ok === true;
+        }
+        case '642_store_issue_reverse_governance.sql': {
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'store_issue_documents'
+                      AND column_name = 'reversal_reason'
                  ) AS ok`,
             );
             return rows[0]?.ok === true;

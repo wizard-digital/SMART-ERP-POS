@@ -120,6 +120,15 @@ export const MIGRATION_COLUMN_ANCHORS: Readonly<
         inventory_batches: ['status', 'received_date'],
         product_valuation: ['cost_price', 'average_cost', 'costing_method'],
     },
+    '640_store_issue_uom.sql': {
+        store_issue_lines: ['uom_id', 'uom_name', 'conversion_factor'],
+    },
+    '641_store_issue_reversal.sql': {
+        store_issue_documents: ['reversed_by', 'reversed_at', 'reversal_journal_id'],
+    },
+    '642_store_issue_reverse_governance.sql': {
+        store_issue_documents: ['reversal_reason'],
+    },
     '523_products_stock_level_columns.sql': {
         products: ['max_stock_level', 'reorder_point', 'optimal_stock_level'],
     },

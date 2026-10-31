@@ -64,6 +64,17 @@ describe('PROOF — kitchen nav integrity & label consistency', () => {
   const batches = readRepo('samplepos.client/src/pages/kitchen/KitchenProductionPage.tsx');
   const buffet = readRepo('samplepos.client/src/pages/kitchen/KitchenBuffetSessionsPage.tsx');
   const waste = readRepo('samplepos.client/src/pages/kitchen/KitchenWastePage.tsx');
+  const storeIssue = readRepo('samplepos.client/src/pages/kitchen/KitchenStoreIssuePage.tsx');
+  const storeIssueWorkspace = existsSync(
+    resolve(repoRoot, 'samplepos.client/src/components/kitchen/StoreIssueCreateWorkspace.tsx'),
+  )
+    ? readRepo('samplepos.client/src/components/kitchen/StoreIssueCreateWorkspace.tsx')
+    : '';
+  const storeIssuePicker = existsSync(
+    resolve(repoRoot, 'samplepos.client/src/components/kitchen/StoreIssueLinePicker.tsx'),
+  )
+    ? readRepo('samplepos.client/src/components/kitchen/StoreIssueLinePicker.tsx')
+    : '';
   const analytics = readRepo('samplepos.client/src/pages/kitchen/KitchenAnalyticsPage.tsx');
   const cashier = readRepo('samplepos.client/src/utils/cashierLockdown.ts');
   const recipes = readRepo('samplepos.client/src/pages/restaurant/RestaurantRecipesPage.tsx');
@@ -111,6 +122,8 @@ describe('PROOF — kitchen nav integrity & label consistency', () => {
     gate('B3-route-batches', appPaths.includes('/kitchen/production'));
     gate('B4-route-buffet', appPaths.includes('/kitchen/buffet-sessions'));
     gate('B5-route-waste', appPaths.includes('/kitchen/waste'));
+    gate('B5b-route-store-issues', appPaths.includes('/kitchen/store-issues'));
+    gate('B5c-route-store-issue-audit', appPaths.includes('/reports/inventory/store-issues'));
     gate('B6-route-analytics', appPaths.includes('/kitchen/analytics'));
     gate('B7-layout-kds-perm', layout.includes("'restaurant.kitchen'"));
     gate('B8-layout-prod-perm', layout.includes("'kitchen.production.read'"));
@@ -123,6 +136,46 @@ describe('PROOF — kitchen nav integrity & label consistency', () => {
     gate('C4-batches-not-confused-as-menu-only', !/name: 'Kitchen Production'/.test(batches));
     gate('C5-buffet-h1', /Buffet Sessions/.test(buffet));
     gate('C6-waste-h1', /Kitchen Waste/.test(waste));
+    gate('C6b-store-issue-h1', /Store Issue to Expense/.test(storeIssue));
+    gate(
+      'C6c-store-issue-document-grid',
+      /StoreIssueCreateWorkspace/.test(storeIssue) &&
+        /StoreIssueLinePicker/.test(storeIssueWorkspace) &&
+        /SlideDrawer/.test(storeIssueWorkspace) &&
+        /StoreLocationSelect/.test(storeIssueWorkspace) &&
+        /EnterpriseProductSearch/.test(storeIssuePicker) &&
+        /DataTable/.test(storeIssuePicker),
+    );
+    gate(
+      'C6d-store-issue-not-inline-selected',
+      !/filteredProducts/.test(storeIssue) &&
+        !/flex flex-wrap items-center gap-2 p-2/.test(storeIssuePicker),
+    );
+    gate(
+      'C6e-store-issue-pdf-ssot',
+      /documents\/STORE_ISSUE/.test(storeIssue) && /downloadFile/.test(storeIssue),
+    );
+    gate(
+      'C6f-store-issue-uom',
+      /UomSelector/.test(storeIssuePicker) &&
+        /header: 'UoM'/.test(storeIssuePicker) &&
+        /header: 'Requested'/.test(storeIssuePicker) &&
+        /header: 'Issued'/.test(storeIssuePicker) &&
+        /poLineBaseQuantity/.test(storeIssue),
+    );
+    gate(
+      'C6g-store-issue-display-reverse',
+      /openDisplay/.test(storeIssue) &&
+        /Requested \/ issued/.test(storeIssue) &&
+        /reverseIssue/.test(storeIssue) &&
+        /mode === 'display'/.test(storeIssueWorkspace) &&
+        /Confirm reverse/.test(storeIssueWorkspace) &&
+        /formatQtyWithUom/.test(storeIssueWorkspace) &&
+        /Reason for reverse/.test(storeIssueWorkspace) &&
+        /kitchen.production.reverse/.test(storeIssue) &&
+        /Store Issue Audit/.test(storeIssue) &&
+        /mutate\(\{ id: draftId, reason \}\)/.test(storeIssue),
+    );
     gate('C7-analytics-h1', /Kitchen Food Cost/.test(analytics));
     gate('C8-analytics-no-ambiguous', !/Kitchen Analytics/.test(analytics));
     gate('C9-recipes-link-hub', recipes.includes('to="/kitchen"') && recipes.includes('Kitchen Production'));
@@ -138,6 +191,10 @@ describe('PROOF — kitchen nav integrity & label consistency', () => {
     gate('D4-runtime-kds-family', classifyTaskFamily('/restaurant/kitchen') === 'restaurant');
     gate('D5-runtime-hub-family', classifyTaskFamily('/kitchen') === 'restaurant');
     gate('D6-runtime-batch-family', classifyTaskFamily('/kitchen/waste') === 'restaurant');
+    gate(
+      'D6b-runtime-store-issue-family',
+      classifyTaskFamily('/kitchen/store-issues') === 'restaurant',
+    );
     gate(
       'D7-layout-prod-requires-restaurant',
       layout.includes("name: 'Kitchen Production'") && layout.includes('requiresRestaurant: true'),
@@ -157,6 +214,16 @@ describe('PROOF — kitchen nav integrity & label consistency', () => {
         'SamplePOS.Server/src/modules/kitchen-production/kitchenProductionSettings.ts',
       ).includes('isRestaurantModeEnabled'),
     );
+    const inventoryNav = readRepo('samplepos.client/src/components/inventory/inventoryNavConfig.ts');
+    const storeIssueNav = inventoryNav.slice(
+      inventoryNav.indexOf("id: 'store-issue'"),
+      inventoryNav.indexOf("id: 'store-issue'") + 550,
+    );
+    gate(
+      'D10-inventory-store-issue-restaurant-only',
+      storeIssueNav.includes('restaurantOnly: true'),
+      storeIssueNav.slice(0, 180),
+    );
   });
 
   it('E — integrity: production hub is single primary SSOT entry', () => {
@@ -167,9 +234,13 @@ describe('PROOF — kitchen nav integrity & label consistency', () => {
     gate(
       'E4-no-draft-routes-in-main-menu',
       !nav.some((n) =>
-        ['/kitchen/production', '/kitchen/buffet-sessions', '/kitchen/waste', '/kitchen/analytics'].includes(
-          n.path,
-        ),
+        [
+          '/kitchen/production',
+          '/kitchen/buffet-sessions',
+          '/kitchen/waste',
+          '/kitchen/store-issues',
+          '/kitchen/analytics',
+        ].includes(n.path),
       ),
     );
   });

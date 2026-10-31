@@ -97,6 +97,7 @@ const InventoryValuationReportPage = lazyWithRetry(() => import('./pages/reports
 const InventoryReconciliationReportPage = lazyWithRetry(() => import('./pages/reports/inventory/InventoryReconciliationReportPage'));
 const InventoryAnalyticsReportPage = lazyWithRetry(() => import('./pages/reports/inventory/InventoryAnalyticsReportPage'));
 const InventoryMarginsReportPage = lazyWithRetry(() => import('./pages/reports/inventory/InventoryMarginsReportPage'));
+const StoreIssueAuditReportPage = lazyWithRetry(() => import('./pages/reports/inventory/StoreIssueAuditReportPage'));
 const CategoryIntelligencePage = lazyWithRetry(() => import('./pages/reports/CategoryIntelligencePage'));
 const AdminDataManagementPage = lazyWithRetry(() => import('./pages/AdminDataManagementPage'));
 const InventoryCommandCenterPage = lazyWithRetry(() => import('./pages/inventory/InventoryCommandCenterPage'));
@@ -163,6 +164,7 @@ const KitchenBuffetSessionsPage = lazyWithRetry(
   () => import('./pages/kitchen/KitchenBuffetSessionsPage'),
 );
 const KitchenWastePage = lazyWithRetry(() => import('./pages/kitchen/KitchenWastePage'));
+const KitchenStoreIssuePage = lazyWithRetry(() => import('./pages/kitchen/KitchenStoreIssuePage'));
 const KitchenAnalyticsPage = lazyWithRetry(() => import('./pages/kitchen/KitchenAnalyticsPage'));
 const RestaurantOrderTagsPage = lazyWithRetry(
   () => import('./pages/restaurant/RestaurantOrderTagsPage'),
@@ -591,6 +593,25 @@ function App() {
                         requiredFeature="pos"
                       >
                         <KitchenWastePage />
+                      </ProtectedRoute>
+                    }
+                  />
+
+                  <Route
+                    path="/kitchen/store-issues"
+                    element={
+                      <ProtectedRoute
+                        requiredPermissions={[
+                          'kitchen.production.read',
+                          'kitchen.production.create',
+                          'kitchen.production.post',
+                          'kitchen.production.reverse',
+                          'inventory.adjust',
+                          'inventory.read',
+                        ]}
+                        requiredFeature="pos"
+                      >
+                        <KitchenStoreIssuePage />
                       </ProtectedRoute>
                     }
                   />
@@ -1468,6 +1489,14 @@ function App() {
                     element={
                       <ProtectedRoute requiredPermissions={['reports.inventory_view', 'reports.read']} requiredFeature="reports">
                         <InventoryMarginsReportPage />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/reports/inventory/store-issues"
+                    element={
+                      <ProtectedRoute requiredPermissions={['reports.inventory_view', 'reports.read']} requiredFeature="reports">
+                        <StoreIssueAuditReportPage />
                       </ProtectedRoute>
                     }
                   />

@@ -49,6 +49,7 @@ const SHELL_CONSUMERS = [
   'pages/reports/OrdersReportPage.tsx',
   'pages/accounting/AgedBalancePage.tsx',
   'pages/accounting/TrialBalancePage.tsx',
+  'pages/reports/inventory/StoreIssueAuditReportPage.tsx',
 ] as const;
 
 describe('PROOF: adaptive report SSOT integrity', () => {

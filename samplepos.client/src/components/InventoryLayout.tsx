@@ -32,6 +32,7 @@ import {
   groupInventoryMoreNav,
 
   filterInventoryNavByPermissions,
+  filterInventoryNavByTenantFlags,
 
   isInventoryMoreNavActive,
 
@@ -102,21 +103,27 @@ export default function InventoryLayout({ children }: InventoryLayoutProps) {
   const primaryTabs = useMemo(
     () =>
       filterInventoryNavByPermissions(
-        INVENTORY_PRIMARY_NAV.filter((tab) => !tab.multistoreOnly || isMultistoreEnabled),
+        filterInventoryNavByTenantFlags(INVENTORY_PRIMARY_NAV, {
+          isMultistoreEnabled,
+          restaurantEnabled: !!restaurantEnabled,
+        }),
         permissions,
         user?.role,
       ),
-    [isMultistoreEnabled, permissions, user?.role],
+    [isMultistoreEnabled, restaurantEnabled, permissions, user?.role],
   );
 
   const staticMoreTabs = useMemo(
     () =>
       filterInventoryNavByPermissions(
-        INVENTORY_MORE_NAV.filter((tab) => !tab.multistoreOnly || isMultistoreEnabled),
+        filterInventoryNavByTenantFlags(INVENTORY_MORE_NAV, {
+          isMultistoreEnabled,
+          restaurantEnabled: !!restaurantEnabled,
+        }),
         permissions,
         user?.role,
       ),
-    [isMultistoreEnabled, permissions, user?.role],
+    [isMultistoreEnabled, restaurantEnabled, permissions, user?.role],
   );
 
   const activePrimaryIndex = useMemo(
