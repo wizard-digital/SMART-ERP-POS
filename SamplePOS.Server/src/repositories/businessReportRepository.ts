@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { pool as globalPool } from '../db/pool.js';
 import { toUtcRange, BUSINESS_TIMEZONE } from '../utils/dateRange.js';
 import { LEDGER_NET_ACTIVE_SQL } from '../utils/ledgerNetActive.js';
+import { PNL_GL_EXPENSE_REFERENCE_TYPES_SQL } from '@shared/reporting/index.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -253,7 +254,7 @@ export async function getCostAndStock(
     WHERE lt."Status" = 'POSTED'
       AND lt."ReferenceType" = ANY($3::text[])
       AND (
-        a."AccountCode" IN ('5000','5010','5110','5120','5130','5140','4110')
+        a."AccountCode" IN ('5000','5010','5110','5120','5130','5140','5150','4110')
       )
       AND (lt."ReferenceType" != 'SALE_COGS' OR s.status IS NULL OR s.status NOT IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED'))
       ${dateClause(1)}
@@ -289,7 +290,7 @@ export async function getExpensesByAccount(
       JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
       JOIN accounts a ON a."Id" = le."AccountId"
       WHERE ${LEDGER_NET_ACTIVE_SQL}
-        AND lt."ReferenceType" IN ('EXPENSE', 'EXPENSE_PAYMENT')
+        AND lt."ReferenceType" IN (${PNL_GL_EXPENSE_REFERENCE_TYPES_SQL})
         AND a."AccountType" = 'EXPENSE'
         AND le."DebitAmount" > 0
         ${dateClause(1)}
@@ -493,7 +494,7 @@ export async function getSummaryTotals(
     JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
     JOIN accounts a ON a."Id" = le."AccountId"
     WHERE ${LEDGER_NET_ACTIVE_SQL}
-      AND lt."ReferenceType" IN ('EXPENSE', 'EXPENSE_PAYMENT')
+      AND lt."ReferenceType" IN (${PNL_GL_EXPENSE_REFERENCE_TYPES_SQL})
       AND a."AccountType" = 'EXPENSE'
       AND le."DebitAmount" > 0
       ${dateClause(1)}

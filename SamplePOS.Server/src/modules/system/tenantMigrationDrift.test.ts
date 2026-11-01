@@ -101,8 +101,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     );
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–643 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue/gift SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(643);
+  it('CURRENT_SCHEMA_VERSION matches 621–644 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue/gift/bad-debt P&L SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(644);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -223,6 +223,10 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(MIGRATION_COLUMN_ANCHORS['643_sale_gift_foc.sql']?.sales).toEqual(
       expect.arrayContaining(['gift_reason', 'gift_amount']),
     );
+    const pnlBdSql = fs.readFileSync(path.join(sqlDir, '644_pnl_bad_debt_opex.sql'), 'utf8');
+    expect(pnlBdSql).toContain("WHEN at.account_code = '5210' THEN 'OPERATING_EXPENSES'");
+    expect(pnlBdSql).toContain("AND a.\"AccountCode\" <> '5210'");
+    expect(pnlBdSql).toContain('INSERT INTO schema_version (version) VALUES (644)');
     const comprehensiveTriggers = fs.readFileSync(
       path.join(sqlDir, 'comprehensive_data_triggers.sql'),
       'utf8',

@@ -51,7 +51,7 @@ describe('Store Issue to Expense architecture proof', () => {
 
   it('schema version bumped and AccountCodes.INTERNAL_ISSUE is 5150', () => {
     expect(readRepo('SamplePOS.Server/src/constants/schemaVersion.ts')).toMatch(
-      /CURRENT_SCHEMA_VERSION = 642/,
+      /CURRENT_SCHEMA_VERSION = 644/,
     );
     const uomSql = readRepo('shared/sql/640_store_issue_uom.sql');
     expect(uomSql).toMatch(/uom_id/);

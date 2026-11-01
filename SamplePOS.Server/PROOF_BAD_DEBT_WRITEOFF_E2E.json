@@ -1,0 +1,113 @@
+{
+  "feature": "BAD_DEBT_WRITEOFF_E2E",
+  "provenAt": "2026-11-01T06:12:29.404Z",
+  "verdict": "PASS",
+  "contract": "Settings PATCH (the operator toggle path) turns the flag on/off. Tax-only PATCH does not clobber it. Flag off blocks post. Write-off DR 5210 / CR 1200 via AccountingCore. Invoice residual, customer.balance, workqueue, AR aging, reports P&L 5210, and ERP fn_get_profit_loss 5210 agree. Reverse restores every surface.",
+  "invoice": {
+    "id": "a12f1602-5aa4-406d-8c2a-fe32ff6721f9",
+    "number": "INV-BD-MVXFNR2Y",
+    "total": 10000
+  },
+  "evidence": [
+    {
+      "name": "coa-5210-1200",
+      "ok": true,
+      "detail": {
+        "badDebtExpense": true,
+        "ar": true
+      }
+    },
+    {
+      "name": "flag-default-off",
+      "ok": true,
+      "detail": {
+        "enabled": false
+      }
+    },
+    {
+      "name": "workqueue-age-filter",
+      "ok": true,
+      "detail": {
+        "min30": 10000,
+        "min90": 0,
+        "invoice": "INV-BD-MVXFNR2Y"
+      }
+    },
+    {
+      "name": "flag-off-blocks-post",
+      "ok": true,
+      "detail": {
+        "blocked": true,
+        "statusCode": 403
+      }
+    },
+    {
+      "name": "settings-patch-on-and-tax-save-does-not-clobber",
+      "ok": true,
+      "detail": {
+        "patchedOn": true,
+        "afterTaxSave": true
+      }
+    },
+    {
+      "name": "partial-writeoff-surfaces-agree",
+      "ok": true,
+      "detail": {
+        "document": "BD-2026-0001",
+        "gl5210": 4000,
+        "gl1200": 4000,
+        "invoiceDue": 6000,
+        "customerBalance": 6000,
+        "workqueueDue": 6000,
+        "aging": 6000,
+        "reportsPnl5210": 4000,
+        "erpPnl5210": 4000,
+        "erpSection": "OPERATING_EXPENSES",
+        "businessReport5210": 4000
+      }
+    },
+    {
+      "name": "full-writeoff-clears-ar",
+      "ok": true,
+      "detail": {
+        "document": "BD-2026-0002",
+        "invoiceDue": 0,
+        "invoiceStatus": "PAID",
+        "customerBalance": 0,
+        "workqueueDue": 0,
+        "aging": 0,
+        "gl5210Net": 10000,
+        "reportsPnl5210": 10000,
+        "erpPnl5210": 10000
+      }
+    },
+    {
+      "name": "reverse-restores-all-surfaces",
+      "ok": true,
+      "detail": {
+        "invoiceDue": 10000,
+        "invoiceStatus": "UNPAID",
+        "customerBalance": 10000,
+        "workqueueDue": 10000,
+        "aging": 10000,
+        "gl5210Net": 0,
+        "gl1200NetCredit": 0,
+        "reportsPnl5210": 0,
+        "erpPnl5210": 0
+      }
+    },
+    {
+      "name": "settings-patch-off-blocks-post",
+      "ok": true,
+      "detail": {
+        "patchedOff": true,
+        "statusCode": 403
+      }
+    }
+  ],
+  "summary": {
+    "total": 9,
+    "passed": 9,
+    "failed": 0
+  }
+}

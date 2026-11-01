@@ -19,6 +19,7 @@ import {
 } from '@shared/domain/saleGiftFocSsot.js';
 import { classifyExpiryUrgency } from '../../../../shared/reports/expiringItemsSsot.js';
 import { LEDGER_NET_ACTIVE_SQL } from '../../utils/ledgerNetActive.js';
+import { PNL_GL_EXPENSE_REFERENCE_TYPES_SQL } from '@shared/reporting/index.js';
 import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
 import type {
   SalesReportRow,
@@ -1747,7 +1748,7 @@ export const reportsRepository = {
         JOIN ledger_transactions lt ON lt."Id" = le."TransactionId"
         JOIN accounts a ON a."Id" = le."AccountId"
         WHERE ${LEDGER_NET_ACTIVE_SQL}
-          AND lt."ReferenceType" IN ('EXPENSE', 'EXPENSE_PAYMENT')
+          AND lt."ReferenceType" IN (${PNL_GL_EXPENSE_REFERENCE_TYPES_SQL})
           AND a."AccountType" = 'EXPENSE'
           AND le."DebitAmount" > 0
           AND ($1::timestamptz IS NULL OR le."EntryDate" >= $1::timestamptz)

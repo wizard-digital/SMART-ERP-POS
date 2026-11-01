@@ -198,6 +198,10 @@ export const systemSettingsRepository = {
             setClauses.push(`kitchen_production_enabled = $${paramIndex++}`);
             values.push(updates.kitchenProductionEnabled);
         }
+        if (updates.badDebtWriteoffEnabled !== undefined) {
+            setClauses.push(`bad_debt_writeoff_enabled = $${paramIndex++}`);
+            values.push(updates.badDebtWriteoffEnabled);
+        }
         if (updates.lossQuarantineDocumentEnabled !== undefined) {
             setClauses.push(`loss_quarantine_document_enabled = $${paramIndex++}`);
             values.push(updates.lossQuarantineDocumentEnabled);

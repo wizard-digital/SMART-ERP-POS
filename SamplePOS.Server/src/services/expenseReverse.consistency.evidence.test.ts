@@ -29,10 +29,13 @@ describe('expense reverse — no mismatch SSOT', () => {
     const business = read('repositories/businessReportRepository.ts');
     const reportsExpense = reports.slice(reports.indexOf('Operating expenses from GL'));
     expect(reportsExpense).toContain('LEDGER_NET_ACTIVE_SQL');
-    expect(reportsExpense).toContain("lt.\"ReferenceType\" IN ('EXPENSE', 'EXPENSE_PAYMENT')");
+    expect(reportsExpense).toContain('PNL_GL_EXPENSE_REFERENCE_TYPES_SQL');
     const byAccount = business.slice(business.indexOf('getExpensesByAccount'));
     expect(byAccount).toContain('LEDGER_NET_ACTIVE_SQL');
-    expect(byAccount).toContain("lt.\"ReferenceType\" IN ('EXPENSE', 'EXPENSE_PAYMENT')");
+    expect(byAccount).toContain('PNL_GL_EXPENSE_REFERENCE_TYPES_SQL');
+    const ssot = read('shared/reporting/reportingInvariants.ts');
+    expect(ssot).toContain('AR_WRITEOFF');
+    expect(ssot).toContain('AR_WRITEOFF_REVERSAL');
     const expenseQuerySlice = business.slice(
       business.indexOf('const expenseQuery'),
       business.indexOf('const stockAdjQuery')

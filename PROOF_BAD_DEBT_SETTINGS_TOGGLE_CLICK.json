@@ -1,0 +1,43 @@
+{
+  "feature": "BAD_DEBT_SETTINGS_TOGGLE_CLICK",
+  "provenAt": "2026-11-01T06:12:33.557Z",
+  "verdict": "PASS",
+  "contract": "Clicking Enable Bad Debt Write-off PATCHes immediately. Save Tax Settings with invalid tax fields does not submit and cannot include the flag.",
+  "gates": [
+    {
+      "id": "SOURCE_TOGGLE_AFTER_TAX_SAVE",
+      "ok": true,
+      "detail": "taxForm=23310 save=33988 checkbox=41020"
+    },
+    {
+      "id": "SOURCE_INSTANT_PATCH",
+      "ok": true,
+      "detail": "onChange PATCHes only the flag"
+    },
+    {
+      "id": "CLICK_ON_PATCHES_IMMEDIATELY",
+      "ok": true,
+      "detail": "{\"patches\":[{\"badDebtWriteoffEnabled\":true}],\"submitted\":false}"
+    },
+    {
+      "id": "SAVE_TAX_BLOCKED_WHEN_NAME_EMPTY",
+      "ok": true,
+      "detail": "{\"patches\":[{\"badDebtWriteoffEnabled\":true}],\"submitted\":false,\"taxValid\":false}"
+    },
+    {
+      "id": "SAVE_TAX_DOES_NOT_APPEND_FLAG",
+      "ok": true,
+      "detail": "[{\"badDebtWriteoffEnabled\":true}]"
+    },
+    {
+      "id": "CLICK_OFF_PATCHES_FALSE",
+      "ok": true,
+      "detail": "[{\"badDebtWriteoffEnabled\":true},{\"badDebtWriteoffEnabled\":false}]"
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0
+  }
+}

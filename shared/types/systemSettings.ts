@@ -84,6 +84,9 @@ export interface SystemSettings {
     /** ADR-005 Kitchen Production Batch cook-to-stock (default false) */
     kitchenProductionEnabled: boolean;
 
+    /** ADR-006 Bad debt write-off (default false — tenants opt in after schema 550) */
+    badDebtWriteoffEnabled: boolean;
+
     /** ADR-004 Phase 2A — Loss & Quarantine disposal documents (default false) */
     lossQuarantineDocumentEnabled: boolean;
 
@@ -153,6 +156,7 @@ export interface SystemSettingsDbRow {
     restaurant_mode_enabled?: boolean;
     sales_targets_enabled?: boolean;
     kitchen_production_enabled?: boolean;
+    bad_debt_writeoff_enabled?: boolean;
     loss_quarantine_document_enabled?: boolean;
     transfer_policy_require_approval_all: boolean;
     transfer_policy_allow_direct: boolean;
@@ -209,6 +213,7 @@ export interface UpdateSystemSettingsDto {
     restaurantModeEnabled?: boolean;
     salesTargetsEnabled?: boolean;
     kitchenProductionEnabled?: boolean;
+    badDebtWriteoffEnabled?: boolean;
     lossQuarantineDocumentEnabled?: boolean;
     transferPolicyRequireApprovalAll?: boolean;
     transferPolicyAllowDirect?: boolean;
@@ -266,6 +271,7 @@ export function normalizeSystemSettings(dbRow: SystemSettingsDbRow): SystemSetti
         restaurantModeEnabled: dbRow.restaurant_mode_enabled ?? false,
         salesTargetsEnabled: dbRow.sales_targets_enabled ?? false,
         kitchenProductionEnabled: dbRow.kitchen_production_enabled ?? false,
+        badDebtWriteoffEnabled: dbRow.bad_debt_writeoff_enabled ?? false,
         lossQuarantineDocumentEnabled: dbRow.loss_quarantine_document_enabled ?? false,
         transferPolicyRequireApprovalAll: dbRow.transfer_policy_require_approval_all ?? true,
         transferPolicyAllowDirect: dbRow.transfer_policy_allow_direct ?? true,

@@ -498,9 +498,9 @@ async function main() {
     'utf8'
   );
   const versionAligned =
-    CURRENT_SCHEMA_VERSION === 642 &&
+    CURRENT_SCHEMA_VERSION === 644 &&
     versionFile.includes('SELECT 621') &&
-    /CURRENT_SCHEMA_VERSION = 642/.test(versionConst);
+    /CURRENT_SCHEMA_VERSION = 644/.test(versionConst);
 
   const ok =
     jestResult.ok &&

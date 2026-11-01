@@ -26,11 +26,16 @@ function readRepo(rel: string): string {
 }
 
 describe('Reporting cross-domain honesty (Phase 5D)', () => {
-  it('RP-INV-8: 5110/5120/5130/5210 hit P&L under 539 (5xxx → COGS section)', () => {
+  it('RP-INV-8: inventory 5110–5140 are COGS; 5210 Bad Debt is OpEx; none are revenue', () => {
     for (const code of DOMAIN_PNL_EXPENSE_ACCOUNTS) {
       expect(() => assertDomainExpenseHitsPnl(code)).not.toThrow();
-      expect(classifyFinancialPnlSection(code, 'EXPENSE')).toBe('COST_OF_GOODS_SOLD');
+      expect(classifyFinancialPnlSection(code, 'EXPENSE')).not.toBe('REVENUE');
     }
+    expect(classifyFinancialPnlSection('5110', 'EXPENSE')).toBe('COST_OF_GOODS_SOLD');
+    expect(classifyFinancialPnlSection('5120', 'EXPENSE')).toBe('COST_OF_GOODS_SOLD');
+    expect(classifyFinancialPnlSection('5130', 'EXPENSE')).toBe('COST_OF_GOODS_SOLD');
+    expect(classifyFinancialPnlSection('5140', 'EXPENSE')).toBe('COST_OF_GOODS_SOLD');
+    expect(classifyFinancialPnlSection('5210', 'EXPENSE')).toBe('OPERATING_EXPENSES');
   });
 
   it('RP-INV-9: bad debt uses 5210, never Sales Returns 4010', () => {

@@ -34,6 +34,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '641_store_issue_reversal.sql',
     '642_store_issue_reverse_governance.sql',
     '643_sale_gift_foc.sql',
+    '644_pnl_bad_debt_opex.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -528,6 +529,21 @@ export async function verifyMigrationPostcondition(
                  ) AS ok`,
             );
             return rows[0]?.ok === true;
+        }
+        case '644_pnl_bad_debt_opex.sql': {
+            const { rows } = await pool.query<{ def: string }>(
+                `SELECT pg_get_functiondef(p.oid) AS def
+                 FROM pg_proc p
+                 JOIN pg_namespace n ON n.oid = p.pronamespace
+                 WHERE n.nspname = 'public' AND p.proname = 'fn_get_profit_loss'
+                 LIMIT 1`,
+            );
+            const def = rows[0]?.def ?? '';
+            return (
+                def.includes("'5210'") &&
+                def.includes('OPERATING_EXPENSES') &&
+                /account_code = '5210'[\s\S]*OPERATING_EXPENSES/.test(def)
+            );
         }
         default:
             return true;

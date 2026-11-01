@@ -201,12 +201,9 @@ describe('PROOF — kitchen nav integrity & label consistency', () => {
     );
     gate(
       'D8-settings-kitchen-tied-to-restaurant',
-      /kitchenProductionEnabled[\s\S]*disabled=\{!formData\.restaurantModeEnabled\}|disabled=\{\!formData\.restaurantModeEnabled\}/.test(
+      /id="kitchenProductionEnabled"[\s\S]*disabled=\{isSaving \|\| !settings\.restaurantModeEnabled\}/.test(
         readRepo('samplepos.client/src/pages/settings/tabs/SystemSettingsTab.tsx'),
-      ) ||
-        readRepo('samplepos.client/src/pages/settings/tabs/SystemSettingsTab.tsx').includes(
-          'disabled={!formData.restaurantModeEnabled}',
-        ),
+      ),
     );
     gate(
       'D9-server-requires-restaurant-mode',

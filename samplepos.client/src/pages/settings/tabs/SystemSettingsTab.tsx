@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiResponse } from '../../../services/api';
@@ -85,6 +86,8 @@ interface SystemSettings {
     salesTargetsEnabled?: boolean;
     /** ADR-005 Kitchen Production cook-to-stock batches */
     kitchenProductionEnabled?: boolean;
+    /** ADR-006 Bad debt write-off (default off) */
+    badDebtWriteoffEnabled?: boolean;
 }
 
 async function fetchSettings(): Promise<SystemSettings> {
@@ -127,7 +130,10 @@ interface SettingsComponentProps {
 
 export default function SystemSettingsTab() {
     const queryClient = useQueryClient();
-    const [activeTab, setActiveTab] = useState('general');
+    const [searchParams] = useSearchParams();
+    const [activeTab, setActiveTab] = useState(
+        searchParams.get('section') === 'tax' ? 'tax' : 'general',
+    );
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState('');
 
@@ -176,6 +182,9 @@ export default function SystemSettingsTab() {
             }
             if (variables.kitchenProductionEnabled !== undefined) {
                 void queryClient.invalidateQueries({ queryKey: ['kitchen-production', 'enabled'] });
+            }
+            if (variables.badDebtWriteoffEnabled !== undefined) {
+                void queryClient.invalidateQueries({ queryKey: ['bad-debt'] });
             }
             // Immediately write transaction mode to localStorage so that:
             // 1. Same-tab POS page picks it up on next render (via cache read)
@@ -466,17 +475,31 @@ function TaxSettings({
         taxRates: settings.taxRates || [],
         vatOutputRequiresRegisteredCustomer:
             settings.vatOutputRequiresRegisteredCustomer ?? false,
-        treasuryDocumentEnabled: settings.treasuryDocumentEnabled ?? false,
-        restaurantModeEnabled: settings.restaurantModeEnabled ?? false,
-        salesTargetsEnabled: settings.salesTargetsEnabled ?? false,
-        kitchenProductionEnabled: settings.kitchenProductionEnabled ?? false,
     });
+    const [taxSaveError, setTaxSaveError] = useState<string | null>(null);
 
     const [newRate, setNewRate] = useState({ name: '', rate: 0, description: '' });
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        setTaxSaveError(null);
+        if (formData.taxEnabled) {
+            const rate = Number(formData.defaultTaxRate);
+            if (!String(formData.taxName || '').trim() || Number.isNaN(rate)) {
+                setTaxSaveError('Tax name and a numeric default rate are required when tax is enabled.');
+                return;
+            }
+        }
+        // Tax save must not send module flags — those persist immediately on their own toggles.
+        onSave({
+            taxEnabled: formData.taxEnabled,
+            taxName: formData.taxName,
+            taxNumber: formData.taxNumber,
+            defaultTaxRate: formData.defaultTaxRate,
+            taxInclusive: formData.taxInclusive,
+            taxRates: formData.taxRates,
+            vatOutputRequiresRegisteredCustomer: formData.vatOutputRequiresRegisteredCustomer,
+        });
     };
 
     const addTaxRate = () => {
@@ -497,7 +520,8 @@ function TaxSettings({
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-6" data-tax-settings-form="true">
             <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Tax Configuration</h3>
 
@@ -539,139 +563,6 @@ function TaxSettings({
                                 Walk-in and non-VAT-registered customers get 0% output VAT. VAT-registered
                                 customers use product / mapping / profile rates.
                             </p>
-                        </div>
-                    </div>
-
-                    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
-                        <div className="flex items-start">
-                            <input
-                                type="checkbox"
-                                id="treasuryDocumentEnabled"
-                                checked={formData.treasuryDocumentEnabled}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        treasuryDocumentEnabled: e.target.checked,
-                                    })
-                                }
-                                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <div className="ml-2">
-                                <label
-                                    htmlFor="treasuryDocumentEnabled"
-                                    className="block text-sm font-medium text-gray-900"
-                                >
-                                    Enable Treasury Documents
-                                </label>
-                                <p className="mt-0.5 text-xs text-gray-600">
-                                    Authorize cash and bank liquidity movements through treasury
-                                    documents. Existing cash and banking workflows stay available
-                                    until you switch over.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
-                        <div className="flex items-start">
-                            <input
-                                type="checkbox"
-                                id="restaurantModeEnabled"
-                                checked={formData.restaurantModeEnabled}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        restaurantModeEnabled: e.target.checked,
-                                        // Kitchen is restaurant-domain — auto-off when restaurant is off
-                                        kitchenProductionEnabled: e.target.checked
-                                            ? formData.kitchenProductionEnabled
-                                            : false,
-                                    })
-                                }
-                                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <div className="ml-2">
-                                <label
-                                    htmlFor="restaurantModeEnabled"
-                                    className="block text-sm font-medium text-gray-900"
-                                >
-                                    Enable Restaurant Module
-                                </label>
-                                <p className="mt-0.5 text-xs text-gray-600">
-                                    Tables, kitchen tickets (KOT), Kitchen Display, Kitchen Production,
-                                    and SambaPOS-style restaurant POS. Pure retail tenants leave this
-                                    off — no restaurant UI or kitchen modules.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
-                        <div className="flex items-start">
-                            <input
-                                type="checkbox"
-                                id="salesTargetsEnabled"
-                                checked={formData.salesTargetsEnabled}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        salesTargetsEnabled: e.target.checked,
-                                    })
-                                }
-                                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                data-sales-targets-enabled-toggle="true"
-                            />
-                            <div className="ml-2">
-                                <label
-                                    htmlFor="salesTargetsEnabled"
-                                    className="block text-sm font-medium text-gray-900"
-                                >
-                                    Enable Sales Targets
-                                </label>
-                                <p className="mt-0.5 text-xs text-gray-600">
-                                    Individual cashier revenue targets with Target / Achieved /
-                                    Remaining on Sales. Leave off if this tenant does not use sales
-                                    targets — nav, KPI strip, and APIs stay hidden.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
-                        <div className="flex items-start">
-                            <input
-                                type="checkbox"
-                                id="kitchenProductionEnabled"
-                                checked={
-                                    Boolean(formData.restaurantModeEnabled) &&
-                                    Boolean(formData.kitchenProductionEnabled)
-                                }
-                                disabled={!formData.restaurantModeEnabled}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        kitchenProductionEnabled: e.target.checked,
-                                    })
-                                }
-                                className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
-                            />
-                            <div className="ml-2">
-                                <label
-                                    htmlFor="kitchenProductionEnabled"
-                                    className={`block text-sm font-medium ${
-                                        formData.restaurantModeEnabled
-                                            ? 'text-gray-900'
-                                            : 'text-gray-400'
-                                    }`}
-                                >
-                                    Enable Kitchen Production
-                                </label>
-                                <p className="mt-0.5 text-xs text-gray-600">
-                                    Cook-to-stock prep batches under Restaurant mode (issue ingredients,
-                                    receive finished food). Requires Restaurant Module above. Does not
-                                    replace cook-to-order recipe explosion at payment.
-                                </p>
-                            </div>
                         </div>
                     </div>
 
@@ -811,6 +702,7 @@ function TaxSettings({
                 </div>
             )}
 
+            {taxSaveError && <p className="text-sm text-red-600">{taxSaveError}</p>}
             <div className="flex justify-end">
                 <button
                     type="submit"
@@ -821,6 +713,162 @@ function TaxSettings({
                 </button>
             </div>
         </form>
+
+        <div className="space-y-4" data-settings-optional-modules="true">
+            <div>
+                <h3 className="text-lg font-semibold text-gray-900">Optional modules</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                    Each switch saves immediately. Tax fields above still use Save Tax Settings.
+                </p>
+            </div>
+
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
+                <div className="flex items-start">
+                    <input
+                        type="checkbox"
+                        id="treasuryDocumentEnabled"
+                        checked={Boolean(settings.treasuryDocumentEnabled)}
+                        disabled={isSaving}
+                        onChange={(e) => onSave({ treasuryDocumentEnabled: e.target.checked })}
+                        className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <div className="ml-2">
+                        <label
+                            htmlFor="treasuryDocumentEnabled"
+                            className="block text-sm font-medium text-gray-900"
+                        >
+                            Enable Treasury Documents
+                        </label>
+                        <p className="mt-0.5 text-xs text-gray-600">
+                            Authorize cash and bank liquidity movements through treasury
+                            documents. Existing cash and banking workflows stay available
+                            until you switch over.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
+                <div className="flex items-start">
+                    <input
+                        type="checkbox"
+                        id="restaurantModeEnabled"
+                        checked={Boolean(settings.restaurantModeEnabled)}
+                        disabled={isSaving}
+                        onChange={(e) =>
+                            onSave({
+                                restaurantModeEnabled: e.target.checked,
+                                kitchenProductionEnabled: e.target.checked
+                                    ? Boolean(settings.kitchenProductionEnabled)
+                                    : false,
+                            })
+                        }
+                        className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <div className="ml-2">
+                        <label
+                            htmlFor="restaurantModeEnabled"
+                            className="block text-sm font-medium text-gray-900"
+                        >
+                            Enable Restaurant Module
+                        </label>
+                        <p className="mt-0.5 text-xs text-gray-600">
+                            Tables, kitchen tickets (KOT), Kitchen Display, Kitchen Production,
+                            and SambaPOS-style restaurant POS. Pure retail tenants leave this
+                            off — no restaurant UI or kitchen modules.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
+                <div className="flex items-start">
+                    <input
+                        type="checkbox"
+                        id="salesTargetsEnabled"
+                        checked={Boolean(settings.salesTargetsEnabled)}
+                        disabled={isSaving}
+                        onChange={(e) => onSave({ salesTargetsEnabled: e.target.checked })}
+                        className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                        data-sales-targets-enabled-toggle="true"
+                    />
+                    <div className="ml-2">
+                        <label
+                            htmlFor="salesTargetsEnabled"
+                            className="block text-sm font-medium text-gray-900"
+                        >
+                            Enable Sales Targets
+                        </label>
+                        <p className="mt-0.5 text-xs text-gray-600">
+                            Individual cashier revenue targets with Target / Achieved /
+                            Remaining on Sales. Leave off if this tenant does not use sales
+                            targets — nav, KPI strip, and APIs stay hidden.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
+                <div className="flex items-start">
+                    <input
+                        type="checkbox"
+                        id="kitchenProductionEnabled"
+                        checked={
+                            Boolean(settings.restaurantModeEnabled) &&
+                            Boolean(settings.kitchenProductionEnabled)
+                        }
+                        disabled={isSaving || !settings.restaurantModeEnabled}
+                        onChange={(e) => onSave({ kitchenProductionEnabled: e.target.checked })}
+                        className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                    />
+                    <div className="ml-2">
+                        <label
+                            htmlFor="kitchenProductionEnabled"
+                            className={`block text-sm font-medium ${
+                                settings.restaurantModeEnabled
+                                    ? 'text-gray-900'
+                                    : 'text-gray-400'
+                            }`}
+                        >
+                            Enable Kitchen Production
+                        </label>
+                        <p className="mt-0.5 text-xs text-gray-600">
+                            Cook-to-stock prep batches under Restaurant mode (issue ingredients,
+                            receive finished food). Requires Restaurant Module above. Does not
+                            replace cook-to-order recipe explosion at payment.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
+                <div className="flex items-start">
+                    <input
+                        type="checkbox"
+                        id="badDebtWriteoffEnabled"
+                        checked={Boolean(settings.badDebtWriteoffEnabled)}
+                        disabled={isSaving}
+                        onChange={(e) => onSave({ badDebtWriteoffEnabled: e.target.checked })}
+                        className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                        data-bad-debt-writeoff-enabled-toggle="true"
+                    />
+                    <div className="ml-2">
+                        <label
+                            htmlFor="badDebtWriteoffEnabled"
+                            className="block text-sm font-medium text-gray-900"
+                        >
+                            Enable Bad Debt Write-off
+                        </label>
+                        <p className="mt-0.5 text-xs text-gray-600">
+                            Saves immediately. Uncollectible AR posts as Bad Debt Expense (5210)
+                            and clears AR (1200). Leave off until you are ready to write off
+                            debtors. Use Accounting → Bad Debt Write-off after enabling.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </div>
     );
 }
 

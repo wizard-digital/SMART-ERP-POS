@@ -13,9 +13,10 @@ export type PlAccount = {
 
 export type PlSection = 'REVENUE' | 'COST_OF_GOODS_SOLD' | 'OPERATING_EXPENSES';
 
-/** Same precedence as fn_get_profit_loss after 539 */
+/** Same precedence as fn_get_profit_loss after 644 (5210 is OpEx, not COGS). */
 export function classifySection(code: string, type: string): PlSection {
   if (code.startsWith('4') || type === 'REVENUE') return 'REVENUE';
+  if (code === '5210') return 'OPERATING_EXPENSES';
   if (code.startsWith('5')) return 'COST_OF_GOODS_SOLD';
   return 'OPERATING_EXPENSES';
 }
@@ -30,8 +31,9 @@ export function isOpexBroken(code: string, type: string): boolean {
   return code.startsWith('6') || type === 'EXPENSE';
 }
 
-/** Fixed 539 OpEx predicate */
+/** Fixed 644 OpEx predicate (5210 is OpEx; other 5xxx stay COGS). */
 export function isOpexFixed(code: string, type: string): boolean {
+  if (code === '5210') return true;
   if (code.startsWith('4') || code.startsWith('5')) return false;
   return code.startsWith('6') || code.startsWith('7') || type === 'EXPENSE';
 }
@@ -47,7 +49,7 @@ export function summarize(
     if (a.code.startsWith('4') || a.type === 'REVENUE') {
       revenue += a.credit - a.debit;
     }
-    if (a.code.startsWith('5')) {
+    if (a.code.startsWith('5') && a.code !== '5210') {
       cogs += a.debit - a.credit;
     }
     if (opexPred(a.code, a.type)) {
@@ -101,6 +103,12 @@ describe('P&L SSOT classification (migration 539)', () => {
     expect(classifySection('5000', 'EXPENSE')).toBe('COST_OF_GOODS_SOLD');
     expect(classifySection('6000', 'EXPENSE')).toBe('OPERATING_EXPENSES');
     expect(classifySection('4000', 'REVENUE')).toBe('REVENUE');
+  });
+
+  it('classifies 5210 Bad Debt as OpEx so ERP P&L matches reports P&L', () => {
+    expect(classifySection('5210', 'EXPENSE')).toBe('OPERATING_EXPENSES');
+    expect(isOpexFixed('5210', 'EXPENSE')).toBe(true);
+    expect(isOpexFixed('5000', 'EXPENSE')).toBe(false);
   });
 
   it('reproduces the broken Net Profit / margin symptom (pre-fix OpEx + wrong UI field)', () => {

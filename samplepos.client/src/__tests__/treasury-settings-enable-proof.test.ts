@@ -13,19 +13,20 @@ function readSrc(relativePath: string): string {
 }
 
 describe('Treasury Settings → Tax enable toggle — static proof', () => {
-  it('TaxSettings form includes treasuryDocumentEnabled and saves it with tax settings', () => {
+  it('Tax tab includes treasuryDocumentEnabled and saves it immediately (not via Save Tax Settings)', () => {
     const src = readSrc('pages/settings/tabs/SystemSettingsTab.tsx');
     expect(src).toContain('function TaxSettings');
     expect(src).toContain('id="treasuryDocumentEnabled"');
     expect(src).toContain('Enable Treasury Documents');
     expect(src).toContain('treasuryDocumentEnabled?: boolean');
-    expect(src).toMatch(/treasuryDocumentEnabled:\s*settings\.treasuryDocumentEnabled\s*\?\?\s*false/);
+    expect(src).toContain('onSave({ treasuryDocumentEnabled: e.target.checked })');
 
     const taxStart = src.indexOf('function TaxSettings');
-    const saveTax = src.indexOf("Save Tax Settings", taxStart);
+    const saveTax = src.indexOf('Save Tax Settings', taxStart);
     const checkbox = src.indexOf('id="treasuryDocumentEnabled"', taxStart);
-    expect(checkbox).toBeGreaterThan(taxStart);
-    expect(checkbox).toBeLessThan(saveTax);
+    expect(checkbox).toBeGreaterThan(saveTax);
+    expect(src.slice(taxStart, saveTax)).toContain('data-tax-settings-form');
+    expect(src.slice(taxStart, saveTax)).not.toContain('id="treasuryDocumentEnabled"');
   });
 
   it('Disabled notice points operators to Settings → Tax', () => {

@@ -34,8 +34,8 @@ export function isLegacyPeriodBalancePnl(sourceText: string): boolean {
 }
 
 /**
- * Migration 539 section classification (same precedence as fn_get_profit_loss).
- * 4xxx/REVENUE → REVENUE; 5xxx → COGS; else OpEx.
+ * P&L section (same precedence as fn_get_profit_loss after 644).
+ * 4xxx/REVENUE → REVENUE; 5210 Bad Debt → OpEx; other 5xxx → COGS; else OpEx.
  */
 export function classifyFinancialPnlSection(
   accountCode: string,
@@ -44,12 +44,17 @@ export function classifyFinancialPnlSection(
   const code = (accountCode ?? '').trim();
   const type = (accountType ?? '').trim().toUpperCase();
   if (code.startsWith('4') || type === 'REVENUE') return 'REVENUE';
+  if (code === '5210') return 'OPERATING_EXPENSES';
   if (code.startsWith('5')) return 'COST_OF_GOODS_SOLD';
   return 'OPERATING_EXPENSES';
 }
 
-/** RP-INV-8: inventory loss + bad debt expense accounts hit P&L (5xxx → COGS under 539). */
-export const DOMAIN_PNL_EXPENSE_ACCOUNTS = ['5110', '5120', '5130', '5210'] as const;
+/** RP-INV-8: inventory loss (COGS) + bad debt (OpEx) must still hit P&L, never revenue. */
+export const DOMAIN_PNL_EXPENSE_ACCOUNTS = ['5110', '5120', '5130', '5140', '5210'] as const;
+
+/** GL reference types that feed operating-expense lines on reports P&L / expenses-by-account. */
+export const PNL_GL_EXPENSE_REFERENCE_TYPES_SQL =
+  `'EXPENSE', 'EXPENSE_PAYMENT', 'AR_WRITEOFF', 'AR_WRITEOFF_REVERSAL'` as const;
 
 /** RP-INV-9: commercial CN contra-revenue — never the uncollectible recognition account. */
 export const SALES_RETURNS_ACCOUNT = '4010' as const;

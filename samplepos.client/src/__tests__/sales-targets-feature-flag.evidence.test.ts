@@ -38,8 +38,9 @@ describe('EVIDENCE — Sales Targets tenant feature flag', () => {
     gate(
       'SETTINGS_TOGGLE',
       settingsTab.includes('id="salesTargetsEnabled"') &&
-        settingsTab.includes('data-sales-targets-enabled-toggle'),
-      'System Settings has Enable Sales Targets checkbox',
+        settingsTab.includes('data-sales-targets-enabled-toggle') &&
+        settingsTab.includes('onSave({ salesTargetsEnabled: e.target.checked })'),
+      'System Settings has Enable Sales Targets checkbox that saves immediately',
     );
     gate(
       'SETTINGS_INVALIDATE',

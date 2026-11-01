@@ -1,0 +1,52 @@
+{
+  "feature": "BAD_DEBT_SETTINGS_TOGGLE",
+  "provenAt": "2026-11-01T06:12:32.359Z",
+  "contract": "Flag default off. Enable Bad Debt Write-off is outside Save Tax Settings and PATCHes immediately. Reports P&L includes AR_WRITEOFF.",
+  "gates": [
+    {
+      "id": "SQL_DEFAULT_OFF",
+      "ok": true,
+      "detail": "migration default FALSE"
+    },
+    {
+      "id": "TYPES_AND_PATCH",
+      "ok": true,
+      "detail": "DTO + repository PATCH column"
+    },
+    {
+      "id": "TOGGLE_INSTANT_SAVE",
+      "ok": true,
+      "detail": "checkbox saves immediately, not via tax form"
+    },
+    {
+      "id": "NOT_INSIDE_TAX_SAVE",
+      "ok": true,
+      "detail": "Save Tax Settings payload cannot include the flag"
+    },
+    {
+      "id": "INVALIDATE_QUERY",
+      "ok": true,
+      "detail": "saving flag invalidates bad-debt queries"
+    },
+    {
+      "id": "BANNER_DEEP_LINK",
+      "ok": true,
+      "detail": "disabled banner opens System → Tax"
+    },
+    {
+      "id": "WORKQUEUE_AGE_HINT",
+      "ok": true,
+      "detail": "empty workqueue explains the 30-day filter"
+    },
+    {
+      "id": "REPORTS_PNL_AR_WRITEOFF",
+      "ok": true,
+      "detail": "reports + ERP P&L put 5210 write-offs in operating expenses"
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0
+  }
+}

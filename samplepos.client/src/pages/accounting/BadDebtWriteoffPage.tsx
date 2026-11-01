@@ -197,9 +197,16 @@ export default function BadDebtWriteoffPage() {
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <ShieldAlert className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
-            Bad debt write-offs are disabled. Enable{' '}
-            <code className="text-xs">bad_debt_writeoff_enabled</code> in system settings (after
-            schema 551).
+            Bad debt write-offs are disabled. Turn on{' '}
+            <strong>Enable Bad Debt Write-off</strong> in{' '}
+            <Link
+              to="/settings?tab=system&section=tax"
+              className="text-amber-900 underline font-medium"
+            >
+              Settings → System → Tax
+            </Link>{' '}
+            (Admin). The switch saves immediately — you do not need Save Tax Settings. Then
+            return here to post. The workqueue below still lists overdue open invoices.
           </div>
         </div>
       )}
@@ -294,7 +301,11 @@ export default function BadDebtWriteoffPage() {
             <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
           </div>
         ) : lines.length === 0 ? (
-          <p className="p-6 text-sm text-gray-500">No open invoices match the age filter.</p>
+          <p className="p-6 text-sm text-gray-500">
+            No open invoices overdue at least {minAgeDays} day{minAgeDays === 1 ? '' : 's'}.
+            Lower Min overdue days (0 = any unpaid AR) to include newer invoices. Credit notes
+            and paid invoices never appear here.
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
