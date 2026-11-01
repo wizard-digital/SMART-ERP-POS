@@ -198,6 +198,15 @@ export const creditDebitNoteService = {
         input: CreateCustomerDebitNote,
     ): Promise<{ note: CreditDebitNoteRecord; lineItems: NoteLineItemRecord[] }> {
 
+        try {
+            assertCreditNoteReasonNotBadDebt(input.reason);
+        } catch (err) {
+            if (err instanceof BadDebtInvariantError) {
+                throw new Error(err.message);
+            }
+            throw err;
+        }
+
         return UnitOfWork.run(pool, async (client) => {
             const invoice = await creditDebitNoteRepository.getInvoiceById(client, input.invoiceId);
             if (!invoice) throw new Error('Original invoice not found');

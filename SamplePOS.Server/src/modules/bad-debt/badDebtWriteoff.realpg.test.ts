@@ -35,6 +35,8 @@ let syncCustomerBalanceFromInvoices: typeof import('../../utils/customerBalanceS
 let getBusinessDate: typeof import('../../utils/dateRange.js').getBusinessDate;
 let systemSettingsService: typeof import('../system-settings/systemSettingsService.js').systemSettingsService;
 let getExpensesByAccount: typeof import('../../repositories/businessReportRepository.js').getExpensesByAccount;
+let getIncomeStatement: typeof import('../../repositories/accountingRepository.js').getIncomeStatement;
+let AgedBalanceService: typeof import('../../services/agedBalanceService.js').AgedBalanceService;
 
 const evidence: Array<{ name: string; ok: true; detail: Record<string, unknown> }> = [];
 
@@ -230,6 +232,8 @@ beforeAll(async () => {
   ({ getBusinessDate } = await import('../../utils/dateRange.js'));
   ({ systemSettingsService } = await import('../system-settings/systemSettingsService.js'));
   ({ getExpensesByAccount } = await import('../../repositories/businessReportRepository.js'));
+  ({ getIncomeStatement } = await import('../../repositories/accountingRepository.js'));
+  ({ AgedBalanceService } = await import('../../services/agedBalanceService.js'));
 
   const settingsCount = await pool.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM system_settings`);
   if (Number(settingsCount.rows[0]?.n ?? 0) === 0) {
@@ -373,6 +377,18 @@ describe('bad debt write-off E2E on real Postgres', () => {
     expect(erp5210Partial?.section).toBe('OPERATING_EXPENSES');
     expect(erpPartial.summary.totalOperatingExpenses).toBeGreaterThanOrEqual(PARTIAL_WRITEOFF);
 
+    const fsPartial = await getIncomeStatement(today, rangeEnd, pool);
+    expect(fsPartial.costOfGoodsSold.items.find((a) => a.accountCode === '5210')).toBeUndefined();
+    expect(fsPartial.operatingExpenses.items.find((a) => a.accountCode === '5210')?.amount).toBe(
+      PARTIAL_WRITEOFF,
+    );
+    expect(fsPartial.netIncome).toBe(erpPartial.summary.netIncome);
+
+    const agedPartial = await AgedBalanceService.agedReceivables(today, pool);
+    const agedEntityPartial = agedPartial.entities.find((e) => e.entityId === customerId);
+    expect(agedEntityPartial?.total).toBe(REMAINING);
+    expect(ageRowPartial?.totalOutstanding).toBe(agedEntityPartial?.total);
+
     const bizPartial = await getExpensesByAccount(
       { startDate: today, endDate: rangeEnd, includeExpenses: true },
       pool,
@@ -391,6 +407,10 @@ describe('bad debt write-off E2E on real Postgres', () => {
       reportsPnl5210: bdExpensePartial?.totalAmount,
       erpPnl5210: erp5210Partial?.displayAmount,
       erpSection: erp5210Partial?.section,
+      incomeStatement5210: fsPartial.operatingExpenses.items.find((a) => a.accountCode === '5210')
+        ?.amount,
+      incomeStatementNet: fsPartial.netIncome,
+      agedBalances: agedEntityPartial?.total,
       businessReport5210: PARTIAL_WRITEOFF,
     });
 

@@ -1,10 +1,10 @@
 {
-  "at": "2026-08-11T04:06:43.914Z",
+  "at": "2026-11-01T08:04:46.205Z",
   "feature": "AGED_BALANCE_INTEGRITY",
   "summary": {
-    "pass": 19,
+    "pass": 17,
     "fail": 0,
-    "total": 19,
+    "total": 17,
     "verdict": "PASS"
   },
   "rootCausesFixed": [
@@ -29,9 +29,9 @@
       "detail": "entities array"
     },
     {
-      "id": "AR_ANTI_DUPE",
+      "id": "AR_OPEN_ITEM_SSOT",
       "ok": true,
-      "detail": "credit sales skip when invoice exists"
+      "detail": "AR aging = invoice amount_due open-item SSOT"
     },
     {
       "id": "AP_UNION_BILLS",
@@ -54,24 +54,14 @@
       "detail": "no COALESCE(payment_method, '')"
     },
     {
-      "id": "PM_COMPARE_AS_TEXT",
+      "id": "INVOICE_STATUS_AS_TEXT",
       "ok": true,
-      "detail": "compares payment_method via ::text"
+      "detail": "invoice status via ::text"
     },
     {
-      "id": "SALE_STATUS_AS_TEXT",
+      "id": "UNALLOC_NETTING",
       "ok": true,
-      "detail": "sale status via ::text (avoids invalid enum labels in NOT IN)"
-    },
-    {
-      "id": "CREDIT_ONLY_NOT_INVENTED",
-      "ok": true,
-      "detail": "CREDIT only — ON_ACCOUNT/CHARGE are not payment_method enum labels"
-    },
-    {
-      "id": "NO_IN_LIST_ON_ENUM_PM",
-      "ok": true,
-      "detail": "no payment_method IN with invalid labels"
+      "detail": "unallocated receipts net the same way as reports aging"
     },
     {
       "id": "UI_NORMALIZE",

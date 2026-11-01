@@ -79,6 +79,13 @@ describe('EVIDENCE — Bad debt write-off flag + surfaces', () => {
       'empty workqueue explains the 30-day filter',
     );
     gate(
+      'POST_REQUIRES_MANAGE',
+      page.includes("useBackendPermission('accounting.manage')") &&
+        page.includes('canManage') &&
+        /canPost[\s\S]*canManage/.test(page),
+      'Post/Reverse require accounting.manage',
+    );
+    gate(
       'REPORTS_PNL_AR_WRITEOFF',
       pnl.includes('PNL_GL_EXPENSE_REFERENCE_TYPES_SQL') &&
         pnlInv.includes('AR_WRITEOFF') &&

@@ -134,7 +134,7 @@ export function assertArWriteoffPostingSource(source: string): void {
  * Operators must use Bad Debt Write-off (5210), not Sales Returns (4010).
  */
 export const CREDIT_NOTE_BAD_DEBT_REASON_PATTERN =
-  /\b(bad[\s_-]*debt|uncollectible|write[\s_-]*off|writeoff|bankrupt(cy)?)\b/i;
+  /\b(bad[\s_-]*debt|uncollectible|write[\s_-]*off|writeoff|bankrupt(cy)?|cannot\s+collect|could\s+not\s+collect|refused\s+to\s+pay|unrecoverable)\b/i;
 
 /** BD-INV-4: reject CN/DN reasons that attempt uncollectible recognition via 4010. */
 export function assertCreditNoteReasonNotBadDebt(reason: string | null | undefined): void {

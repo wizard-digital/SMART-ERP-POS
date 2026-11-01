@@ -5518,8 +5518,12 @@ export default function ReportsPage() {
             {/* ── Income Statement ── */}
             <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
               <div className="bg-gradient-to-r from-indigo-700 to-indigo-900 px-4 sm:px-6 py-4">
-                <h4 className="text-lg sm:text-xl font-bold text-white tracking-wide">Income Statement (P&L)</h4>
-                <p className="text-indigo-200 text-xs mt-1">Financial Report • {reportData.parameters?.startDate} to {reportData.parameters?.endDate}</p>
+                <h4 className="text-lg sm:text-xl font-bold text-white tracking-wide">Sales profit (billed)</h4>
+                <p className="text-indigo-200 text-xs mt-1">
+                  Operational billed revenue and sales cost — not GL close. Period close is Accounting P&L Reports.
+                  {' '}
+                  {reportData.parameters?.startDate} to {reportData.parameters?.endDate}
+                </p>
               </div>
 
               <div className="divide-y divide-gray-100">

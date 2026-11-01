@@ -1,0 +1,27 @@
+{
+  "at": "2026-08-10T07:09:51.370Z",
+  "feature": "AGED_BALANCE_INTEGRITY",
+  "summary": {
+    "pass": 3,
+    "fail": 0,
+    "total": 3,
+    "verdict": "PASS"
+  },
+  "gates": [
+    {
+      "id": "NORM_TOTAL",
+      "ok": true,
+      "detail": "total=150"
+    },
+    {
+      "id": "NORM_ENTITIES_LEN",
+      "ok": true,
+      "detail": "n=1"
+    },
+    {
+      "id": "NORM_NAME",
+      "ok": true,
+      "detail": "Alice"
+    }
+  ]
+}

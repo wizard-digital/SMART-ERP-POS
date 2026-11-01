@@ -1,8 +1,8 @@
 {
   "feature": "DIST_PAYMENT_AR_SSOT",
   "verdict": "PASS",
-  "passed": 13,
-  "total": 13,
+  "passed": 17,
+  "total": 17,
   "gates": [
     {
       "id": "CLEARING_USES_INVOICE_ADD_PAYMENT",
@@ -68,7 +68,27 @@
       "id": "CUSTOMER_LIST_INCLUDES_DIST",
       "ok": true,
       "detail": "customer invoice list uses open AR types"
+    },
+    {
+      "id": "ALLOCATION_USES_AR_OPEN_SSOT",
+      "ok": true,
+      "detail": "allocation engine uses AR open SSOT (includes DIST)"
+    },
+    {
+      "id": "CUSTOMER_OPEN_AR_USES_SSOT",
+      "ok": true,
+      "detail": "customer open AR SQL uses SSOT"
+    },
+    {
+      "id": "REPORTS_AGING_USES_AR_OPEN_SSOT",
+      "ok": true,
+      "detail": "aging / open-item reports use AR open SSOT"
+    },
+    {
+      "id": "AGED_BALANCES_USES_AR_OPEN_SSOT",
+      "ok": true,
+      "detail": "aged receivables uses open AR amount_due SSOT"
     }
   ],
-  "at": "2026-10-11T19:37:31.009Z"
+  "at": "2026-11-01T08:04:46.245Z"
 }

@@ -3,7 +3,7 @@
  *
  * ERP-grade P&L reporting (ADR-007 / RP-INV-1):
  *   ✔ Single Source of Truth — posted ledger via fn_get_profit_loss*
- *   ✔ Migration 539 classification (5xxx = COGS, not OpEx)
+ *   ✔ Migration 644 classification (5210 = OpEx; other 5xxx = COGS)
  *   ✔ No frontend calculations
  *   ✔ Totals reconcile via verifyProfitLossConsistency
  */

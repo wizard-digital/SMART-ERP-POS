@@ -1,11 +1,11 @@
 {
   "feature": "BAD_DEBT_WRITEOFF_E2E",
-  "provenAt": "2026-11-01T06:12:29.404Z",
+  "provenAt": "2026-11-01T08:04:52.603Z",
   "verdict": "PASS",
   "contract": "Settings PATCH (the operator toggle path) turns the flag on/off. Tax-only PATCH does not clobber it. Flag off blocks post. Write-off DR 5210 / CR 1200 via AccountingCore. Invoice residual, customer.balance, workqueue, AR aging, reports P&L 5210, and ERP fn_get_profit_loss 5210 agree. Reverse restores every surface.",
   "invoice": {
-    "id": "a12f1602-5aa4-406d-8c2a-fe32ff6721f9",
-    "number": "INV-BD-MVXFNR2Y",
+    "id": "5167f835-4543-4e75-904a-24354f7aac11",
+    "number": "INV-BD-MVXJOA21",
     "total": 10000
   },
   "evidence": [
@@ -30,7 +30,7 @@
       "detail": {
         "min30": 10000,
         "min90": 0,
-        "invoice": "INV-BD-MVXFNR2Y"
+        "invoice": "INV-BD-MVXJOA21"
       }
     },
     {
@@ -63,6 +63,9 @@
         "reportsPnl5210": 4000,
         "erpPnl5210": 4000,
         "erpSection": "OPERATING_EXPENSES",
+        "incomeStatement5210": 4000,
+        "incomeStatementNet": -4000,
+        "agedBalances": 6000,
         "businessReport5210": 4000
       }
     },

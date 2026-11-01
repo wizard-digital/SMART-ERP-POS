@@ -4,7 +4,9 @@
  * Enterprise-grade aging analysis (Odoo Accounting Reports pattern).
  *
  * Integrity rules:
- *   - AR: invoices SSOT when linked to a credit sale — never double-count sale + invoice
+ *   - AR: same open-item SSOT as reports aging / customer.balance
+ *     (amount_due, AR_OPEN_DOCUMENT_TYPE_IN_SQL). Uninvoiced credit sales are
+ *     a separate leak — do not mix them into invoice aging.
  *   - AP: supplier invoices UNION open POs without open bill — never JOIN cartesian
  *   - Response SSOT: summary.total === grandTotal; table rows = entities (not invoice details)
  */
@@ -12,6 +14,7 @@
 import type pg from 'pg';
 import { pool as globalPool } from '../db/pool.js';
 import { Money, Decimal } from '../utils/money.js';
+import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../modules/customer-payments/arReconciliationEngine.js';
 
 // =============================================================================
 // TYPES
@@ -92,7 +95,6 @@ export class AgedBalanceService {
   ): Promise<AgingReport> {
     const pool = dbPool || globalPool;
 
-    // 1) Customer invoices with outstanding balance (include those linked to sales)
     const invoiceResult = await pool.query(
       `SELECT
          COALESCE(c.id::text, i.customer_id::text, 'unknown') as entity_id,
@@ -101,45 +103,36 @@ export class AgedBalanceService {
          i.issue_date::date::text as invoice_date,
          COALESCE(i.due_date, i.issue_date)::date::text as due_date,
          i.total_amount as original_amount,
-         (i.total_amount - COALESCE(i.amount_paid, 0)) as outstanding_amount,
+         i.amount_due as outstanding_amount,
          ($1::date - COALESCE(i.due_date, i.issue_date)::date) as days_overdue
        FROM invoices i
        LEFT JOIN customers c ON c.id = i.customer_id
-       WHERE UPPER(COALESCE(i.status::text, '')) NOT IN ('CANCELLED', 'PAID', 'VOIDED', 'VOID')
-         AND (i.total_amount - COALESCE(i.amount_paid, 0)) > 0.01
+       WHERE COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
+         AND UPPER(COALESCE(i.status::text, '')) NOT IN ('CANCELLED', 'PAID', 'VOIDED', 'VOID', 'DRAFT')
+         AND i.amount_due > 0.009
          AND i.issue_date::date <= $1::date`,
       [asOfDate]
     );
 
-    // 2) Credit sales still open that do NOT have a non-cancelled invoice (avoid double count)
-    // payment_method is PG enum — never COALESCE(enum, '') (casts '' → 22P02).
-    // Compare via ::text so unknown method codes never invent invalid enum labels.
-    const salesResult = await pool.query(
+    const unallocResult = await pool.query(
       `SELECT
-         COALESCE(c.id::text, s.customer_id::text, 'unknown') as entity_id,
-         COALESCE(c.name, 'Walk-in / Unknown') as entity_name,
-         s.sale_number as invoice_number,
-         s.sale_date::date::text as invoice_date,
-         s.sale_date::date::text as due_date,
-         s.total_amount as original_amount,
-         (s.total_amount - COALESCE(s.amount_paid, 0)) as outstanding_amount,
-         ($1::date - s.sale_date::date) as days_overdue
-       FROM sales s
-       LEFT JOIN customers c ON c.id = s.customer_id
-       WHERE UPPER(COALESCE(s.payment_method::text, '')) = 'CREDIT'
-         AND UPPER(COALESCE(s.status::text, '')) NOT IN ('VOID', 'REFUNDED', 'VOIDED_BY_RETURN')
-         AND (s.total_amount - COALESCE(s.amount_paid, 0)) > 0.01
-         AND s.sale_date::date <= $1::date
-         AND NOT EXISTS (
-           SELECT 1 FROM invoices inv
-           WHERE inv.sale_id = s.id
-             AND UPPER(COALESCE(inv.status::text, '')) NOT IN ('CANCELLED', 'VOIDED', 'VOID')
-         )`,
+         p.customer_id::text AS customer_id,
+         COALESCE(SUM(p.unallocated_amount), 0) AS unallocated_credits
+       FROM ar_customer_payments p
+       WHERE p.status <> 'REVERSED'
+         AND p.reversal_of_payment_id IS NULL
+         AND p.unallocated_amount > 0.009
+         AND p.payment_date <= $1::date
+       GROUP BY p.customer_id`,
       [asOfDate]
     );
+    const unallocByCustomer = new Map<string, number>();
+    for (const row of unallocResult.rows) {
+      unallocByCustomer.set(String(row.customer_id), Number(row.unallocated_credits) || 0);
+    }
 
-    const allRows = [...invoiceResult.rows, ...salesResult.rows];
-    return this.buildReport('RECEIVABLE', asOfDate, allRows);
+    const report = this.buildReport('RECEIVABLE', asOfDate, invoiceResult.rows);
+    return this.applyUnallocatedCredits(report, unallocByCustomer);
   }
 
   /**
@@ -298,6 +291,53 @@ export class AgedBalanceService {
       },
       entities: Array.from(entityMap.values()).sort((a, b) => b.total - a.total),
       details,
+    };
+  }
+
+  /** Same as reports aging: unallocated AR receipts reduce Current, then total. */
+  private static applyUnallocatedCredits(
+    report: AgingReport,
+    unallocByCustomer: Map<string, number>,
+  ): AgingReport {
+    const entities: AgingEntitySummary[] = [];
+    for (const entity of report.entities) {
+      const credit = Money.parseDb(unallocByCustomer.get(entity.entityId) ?? 0);
+      if (credit.lte(0.009)) {
+        entities.push(entity);
+        continue;
+      }
+      const currentCut = Decimal.min(new Decimal(entity.current), credit);
+      const newCurrent = Money.subtract(entity.current, currentCut).toNumber();
+      const newTotal = Money.subtract(entity.total, credit);
+      if (newTotal.lte(0.009)) continue;
+      entities.push({
+        ...entity,
+        current: newCurrent,
+        total: newTotal.toNumber(),
+      });
+    }
+
+    const summary = entities.reduce(
+      (acc, e) => ({
+        current: Money.add(acc.current, e.current).toNumber(),
+        days1to30: Money.add(acc.days1to30, e.days1to30).toNumber(),
+        days31to60: Money.add(acc.days31to60, e.days31to60).toNumber(),
+        days61to90: Money.add(acc.days61to90, e.days61to90).toNumber(),
+        over90: Money.add(acc.over90, e.over90).toNumber(),
+        total: Money.add(acc.total, e.total).toNumber(),
+      }),
+      { current: 0, days1to30: 0, days31to60: 0, days61to90: 0, over90: 0, total: 0 },
+    );
+
+    return {
+      ...report,
+      summary: {
+        ...summary,
+        grandTotal: summary.total,
+        entityCount: entities.length,
+      },
+      entities: entities.sort((a, b) => b.total - a.total),
+      details: report.details.filter((d) => entities.some((e) => e.entityId === d.entityId)),
     };
   }
 

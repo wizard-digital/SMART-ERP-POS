@@ -24,6 +24,7 @@ import {
   useReverseBadDebtWriteoff,
 } from '../../hooks/useAccountingModules';
 import { getBusinessDate } from '../../utils/businessDate';
+import { useBackendPermission } from '../../hooks/useBackendPermission';
 
 type ReasonCode = 'UNCOLLECTIBLE' | 'DISPUTE_LOST' | 'BANKRUPTCY' | 'OTHER';
 
@@ -73,6 +74,7 @@ export default function BadDebtWriteoffPage() {
   const reverseMutation = useReverseBadDebtWriteoff();
 
   const featureOn = enabledQ.data?.enabled === true;
+  const canManage = useBackendPermission('accounting.manage');
   const workqueue = workqueueQ.data;
   const lines = (workqueue?.lines ?? []) as WorkqueueLine[];
   const docs = (docsQ.data ?? []) as WriteoffDoc[];
@@ -95,6 +97,7 @@ export default function BadDebtWriteoffPage() {
   const totalSelected = selectedLines.reduce((s, l) => s + l.writeoffAmount, 0);
   const canPost =
     featureOn
+    && canManage
     && selectedLines.length > 0
     && selectedCustomerIds.length === 1
     && !!writeoffDate
@@ -267,7 +270,12 @@ export default function BadDebtWriteoffPage() {
             disabled={!featureOn}
           />
         </div>
-        <Button type="button" onClick={() => void handlePost()} disabled={!canPost}>
+        <Button
+          type="button"
+          onClick={() => void handlePost()}
+          disabled={!canPost}
+          data-bad-debt-post
+        >
           {postMutation.isPending ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -394,15 +402,18 @@ export default function BadDebtWriteoffPage() {
                     <td className="px-3 py-2 text-right tabular-nums">{fmt(doc.totalAmount)}</td>
                     <td className="px-3 py-2 text-right">{doc.lines?.length ?? 0}</td>
                     <td className="px-3 py-2 text-right">
+                      {canManage && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={!featureOn || reverseMutation.isPending || !!doc.reversedByDocumentId}
                         onClick={() => void handleReverse(doc)}
+                        data-bad-debt-reverse
                       >
                         Reverse
                       </Button>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -3,6 +3,7 @@
  * No DB required.
  */
 import { describe, expect, it } from '@jest/globals';
+import { classifyFinancialPnlSection } from '@shared/reporting/reportingInvariants.js';
 
 export type PlAccount = {
   code: string;
@@ -15,10 +16,7 @@ export type PlSection = 'REVENUE' | 'COST_OF_GOODS_SOLD' | 'OPERATING_EXPENSES';
 
 /** Same precedence as fn_get_profit_loss after 644 (5210 is OpEx, not COGS). */
 export function classifySection(code: string, type: string): PlSection {
-  if (code.startsWith('4') || type === 'REVENUE') return 'REVENUE';
-  if (code === '5210') return 'OPERATING_EXPENSES';
-  if (code.startsWith('5')) return 'COST_OF_GOODS_SOLD';
-  return 'OPERATING_EXPENSES';
+  return classifyFinancialPnlSection(code, type);
 }
 
 export function displayAmount(code: string, type: string, debit: number, credit: number): number {

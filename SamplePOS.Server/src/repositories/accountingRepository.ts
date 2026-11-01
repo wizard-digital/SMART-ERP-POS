@@ -21,6 +21,7 @@ import Decimal from 'decimal.js';
 import logger from '../utils/logger.js';
 import { Money } from '../utils/money.js';
 import { LEDGER_NET_ACTIVE_SQL } from '../utils/ledgerNetActive.js';
+import { getProfitLossReportService } from '../services/profitLossReportService.js';
 
 // =============================================================================
 // TYPE DEFINITIONS
@@ -976,7 +977,8 @@ export async function getBalanceSheet(
 }
 
 /**
- * Generate Income Statement from actual revenue/expense account balances
+ * Income Statement SSOT = ERP P&L (fn_get_profit_loss* / migration 644).
+ * 5210 Bad Debt is OpEx. Do not read gl_period_balances or startsWith('5').
  */
 export async function getIncomeStatement(
   startDate: string,
@@ -1012,133 +1014,43 @@ export async function getIncomeStatement(
 }> {
   const pool = dbPool || globalPool;
   try {
-    // Parse date range to fiscal year/month for gl_period_balances lookup
-    const [startYearStr, startMonthStr] = startDate.split('-');
-    const [endYearStr, endMonthStr] = endDate.split('-');
-    const startYear = parseInt(startYearStr, 10);
-    const startMonth = parseInt(startMonthStr, 10);
-    const endYear = parseInt(endYearStr, 10);
-    const endMonth = parseInt(endMonthStr, 10);
-
-    // Get revenue and expense account balances for the period from gl_period_balances
-    const query = `
-      SELECT 
-        a."AccountCode" as "accountCode",
-        a."AccountName" as "accountName",
-        a."AccountType" as "accountType",
-        a."NormalBalance" as "normalBalance",
-        CASE 
-          WHEN a."NormalBalance" = 'CREDIT' 
-            THEN COALESCE(SUM(gpb.credit_total), 0) - COALESCE(SUM(gpb.debit_total), 0)
-          ELSE 
-            COALESCE(SUM(gpb.debit_total), 0) - COALESCE(SUM(gpb.credit_total), 0)
-        END as balance
-      FROM accounts a
-      LEFT JOIN gl_period_balances gpb 
-        ON gpb.account_id = a."Id"
-        AND (gpb.fiscal_year > $1 OR (gpb.fiscal_year = $1 AND gpb.fiscal_period >= $2))
-        AND (gpb.fiscal_year < $3 OR (gpb.fiscal_year = $3 AND gpb.fiscal_period <= $4))
-        AND gpb.fiscal_period > 0
-      WHERE a."IsActive" = true 
-        AND a."IsPostingAccount" = true
-        AND a."AccountType" IN ('REVENUE', 'EXPENSE')
-      GROUP BY a."AccountCode", a."AccountName", a."AccountType", a."NormalBalance"
-      HAVING COALESCE(SUM(gpb.debit_total), 0) != 0 
-          OR COALESCE(SUM(gpb.credit_total), 0) != 0
-      ORDER BY a."AccountCode"
-    `;
-
-    const result = await pool.query(query, [startYear, startMonth, endYear, endMonth]);
-
-    const revenue: { accountCode: string; accountName: string; amount: number }[] = [];
-    const cogs: { accountCode: string; accountName: string; amount: number }[] = [];
-    const operatingExpenses: { accountCode: string; accountName: string; amount: number }[] = [];
-    const otherExpenses: { accountCode: string; accountName: string; amount: number }[] = [];
-
-    for (const row of result.rows) {
-      const balance = new Decimal(row.balance || 0).toNumber();
-      const item = {
-        accountCode: row.accountCode as string,
-        accountName: row.accountName as string,
-        amount: balance,
-      };
-
-      if (row.accountType === 'REVENUE') {
-        revenue.push(item);
-      } else if (row.accountType === 'EXPENSE') {
-        // Categorize expenses (simplified logic based on account codes)
-        if (row.accountCode.startsWith('5')) {
-          cogs.push(item);
-        } else if (row.accountCode.startsWith('6')) {
-          operatingExpenses.push(item);
-        } else {
-          otherExpenses.push(item);
-        }
-      }
-    }
-
-    const totalRevenueD = revenue.reduce((sum, r) => sum.plus(r.amount), new Decimal(0));
-    const totalCOGSD = cogs.reduce((sum, c) => sum.plus(c.amount), new Decimal(0));
-    const totalOperatingExpensesD = operatingExpenses.reduce(
-      (sum, e) => sum.plus(e.amount),
-      new Decimal(0)
-    );
-    const totalOtherExpensesD = otherExpenses.reduce(
-      (sum, e) => sum.plus(e.amount),
-      new Decimal(0)
-    );
-
-    const grossProfitD = totalRevenueD.minus(totalCOGSD);
-    const operatingIncomeD = grossProfitD.minus(totalOperatingExpensesD);
-    const netIncomeD = operatingIncomeD.minus(totalOtherExpensesD);
-
-    // Convert to numbers for the return value
-    const totalRevenue = totalRevenueD.toNumber();
-    const totalCOGS = totalCOGSD.toNumber();
-    const totalOperatingExpenses = totalOperatingExpensesD.toNumber();
-    const totalOtherExpenses = totalOtherExpensesD.toNumber();
-    const grossProfit = grossProfitD.toNumber();
-    const operatingIncome = operatingIncomeD.toNumber();
-    const netIncome = netIncomeD.toNumber();
-
-    // Calculate margins
-    const grossProfitMargin = totalRevenueD.greaterThan(0)
-      ? grossProfitD.dividedBy(totalRevenueD).times(100).toDecimalPlaces(2).toNumber()
-      : 0;
-    const operatingMargin = totalRevenueD.greaterThan(0)
-      ? operatingIncomeD.dividedBy(totalRevenueD).times(100).toDecimalPlaces(2).toNumber()
-      : 0;
-    const netProfitMargin = totalRevenueD.greaterThan(0)
-      ? netIncomeD.dividedBy(totalRevenueD).times(100).toDecimalPlaces(2).toNumber()
-      : 0;
+    const report = await getProfitLossReportService(pool).getProfitLossReport(startDate, endDate);
+    const mapItems = (
+      rows: { accountCode: string; accountName: string; displayAmount: number }[],
+    ) =>
+      rows.map((r) => ({
+        accountCode: r.accountCode,
+        accountName: r.accountName,
+        amount: r.displayAmount,
+      }));
 
     return {
       companyName: 'SMART ERP',
       periodStart: startDate,
       periodEnd: endDate,
-      generatedAt: new Date().toISOString(),
+      generatedAt: report.generatedAt,
       revenue: {
-        items: revenue,
-        totalRevenue,
+        items: mapItems(report.revenueAccounts),
+        totalRevenue: report.summary.totalRevenue,
       },
       costOfGoodsSold: {
-        items: cogs,
-        totalCOGS,
+        items: mapItems(report.cogsAccounts),
+        totalCOGS: report.summary.totalCogs,
       },
-      grossProfit,
+      grossProfit: report.summary.grossProfit,
       operatingExpenses: {
-        items: operatingExpenses,
-        totalOperatingExpenses,
+        items: mapItems(report.expenseAccounts),
+        totalOperatingExpenses: report.summary.totalOperatingExpenses,
       },
-      operatingIncome,
+      operatingIncome: report.summary.operatingIncome,
       otherExpenses: {
-        items: otherExpenses,
-        totalOtherExpenses,
+        items: [],
+        totalOtherExpenses: 0,
       },
-      netIncome,
-      grossProfitMargin,
-      operatingMargin,
-      netProfitMargin,
+      netIncome: report.summary.netIncome,
+      grossProfitMargin: report.summary.grossMarginPercent,
+      operatingMargin: report.summary.operatingMarginPercent,
+      netProfitMargin: report.summary.netMarginPercent,
     };
   } catch (error) {
     logger.error('Error generating income statement', { error, startDate, endDate });

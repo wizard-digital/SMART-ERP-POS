@@ -34,6 +34,7 @@ import { isBadDebtWriteoffEnabled } from './badDebtSettings.js';
 import { ensureBadDebtExpenseAccount } from './ensureBadDebtAccount.js';
 import * as repo from './badDebtRepository.js';
 import { invoiceRepository } from '../invoices/invoiceRepository.js';
+import { AR_OPEN_DOCUMENT_TYPES } from '../customer-payments/arReconciliationEngine.js';
 import { syncCustomerBalanceFromInvoices } from '../../utils/customerBalanceSync.js';
 import { AccountingCore } from '../../services/accountingCore.js';
 import { AccountCodes } from '../../services/glEntryService.js';
@@ -159,8 +160,11 @@ export async function createAndPostWriteoff(
       if (inv.rows[0].customer_id !== input.customerId) {
         throw new ValidationError(`Invoice ${raw.invoiceId} does not belong to customer`);
       }
-      if (String(inv.rows[0].document_type).toUpperCase() !== 'INVOICE') {
-        throw new ValidationError('Write-offs may only allocate to customer INVOICE documents');
+      const docType = String(inv.rows[0].document_type || 'INVOICE').toUpperCase();
+      if (!(AR_OPEN_DOCUMENT_TYPES as readonly string[]).includes(docType)) {
+        throw new ValidationError(
+          'Write-offs may only allocate to open AR documents (INVOICE, OPENING_BALANCE, DIST_INVOICE)',
+        );
       }
 
       const settlement = await invoiceRepository.getInvoiceSettlement(client, raw.invoiceId);
@@ -268,7 +272,7 @@ async function postInternal(
     ]);
     assertForbiddenAccounts(
       lines,
-      ['4010', '5110', '5120', '5130', '1010', '6900'],
+      ['4010', '5110', '5120', '5130', '5140', '1010', '6900'],
       `AR write-off ${doc.documentNumber}`,
     );
   } catch (err) {

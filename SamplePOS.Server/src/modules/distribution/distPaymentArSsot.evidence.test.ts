@@ -199,6 +199,15 @@ describe('PROOF: dist payment AR SSOT', () => {
       reports.includes('AR_OPEN_DOCUMENT_TYPE_IN_SQL'),
       'aging / open-item reports use AR open SSOT',
     );
+    const aged = readFileSync(
+      path.join(serverRoot, 'src/services/agedBalanceService.ts'),
+      'utf8',
+    );
+    gate(
+      'AGED_BALANCES_USES_AR_OPEN_SSOT',
+      aged.includes('AR_OPEN_DOCUMENT_TYPE_IN_SQL') && aged.includes('amount_due as outstanding_amount'),
+      'aged receivables uses open AR amount_due SSOT',
+    );
   });
 
   it('writes proof artifact', () => {

@@ -5,6 +5,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { getBusinessYear } from '../../utils/dateRange.js';
 import type { BadDebtReasonCode } from '@shared/bad-debt/index.js';
+import { AR_OPEN_DOCUMENT_TYPE_IN_SQL } from '../customer-payments/arReconciliationEngine.js';
 
 type Db = Pool | PoolClient;
 
@@ -254,7 +255,7 @@ export async function listWorkqueue(
        END AS age_days
      FROM invoices i
      LEFT JOIN customers c ON c.id = i.customer_id
-     WHERE COALESCE(i.document_type, 'INVOICE') = 'INVOICE'
+     WHERE COALESCE(i.document_type, 'INVOICE') IN (${AR_OPEN_DOCUMENT_TYPE_IN_SQL})
        AND i.amount_due > 0.009
        AND UPPER(COALESCE(i.status::text, 'UNPAID')) IN ('UNPAID', 'PARTIALLY_PAID')
        AND (

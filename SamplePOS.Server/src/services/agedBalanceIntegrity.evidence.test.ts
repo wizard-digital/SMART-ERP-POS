@@ -30,7 +30,13 @@ describe('PROOF: Aged Balances integrity', () => {
     gate('HAS_TOTAL_ALIAS', /total:\s*grandTotal/.test(src) || src.includes('total: grandTotal'), 'summary.total set');
     gate('HAS_GRAND_TOTAL', src.includes('grandTotal'), 'grandTotal retained');
     gate('HAS_ENTITIES', src.includes('entities:'), 'entities array');
-    gate('AR_ANTI_DUPE', src.includes('NOT EXISTS') && src.includes('sale_id'), 'credit sales skip when invoice exists');
+    gate(
+      'AR_OPEN_ITEM_SSOT',
+      src.includes('AR_OPEN_DOCUMENT_TYPE_IN_SQL') &&
+        src.includes('i.amount_due as outstanding_amount') &&
+        !src.includes('FROM sales s'),
+      'AR aging = invoice amount_due open-item SSOT',
+    );
     gate('AP_UNION_BILLS', /agedPayables[\s\S]*supplier_invoices/.test(src), 'bills query');
     gate('AP_UNION_PO', /agedPayables[\s\S]*purchase_orders/.test(src), 'PO residual query');
     gate(
@@ -40,7 +46,7 @@ describe('PROOF: Aged Balances integrity', () => {
     );
   });
 
-  it('service SQL is enum-safe (payment_method / status ::text, no COALESCE(enum,\'\'))', () => {
+  it('service SQL is enum-safe (status ::text, no COALESCE(enum,\'\'))', () => {
     const src = readRepo('SamplePOS.Server/src/services/agedBalanceService.ts');
     gate(
       'NO_COALESCE_PM_EMPTY',
@@ -49,24 +55,14 @@ describe('PROOF: Aged Balances integrity', () => {
       'no COALESCE(payment_method, \'\')',
     );
     gate(
-      'PM_COMPARE_AS_TEXT',
-      /payment_method::text/.test(src),
-      'compares payment_method via ::text',
+      'INVOICE_STATUS_AS_TEXT',
+      /i\.status::text/.test(src),
+      'invoice status via ::text',
     );
     gate(
-      'SALE_STATUS_AS_TEXT',
-      /s\.status::text/.test(src),
-      'sale status via ::text (avoids invalid enum labels in NOT IN)',
-    );
-    gate(
-      'CREDIT_ONLY_NOT_INVENTED',
-      /=\s*'CREDIT'/.test(src) && !/ON_ACCOUNT/.test(src),
-      'CREDIT only — ON_ACCOUNT/CHARGE are not payment_method enum labels',
-    );
-    gate(
-      'NO_IN_LIST_ON_ENUM_PM',
-      !/payment_method(?!::text)[^\n]{0,40}IN\s*\([^)]*ON_ACCOUNT/.test(src),
-      'no payment_method IN with invalid labels',
+      'UNALLOC_NETTING',
+      src.includes('unallocated_amount') && src.includes('applyUnallocatedCredits'),
+      'unallocated receipts net the same way as reports aging',
     );
   });
 

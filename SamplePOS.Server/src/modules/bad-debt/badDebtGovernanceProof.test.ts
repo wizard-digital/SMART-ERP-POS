@@ -45,6 +45,12 @@ describe('Bad Debt governance proof (Phase 4D)', () => {
       'SamplePOS.Server/src/modules/credit-debit-notes/creditDebitNoteService.ts',
     );
     expect(src).toMatch(/assertCreditNoteReasonNotBadDebt/);
+    expect(src.match(/assertCreditNoteReasonNotBadDebt/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('BD-INV-4 rejects collection-failure CN reasons', () => {
+    expect(() => assertCreditNoteReasonNotBadDebt('cannot collect')).toThrow(BadDebtInvariantError);
+    expect(() => assertCreditNoteReasonNotBadDebt('refused to pay')).toThrow(BadDebtInvariantError);
   });
 
   it('BD-INV-5 loss disposal does not credit AR 1200', () => {

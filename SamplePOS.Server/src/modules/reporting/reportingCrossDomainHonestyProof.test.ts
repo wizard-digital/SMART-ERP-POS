@@ -80,6 +80,17 @@ describe('Reporting cross-domain honesty (Phase 5D)', () => {
     expect(disposal).not.toMatch(/AR_WRITEOFF/);
   });
 
+  it('RP-INV-1: Financial Statements income statement uses fn_get_profit_loss*', () => {
+    const repo = readRepo('SamplePOS.Server/src/repositories/accountingRepository.ts');
+    const fn = repo.slice(
+      repo.indexOf('export async function getIncomeStatement'),
+      repo.indexOf('export default'),
+    );
+    expect(fn).toMatch(/getProfitLossReportService/);
+    expect(fn).not.toMatch(/startsWith\('5'\)/);
+    expect(fn).not.toMatch(/gl_period_balances/);
+  });
+
   it('RP-INV-9 structural: bad debt posts 5210 not 4010', () => {
     const svc = readRepo('SamplePOS.Server/src/modules/bad-debt/badDebtService.ts');
     expect(svc).toMatch(/5210|BAD_DEBT_EXPENSE|assertBadDebtExpenseAccount/);

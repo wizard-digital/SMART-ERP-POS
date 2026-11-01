@@ -429,10 +429,10 @@ export const invoiceRepository = {
 
   /**
    * Settlement on an invoice: cash, posted credit/debit notes, write-offs,
- * and completed returns on the linked sale.
- * The sale header can be rewritten from CREDIT to CASH once the invoice reaches
- * zero, so the return is tied to the sale, not to the current payment method.
- */
+   * and completed returns on the linked sale.
+   * Returns stay tied to the sale, not to the current payment method. Full
+   * settlement (write-off / CN) updates amount_paid only — CREDIT stays CREDIT.
+   */
   async getInvoiceSettlement(
     pool: Pool | PoolClient,
     invoiceId: string,
@@ -545,7 +545,8 @@ export const invoiceRepository = {
   },
 
   /**
-   * Keep linked credit sale amount_paid in sync with invoice settlement (cash + credit notes).
+   * Keep linked sale amount_paid in sync with invoice settlement.
+   * Never rewrite CREDIT → CASH: write-off / CN settlement is not cash collected.
    */
   async syncLinkedSaleFromInvoice(pool: Pool | PoolClient, invoiceId: string): Promise<void> {
     const res = await pool.query(
@@ -564,22 +565,12 @@ export const invoiceRepository = {
     const totalDec = Money.parseDb(row.total_amount ?? 0);
     const paidDec = Money.parseDb(row.amount_paid ?? 0);
     const dueDec = Money.parseDb(row.amount_due ?? 0);
-    const isFullySettled = dueDec.lte(0) && paidDec.greaterThan(0);
-
-    const saleRes = await pool.query(
-      'SELECT payment_method FROM sales WHERE id = $1',
-      [row.sale_id],
-    );
-    const currentMethod = saleRes.rows[0]?.payment_method as string | undefined;
-    const newPaymentMethod =
-      isFullySettled && currentMethod === 'CREDIT' ? 'CASH' : currentMethod;
 
     await pool.query(
       `UPDATE sales
-       SET amount_paid = $1::numeric,
-           payment_method = COALESCE($2::payment_method, payment_method)
-       WHERE id = $3`,
-      [Money.toNumber(paidDec), newPaymentMethod ?? null, row.sale_id],
+       SET amount_paid = $1::numeric
+       WHERE id = $2`,
+      [Money.toNumber(paidDec), row.sale_id],
     );
 
     logger.info('Linked sale synced from invoice settlement', {
@@ -588,7 +579,6 @@ export const invoiceRepository = {
       amountPaid: Money.toNumber(paidDec),
       amountDue: Money.toNumber(dueDec),
       totalAmount: Money.toNumber(totalDec),
-      paymentMethod: newPaymentMethod ?? currentMethod,
     });
   },
 
