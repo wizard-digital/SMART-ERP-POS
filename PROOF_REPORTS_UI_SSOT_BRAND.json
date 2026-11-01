@@ -1,6 +1,6 @@
 {
   "feature": "REPORTS_UI_SSOT_BRAND_FREE",
-  "provenAt": "2026-08-23T12:13:51.867Z",
+  "provenAt": "2026-11-01T10:11:52.672Z",
   "scope": {
     "in": [
       "Competitor-brand token absence in report UI source",
@@ -19,7 +19,7 @@
     {
       "id": "BRAND_FREE_REPORT_UI",
       "ok": true,
-      "detail": "scanned 20 files; brand hits=0"
+      "detail": "scanned 21 files; brand hits=0"
     },
     {
       "id": "HAS_IS_SSOT_HELPER",
@@ -75,7 +75,7 @@
       "id": "DEDICATED_COVERED_BY_SSOT",
       "ok": true,
       "detail": "dedicated=24; missing=0",
-      "evidence": "SALES_COMPARISON,DAILY_CASH_FLOW,EXPIRING_ITEMS,VOID_SALES_REPORT,REFUND_REPORT,CUSTOMER_ACCOUNT_STATEMENT,SUPPLIER_STATEMENT,CUSTOMER_PAYMENTS,AR_LEDGER,AP_LEDGER,TOP_CUSTOMERS,CUSTOMER_PURCHASE_HISTORY,PAYMENT_REPORT,PROFIT_MARGIN_BY_PRODUCT,SALES_RETURNS_ALLOWANCES,PURCHASE_RETURNS_ALLOWANCES,NOTE_REGISTER,TAX_REVERSAL,CASH_REGISTER_SESSION_SUMMARY,CASH_REGISTER_SESSION_HISTORY,CASH_REGISTER_MOVEMENT_BREAKDOWN,SUPPLIER_PAYMENT_STATUS,SALES_BY_CASHIER,PROFIT_LOSS"
+      "evidence": "EXPIRING_ITEMS,SALES_COMPARISON,DAILY_CASH_FLOW,VOID_SALES_REPORT,REFUND_REPORT,CUSTOMER_ACCOUNT_STATEMENT,SUPPLIER_STATEMENT,CUSTOMER_PAYMENTS,AR_LEDGER,AP_LEDGER,TOP_CUSTOMERS,CUSTOMER_PURCHASE_HISTORY,PAYMENT_REPORT,PROFIT_MARGIN_BY_PRODUCT,SALES_RETURNS_ALLOWANCES,PURCHASE_RETURNS_ALLOWANCES,NOTE_REGISTER,TAX_REVERSAL,CASH_REGISTER_SESSION_SUMMARY,CASH_REGISTER_SESSION_HISTORY,CASH_REGISTER_MOVEMENT_BREAKDOWN,SUPPLIER_PAYMENT_STATUS,SALES_BY_CASHIER,PROFIT_LOSS"
     },
     {
       "id": "AGING_SHORT_CIRCUIT",
@@ -106,6 +106,16 @@
       "id": "COMBO_WIRED",
       "ok": true,
       "detail": "ReportsPage imports and renders ReportSupplierCombobox"
+    },
+    {
+      "id": "SUPPLIER_NARROWS_NULL",
+      "ok": true,
+      "detail": "supplier combobox skipped when selectedReport is null"
+    },
+    {
+      "id": "CUSTOMER_NARROWS_NULL",
+      "ok": true,
+      "detail": "customer combobox skipped when selectedReport is null"
     },
     {
       "id": "SUPPLIER_REQUIRED",
@@ -139,8 +149,8 @@
     }
   ],
   "summary": {
-    "total": 24,
-    "passed": 24,
+    "total": 26,
+    "passed": 26,
     "failed": 0,
     "verdict": "PASS"
   }

@@ -215,6 +215,16 @@ describe('EVIDENCE — Reports UI SSOT + brand-free', () => {
       'ReportsPage imports and renders ReportSupplierCombobox',
     );
     gate(
+      'SUPPLIER_NARROWS_NULL',
+      page.includes("supportsFilters.includes('supplier') && selectedReport &&"),
+      'supplier combobox skipped when selectedReport is null',
+    );
+    gate(
+      'CUSTOMER_NARROWS_NULL',
+      page.includes("supportsFilters.includes('customer') && selectedReport &&"),
+      'customer combobox skipped when selectedReport is null',
+    );
+    gate(
       'SUPPLIER_REQUIRED',
       page.includes("SUPPLIER_REQUIRED_REPORTS") &&
         page.includes("'SUPPLIER_STATEMENT'"),

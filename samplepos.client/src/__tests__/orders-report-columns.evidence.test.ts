@@ -101,6 +101,10 @@ describe('EVIDENCE — Orders report column chooser (never-fail / consistency)',
   it('routing: App + ReportsPage navigate to designer', () => {
     const app = read('samplepos.client/src/App.tsx');
     const reports = read('samplepos.client/src/pages/ReportsPage.tsx');
+    const generateBody = reports.slice(
+      reports.indexOf('const handleGenerateReport'),
+      reports.indexOf("api.post('/reports/generate'"),
+    );
     gate('APP_ROUTE', app.includes('/reports/orders') && app.includes('OrdersReportPage'), 'App route wired');
     gate(
       'NAV_ORDERS',
@@ -111,6 +115,18 @@ describe('EVIDENCE — Orders report column chooser (never-fail / consistency)',
       'NAV_CANCELLED',
       reports.includes("navigate('/reports/orders?mode=cancelled')"),
       'Cancelled opens designer cancelled mode',
+    );
+    gate(
+      'ORDERS_GENERATE_RETURNS',
+      /if \(selectedReport === 'ORDERS_REPORT'\) \{\s*navigate\('\/reports\/orders'\);\s*return;/.test(
+        generateBody,
+      ),
+      'Generate returns after navigating Orders Report (no unreachable compare)',
+    );
+    gate(
+      'NO_DEAD_ORDERS_GENERATE_BRANCH',
+      !/else if \(selectedReport === 'ORDERS_REPORT'\)/.test(generateBody),
+      'Generate does not set params for ORDERS_REPORT after navigate',
     );
   });
 

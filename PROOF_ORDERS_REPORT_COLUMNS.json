@@ -1,6 +1,6 @@
 {
   "feature": "ORDERS_REPORT_COLUMN_CHOOSER",
-  "provenAt": "2026-08-23T12:13:51.825Z",
+  "provenAt": "2026-11-01T10:11:51.897Z",
   "contract": "never-empty columns; screen/CSV/PDF same ids via shared/reports/ordersReportColumnsSsot",
   "gates": [
     {
@@ -149,6 +149,16 @@
       "detail": "Cancelled opens designer cancelled mode"
     },
     {
+      "id": "ORDERS_GENERATE_RETURNS",
+      "ok": true,
+      "detail": "Generate returns after navigating Orders Report (no unreachable compare)"
+    },
+    {
+      "id": "NO_DEAD_ORDERS_GENERATE_BRANCH",
+      "ok": true,
+      "detail": "Generate does not set params for ORDERS_REPORT after navigate"
+    },
+    {
       "id": "SCHEMA_COLUMNS",
       "ok": true,
       "detail": "query schema accepts columns"
@@ -180,8 +190,8 @@
     }
   ],
   "summary": {
-    "total": 35,
-    "passed": 35,
+    "total": 37,
+    "passed": 37,
     "failed": 0,
     "verdict": "PASS"
   }

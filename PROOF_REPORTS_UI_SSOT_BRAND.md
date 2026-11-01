@@ -1,8 +1,8 @@
 # PROOF — Reports UI SSOT + brand-free
 
 **Verdict:** PASS
-**Proven at:** 2026-08-23T12:13:51.867Z
-**Gates:** 24/24 passed
+**Proven at:** 2026-11-01T10:11:52.672Z
+**Gates:** 26/26 passed
 
 ## What this proves
 - Competitor-brand token absence in report UI source
@@ -19,7 +19,7 @@
 ## Gate results
 | ID | OK | Detail |
 |----|----|--------|
-| BRAND_FREE_REPORT_UI | PASS | scanned 20 files; brand hits=0 |
+| BRAND_FREE_REPORT_UI | PASS | scanned 21 files; brand hits=0 |
 | HAS_IS_SSOT_HELPER | PASS | isSsotReportType defined |
 | SUMMARY_GATED | PASS | generic summary gated by isSsotReportType |
 | TABLE_GATED | PASS | generic data table gated by isSsotReportType |
@@ -37,6 +37,8 @@
 | AGING_USES_COMPONENT | PASS | CustomerAgingReport is the SSOT UI |
 | HAS_SUPPLIER_COMBOBOX | PASS | combobox component exists |
 | COMBO_WIRED | PASS | ReportsPage imports and renders ReportSupplierCombobox |
+| SUPPLIER_NARROWS_NULL | PASS | supplier combobox skipped when selectedReport is null |
+| CUSTOMER_NARROWS_NULL | PASS | customer combobox skipped when selectedReport is null |
 | SUPPLIER_REQUIRED | PASS | supplier required for statement |
 | SUPPLIER_STATEMENT_UI | PASS | dedicated supplier statement renderer |
 | NO_PLAIN_SELECT_FOR_STATEMENT | PASS | no plain <select> path for supplier statement |

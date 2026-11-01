@@ -1,7 +1,7 @@
 # PROOF — Orders report column chooser (never-fail / consistency)
 
 **Verdict:** PASS
-**Proven at:** 2026-08-23T12:13:51.825Z
+**Proven at:** 2026-11-01T10:11:51.897Z
 
 **Contract:** never-empty columns; screen/CSV/PDF same ids via shared/reports/ordersReportColumnsSsot
 
@@ -34,6 +34,8 @@
 - PASS `APP_ROUTE`: App route wired
 - PASS `NAV_ORDERS`: Orders Report opens designer
 - PASS `NAV_CANCELLED`: Cancelled opens designer cancelled mode
+- PASS `ORDERS_GENERATE_RETURNS`: Generate returns after navigating Orders Report (no unreachable compare)
+- PASS `NO_DEAD_ORDERS_GENERATE_BRANCH`: Generate does not set params for ORDERS_REPORT after navigate
 - PASS `SCHEMA_COLUMNS`: query schema accepts columns
 - PASS `SERVER_SSOT_IMPORT`: controller imports resolvePdfColumnIds
 - PASS `BUILD_HELPER`: PDF builder fail-closed helper

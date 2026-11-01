@@ -1461,8 +1461,6 @@ export default function ReportsPage() {
         if (status) params.status = status;
       } else if (selectedReport === 'SUPPLIER_STATEMENT') {
         params.supplierId = supplierId;
-      } else if (selectedReport === 'ORDERS_REPORT') {
-        if (status) params.status = status;
       } else if (selectedReport === 'SALES_BY_CATEGORY') {
         if (categoryFilter) params.category = categoryFilter;
       } else if (selectedReport === 'SALES_BY_CASHIER') {
@@ -2078,7 +2076,7 @@ export default function ReportsPage() {
         )}
 
         {/* Supplier picker — searchable (Statement required; AP Ledger / others allow All) */}
-        {selectedReportOption?.supportsFilters.includes('supplier') && (
+        {selectedReportOption?.supportsFilters.includes('supplier') && selectedReport && (
           <ReportSupplierCombobox
             id="supplierId"
             value={supplierId}
