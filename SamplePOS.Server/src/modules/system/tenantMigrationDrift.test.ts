@@ -101,8 +101,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     );
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–644 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue/gift/bad-debt P&L SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(644);
+  it('CURRENT_SCHEMA_VERSION matches 621–645 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue/gift/bad-debt/invoice-sync P&L SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(645);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -227,6 +227,13 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(pnlBdSql).toContain("WHEN at.account_code = '5210' THEN 'OPERATING_EXPENSES'");
     expect(pnlBdSql).toContain("AND a.\"AccountCode\" <> '5210'");
     expect(pnlBdSql).toContain('INSERT INTO schema_version (version) VALUES (644)');
+    const invPaySyncSql = fs.readFileSync(
+      path.join(sqlDir, '645_drop_legacy_invoice_payment_sync.sql'),
+      'utf8',
+    );
+    expect(invPaySyncSql).toContain('DROP TRIGGER IF EXISTS trg_invoice_payment_sync');
+    expect(invPaySyncSql).toContain('DROP FUNCTION IF EXISTS fn_sync_invoice_payment() CASCADE');
+    expect(invPaySyncSql).toContain('INSERT INTO schema_version (version) VALUES (645)');
     const comprehensiveTriggers = fs.readFileSync(
       path.join(sqlDir, 'comprehensive_data_triggers.sql'),
       'utf8',

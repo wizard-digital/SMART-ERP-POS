@@ -107,29 +107,27 @@ type InvoicePaymentInput = {
   processedById?: string | null;
 };
 
+/**
+ * Keep linked sale amount_paid in sync with invoice settlement.
+ * Never rewrite payment_method (CREDIT stays CREDIT). Settlement tender
+ * (CASH / DEPOSIT / …) lives on invoice_payments — rewriting the sale header
+ * to DEPOSIT caused Postgres constraint failures and corrupted tender identity.
+ * SSOT matches invoiceRepository.syncLinkedSaleFromInvoice.
+ */
 async function syncLinkedSaleAfterInvoicePayment(
   handle: DbConnection,
   inv: { sale_id: string | null; invoice_number: string },
   fresh: { amount_paid: number | null; total_amount: number | null },
-  paymentMethod: string,
+  _paymentMethod: string,
   paymentAmount: number,
 ): Promise<void> {
   if (!inv.sale_id) return;
 
-  const isFullyPaid = new Decimal(fresh.amount_paid || 0).greaterThanOrEqualTo(
-    new Decimal(fresh.total_amount),
-  );
-  const saleResult = await handle.query('SELECT payment_method FROM sales WHERE id = $1', [inv.sale_id]);
-  const currentPaymentMethod = saleResult.rows[0]?.payment_method;
-  const newPaymentMethod =
-    isFullyPaid && currentPaymentMethod === 'CREDIT' ? paymentMethod : currentPaymentMethod;
-
   await handle.query(
     `UPDATE sales
-     SET amount_paid = $1,
-         payment_method = $2::payment_method
-     WHERE id = $3`,
-    [fresh.amount_paid, newPaymentMethod, inv.sale_id],
+     SET amount_paid = $1::numeric
+     WHERE id = $2`,
+    [fresh.amount_paid, inv.sale_id],
   );
 
   logger.info('Sale payment synchronized', {
@@ -137,9 +135,7 @@ async function syncLinkedSaleAfterInvoicePayment(
     invoiceNumber: inv.invoice_number,
     amountPaid: fresh.amount_paid,
     paymentAmount,
-    isFullyPaid,
-    paymentMethodUpdated: currentPaymentMethod !== newPaymentMethod,
-    newPaymentMethod,
+    paymentMethodUpdated: false,
   });
 }
 
@@ -208,13 +204,35 @@ async function addLegacyInvoicePayment(
         depositAvailable: depositBalance.availableBalance,
       });
 
+      // Resolve apply target: never write a broken sales FK. Orphan invoice.sale_id
+      // falls back to invoice-only apply (migration 600). Missing schema fails loud.
+      let saleIdForApply: string | null = inv.sale_id;
+      let invoiceIdForApply: string | undefined;
+      if (saleIdForApply) {
+        const saleExists = await client.query<{ ok: number }>(
+          'SELECT 1 AS ok FROM sales WHERE id = $1',
+          [saleIdForApply],
+        );
+        if (saleExists.rows.length === 0) {
+          logger.warn('Invoice sale_id missing on master — deposit apply uses invoice target', {
+            invoiceId,
+            invoiceNumber: inv.invoice_number,
+            orphanSaleId: saleIdForApply,
+          });
+          saleIdForApply = null;
+          invoiceIdForApply = invoiceId;
+        }
+      } else {
+        invoiceIdForApply = invoiceId;
+      }
+
       const depositApplicationResult = await depositsService.applyDepositsToSaleInTransaction(
         client,
         inv.customer_id,
-        inv.sale_id,
+        saleIdForApply,
         paymentExact.toFixed(2),
         input.processedById || undefined,
-        inv.sale_id ? undefined : { invoiceId },
+        invoiceIdForApply ? { invoiceId: invoiceIdForApply } : undefined,
       );
       assertAppliedEqualsRequested(depositApplicationResult.totalApplied, paymentExact);
 
@@ -226,7 +244,8 @@ async function addLegacyInvoicePayment(
         depositBalanceBefore: money2(depositBalance.availableBalance).toFixed(2),
         depositBalanceAfter: money2(depositBalance.availableBalance).minus(paymentExact).toFixed(2),
         applicationsCount: depositApplicationResult.applications.length,
-        saleId: inv.sale_id,
+        saleId: saleIdForApply,
+        invoiceTarget: invoiceIdForApply ?? null,
       });
 
       const paymentDateStrDeposit =
@@ -250,7 +269,7 @@ async function addLegacyInvoicePayment(
             applicationId: app.id,
             depositId: app.depositId,
             depositNumber: app.depositNumber || '',
-            saleId: inv.sale_id || invoiceId,
+            saleId: saleIdForApply || invoiceId,
             saleNumber: inv.invoice_number,
             applicationDate: paymentDateStrDeposit,
             amount: app.amountApplied,
@@ -279,38 +298,8 @@ async function addLegacyInvoicePayment(
     if (!fresh) {
       throw new Error('Failed to recalculate invoice after recording payment');
     }
-
-    if (inv.sale_id) {
-      const isFullyPaid = new Decimal(fresh.amount_paid || 0).greaterThanOrEqualTo(
-        new Decimal(fresh.total_amount),
-      );
-      const saleResult = await client.query('SELECT payment_method FROM sales WHERE id = $1', [
-        inv.sale_id,
-      ]);
-      const currentPaymentMethod = saleResult.rows[0]?.payment_method;
-      const newPaymentMethod =
-        isFullyPaid && currentPaymentMethod === 'CREDIT'
-          ? input.paymentMethod
-          : currentPaymentMethod;
-
-      await client.query(
-        `UPDATE sales
-         SET amount_paid = $1,
-             payment_method = $2::payment_method
-         WHERE id = $3`,
-        [fresh.amount_paid, newPaymentMethod, inv.sale_id],
-      );
-
-      logger.info('Sale payment synchronized', {
-        invoiceId,
-        saleId: inv.sale_id,
-        amountPaid: fresh.amount_paid,
-        paymentAmount: input.amount,
-        isFullyPaid,
-        paymentMethodUpdated: currentPaymentMethod !== newPaymentMethod,
-        newPaymentMethod,
-      });
-    }
+    // Linked sale amount_paid is synced inside recalcInvoice → syncLinkedSaleFromInvoice.
+    // Never rewrite sales.payment_method here (CREDIT / DEPOSIT identity SSOT).
 
     if (inv.customer_id) {
       await openItemEngine.syncCustomerBalanceFromOpenItems(

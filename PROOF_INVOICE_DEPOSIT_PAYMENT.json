@@ -1,8 +1,8 @@
 {
   "feature": "INVOICE_DEPOSIT_PAYMENT",
-  "generatedAt": "2026-08-12T14:11:31.343Z",
+  "generatedAt": "2026-11-02T20:01:20.543Z",
   "passed": true,
-  "gateCount": 44,
+  "gateCount": 50,
   "failedCount": 0,
   "gates": [
     {
@@ -121,6 +121,16 @@
       "detail": "balance check inside tx"
     },
     {
+      "id": "INV_ORPHAN_SALE_FALLBACK",
+      "ok": true,
+      "detail": "orphan sale_id falls back to invoice target"
+    },
+    {
+      "id": "INV_NEVER_REWRITE_CREDIT_TO_DEPOSIT",
+      "ok": true,
+      "detail": "never rewrite CREDIT → DEPOSIT/CASH on sale header"
+    },
+    {
       "id": "GL_SKIP_DEPOSIT_CASH",
       "ok": true,
       "detail": "DEPOSIT invoice payment does not post cash"
@@ -164,6 +174,26 @@
       "id": "MIG_600",
       "ok": true,
       "detail": "migration 600 present"
+    },
+    {
+      "id": "APPLY_SCHEMA_PREFLIGHT",
+      "ok": true,
+      "detail": "invoice-only apply asserts migration 600 schema before INSERT"
+    },
+    {
+      "id": "APPLY_SALE_FK_LOUD",
+      "ok": true,
+      "detail": "sale FK violation fails loud (not generic constraint)"
+    },
+    {
+      "id": "POSTCOND_600",
+      "ok": true,
+      "detail": "migration 600 postcondition heals tenant drift"
+    },
+    {
+      "id": "POSTCOND_597",
+      "ok": true,
+      "detail": "migration 597 postcondition keeps DEPOSIT_APPLICATION on 1200/2200"
     },
     {
       "id": "UI_HOOK",

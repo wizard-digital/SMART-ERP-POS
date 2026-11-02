@@ -92,6 +92,13 @@ describe('tenantSchemaIntegrity', () => {
     expect(FORBIDDEN_TRIGGERS).toContainEqual(['sale_items', 'trg_sync_sale_totals']);
   });
 
+  it('forbids trg_invoice_payment_sync (Bliss PascalCase InvoiceNumber)', () => {
+    expect(FORBIDDEN_TRIGGERS).toContainEqual([
+      'invoice_payments',
+      'trg_invoice_payment_sync',
+    ]);
+  });
+
   it('fails when trg_sync_sale_totals is still attached', async () => {
     const tables = Object.keys(CRITICAL_SCHEMA_COLUMNS);
     const columnsByTable: Record<string, string[]> = {};

@@ -173,6 +173,9 @@ export const MIGRATION_COLUMN_ANCHORS: Readonly<
     '532_transfer_line_negotiation.sql': {
         store_transfer_lines: ['quantity_approved', 'quantity_shortage', 'approval_comment'],
     },
+    '600_deposit_apply_invoice.sql': {
+        pos_deposit_applications: ['invoice_id'],
+    },
     '603_expense_employee_link.sql': {
         expenses: ['employee_id'],
     },

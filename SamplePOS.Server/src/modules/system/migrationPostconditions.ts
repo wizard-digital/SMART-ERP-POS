@@ -23,6 +23,8 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '618_product_category_name_unique_ssot.sql',
     '620_pos_session_policy_ssot.sql',
     '571_airtel_money_payment_method.sql',
+    '597_deposit_application_posting_source.sql',
+    '600_deposit_apply_invoice.sql',
     '625_momo_airtel_payment_ssot.sql',
     '626_bank_mirror_no_duplicate_ssot.sql',
     '627_tenant_banking_momo_column_ssot.sql',
@@ -35,6 +37,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '642_store_issue_reverse_governance.sql',
     '643_sale_gift_foc.sql',
     '644_pnl_bad_debt_opex.sql',
+    '645_drop_legacy_invoice_payment_sync.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -287,6 +290,36 @@ export async function verifyMigrationPostcondition(
                 ) AS ok`,
             );
             return enumOk[0]?.ok === true && rowOk[0]?.ok === true;
+        }
+        case '597_deposit_application_posting_source.sql': {
+            const [arOk, depOk] = await Promise.all([
+                accountAllowsSource(pool, '1200', 'DEPOSIT_APPLICATION'),
+                accountAllowsSource(pool, '2200', 'DEPOSIT_APPLICATION'),
+            ]);
+            return arOk && depOk;
+        }
+        case '600_deposit_apply_invoice.sql': {
+            const [hasInvoiceId, saleNullable, chkOk] = await Promise.all([
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                          AND table_name = 'pos_deposit_applications'
+                          AND column_name = 'invoice_id'
+                    ) AS ok`,
+                ),
+                columnIsNullable(pool, 'pos_deposit_applications', 'sale_id'),
+                pool.query<{ ok: boolean }>(
+                    `SELECT EXISTS (
+                        SELECT 1 FROM pg_constraint WHERE conname = 'chk_deposit_app_target'
+                    ) AS ok`,
+                ),
+            ]);
+            return (
+                hasInvoiceId.rows[0]?.ok === true &&
+                saleNullable &&
+                chkOk.rows[0]?.ok === true
+            );
         }
         case '625_momo_airtel_payment_ssot.sql': {
             const [enumOk, rowOk, acctOk, srcOk, bookOk] = await Promise.all([
@@ -544,6 +577,22 @@ export async function verifyMigrationPostcondition(
                 def.includes('OPERATING_EXPENSES') &&
                 /account_code = '5210'[\s\S]*OPERATING_EXPENSES/.test(def)
             );
+        }
+        case '645_drop_legacy_invoice_payment_sync.sql': {
+            const triggerGone = await legacyTriggersAbsentForMigration(
+                pool,
+                '645_drop_legacy_invoice_payment_sync.sql',
+            );
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT NOT EXISTS (
+                    SELECT 1
+                    FROM pg_proc p
+                    JOIN pg_namespace n ON n.oid = p.pronamespace
+                    WHERE n.nspname = 'public'
+                      AND p.proname = 'fn_sync_invoice_payment'
+                ) AS ok`,
+            );
+            return triggerGone && rows[0]?.ok === true;
         }
         default:
             return true;

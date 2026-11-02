@@ -1,0 +1,58 @@
+{
+  "proof": "LEGACY_INVOICE_PAYMENT_SYNC_REALPG",
+  "generatedAt": "2026-11-02T20:01:28.259Z",
+  "exercised": true,
+  "passed": true,
+  "gateCount": 9,
+  "failedCount": 0,
+  "gates": [
+    {
+      "id": "PLANTED_TRIGGER",
+      "ok": true,
+      "detail": "Bliss-class trigger attached"
+    },
+    {
+      "id": "INSERT_FAILS_INVOICENUMBER",
+      "ok": true,
+      "detail": "column \"InvoiceNumber\" does not exist"
+    },
+    {
+      "id": "AFTER_645_TRIGGER_GONE",
+      "ok": true,
+      "detail": "645 dropped trigger"
+    },
+    {
+      "id": "AFTER_645_FN_GONE",
+      "ok": true,
+      "detail": "645 dropped function"
+    },
+    {
+      "id": "INSERT_SUCCEEDS_AFTER_645",
+      "ok": true,
+      "detail": "payment rows=1"
+    },
+    {
+      "id": "REPLANTED",
+      "ok": true,
+      "detail": "replanted for comprehensive check"
+    },
+    {
+      "id": "COMPREHENSIVE_NO_CREATE_SYNC",
+      "ok": true,
+      "detail": "comprehensive no longer CREATEs trg_invoice_payment_sync"
+    },
+    {
+      "id": "COMPREHENSIVE_DROP_CLEARS",
+      "ok": true,
+      "detail": "DROP path clears replant"
+    },
+    {
+      "id": "FORBIDDEN_LIST_BLOCKS_SYNC",
+      "ok": true,
+      "detail": "[{\"table\":\"sale_items\",\"trigger\":\"trg_sync_sale_totals\"}]"
+    }
+  ],
+  "liveProdContext": {
+    "note": "Prod Bliss still broken until 645 deploys — see PROOF_LEGACY_INVOICE_PAYMENT_SYNC.md"
+  }
+}

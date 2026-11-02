@@ -503,8 +503,13 @@ function formatSaleError(parsed: ParsedApiError): string {
     }
     case 'ERR_SALE_006':
       return 'Cannot create invoice — the selected customer does not exist.';
-    case 'ERR_SALE_007':
-      return 'Credit sale completed but invoice creation failed. Please contact a manager.';
+    case 'ERR_SALE_007': {
+      const reason = d.reason as string | undefined;
+      // Sale TX rolls back on this error — do not claim the sale completed.
+      return reason && reason.trim()
+        ? `Credit sale invoice failed (sale was not saved): ${reason}`
+        : 'Credit sale invoice failed and the sale was not saved. Please contact a manager.';
+    }
     case 'ERR_SALE_008': {
       const status = d.currentStatus as string | undefined;
       return `Cannot void this sale — it is currently "${status ?? 'unknown'}". Only completed sales can be voided.`;
@@ -619,8 +624,13 @@ function formatByErrorCode(parsed: ParsedApiError): string {
   if (code === 'ERR_FORBIDDEN' || parsed.status === 403) return ACCESS_DENIED_MESSAGE;
   if (code === 'ERR_VALIDATION') return parsed.message;
   if (code === 'ERR_BUSINESS') return parsed.message;
-  if (code === 'ERR_CONSTRAINT')
+  if (code === 'ERR_CONSTRAINT') {
+    const reason = parsed.details?.reason as string | undefined;
+    const constraint = parsed.details?.constraint as string | undefined;
+    if (reason && reason.trim()) return reason;
+    if (constraint) return `A data constraint was violated (${constraint}). Please check your input values.`;
     return 'A data constraint was violated. Please check your input values.';
+  }
   if (code === 'ERR_INTERNAL') return parsed.message;
 
   // Unknown structured error — still better than the raw message alone

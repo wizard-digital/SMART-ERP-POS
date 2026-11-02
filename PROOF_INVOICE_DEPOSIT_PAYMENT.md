@@ -2,7 +2,7 @@
 
 **PASS**
 
-- Gates: 44
+- Gates: 50
 - Failed: 0
 
 | Gate | OK | Detail |
@@ -30,6 +30,8 @@
 | INV_NO_INVOICE_AS_SALE | yes | never invoice UUID as sale_id |
 | INV_PASSES_INVOICE_ID | yes | passes invoiceId option |
 | INV_BALANCE_ON_CLIENT | yes | balance check inside tx |
+| INV_ORPHAN_SALE_FALLBACK | yes | orphan sale_id falls back to invoice target |
+| INV_NEVER_REWRITE_CREDIT_TO_DEPOSIT | yes | never rewrite CREDIT → DEPOSIT/CASH on sale header |
 | GL_SKIP_DEPOSIT_CASH | yes | DEPOSIT invoice payment does not post cash |
 | GL_APPLY_SOURCE | yes | apply posts DEPOSIT_APPLICATION |
 | LOCK_FN | yes | lock helper |
@@ -39,6 +41,10 @@
 | APPLY_MONEY_FIXED | yes | 2dp write |
 | APPLY_NO_TONUMBER_LOOP | yes | no toNumber in apply loop |
 | MIG_600 | yes | migration 600 present |
+| APPLY_SCHEMA_PREFLIGHT | yes | invoice-only apply asserts migration 600 schema before INSERT |
+| APPLY_SALE_FK_LOUD | yes | sale FK violation fails loud (not generic constraint) |
+| POSTCOND_600 | yes | migration 600 postcondition heals tenant drift |
+| POSTCOND_597 | yes | migration 597 postcondition keeps DEPOSIT_APPLICATION on 1200/2200 |
 | UI_HOOK | yes | shared fetch hook |
 | HOOK_NO_SILENT_ZERO | yes | fetch fail → error, not 0 |
 | MODAL_HOOK | yes | modal uses hook |

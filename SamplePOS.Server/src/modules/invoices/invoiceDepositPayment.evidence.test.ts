@@ -144,13 +144,27 @@ describe('PROOF: invoice deposit payment integrity', () => {
     );
     gate(
       'INV_PASSES_INVOICE_ID',
-      /applyDepositsToSaleInTransaction[\s\S]{0,400}\{ invoiceId \}/.test(svc),
+      /applyDepositsToSaleInTransaction[\s\S]{0,500}invoiceIdForApply \? \{ invoiceId: invoiceIdForApply \}/.test(
+        svc,
+      ),
       'passes invoiceId option',
     );
     gate(
       'INV_BALANCE_ON_CLIENT',
       /getCustomerDepositBalance\(\s*client/.test(svc),
       'balance check inside tx',
+    );
+    gate(
+      'INV_ORPHAN_SALE_FALLBACK',
+      svc.includes('orphanSaleId') && svc.includes('invoiceIdForApply'),
+      'orphan sale_id falls back to invoice target',
+    );
+    gate(
+      'INV_NEVER_REWRITE_CREDIT_TO_DEPOSIT',
+      !/currentPaymentMethod === 'CREDIT'[\s\S]{0,80}input\.paymentMethod/.test(svc) &&
+        !/currentPaymentMethod === 'CREDIT' \? paymentMethod/.test(svc) &&
+        svc.includes('Never rewrite payment_method'),
+      'never rewrite CREDIT → DEPOSIT/CASH on sale header',
     );
     const gl = readRepo('SamplePOS.Server/src/services/glEntryService.ts');
     gate(
@@ -182,6 +196,29 @@ describe('PROOF: invoice deposit payment integrity', () => {
       'MIG_600',
       fileHas('shared/sql/600_deposit_apply_invoice.sql', 'chk_deposit_app_target'),
       'migration 600 present',
+    );
+    gate(
+      'APPLY_SCHEMA_PREFLIGHT',
+      repo.includes('DEPOSIT_APPLY_INVOICE_SCHEMA_REQUIRED') &&
+        repo.includes("column_name = 'invoice_id'"),
+      'invoice-only apply asserts migration 600 schema before INSERT',
+    );
+    gate(
+      'APPLY_SALE_FK_LOUD',
+      repo.includes('DEPOSIT_APPLY_SALE_FK'),
+      'sale FK violation fails loud (not generic constraint)',
+    );
+    const post = readRepo('SamplePOS.Server/src/modules/system/migrationPostconditions.ts');
+    gate(
+      'POSTCOND_600',
+      post.includes("'600_deposit_apply_invoice.sql'") && post.includes('chk_deposit_app_target'),
+      'migration 600 postcondition heals tenant drift',
+    );
+    gate(
+      'POSTCOND_597',
+      post.includes("'597_deposit_application_posting_source.sql'") &&
+        post.includes("'DEPOSIT_APPLICATION'"),
+      'migration 597 postcondition keeps DEPOSIT_APPLICATION on 1200/2200',
     );
   });
 

@@ -218,11 +218,23 @@ export function errorHandler(
       return;
     }
     if (pgCode.startsWith('23')) {
+      const pgConstraint = error as Error & {
+        code?: string;
+        constraint?: string;
+        table?: string;
+        detail?: string;
+      };
       res.status(400).json({
         success: false,
         error: pgError.message,
         error_code: 'ERR_CONSTRAINT',
-        details: { pgCode },
+        details: {
+          pgCode,
+          constraint: pgConstraint.constraint || undefined,
+          table: pgConstraint.table || undefined,
+          detail: pgConstraint.detail || undefined,
+          reason: pgError.message,
+        },
         requestId: req.requestId,
       });
       return;

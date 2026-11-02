@@ -29,6 +29,9 @@ export const LEGACY_TRIGGERS_BY_MIGRATION: Record<string, ReadonlyArray<readonly
     '638_sale_totals_trigger_ssot.sql': [
         ['sale_items', 'trg_sync_sale_totals'],
     ],
+    '645_drop_legacy_invoice_payment_sync.sql': [
+        ['invoice_payments', 'trg_invoice_payment_sync'],
+    ],
 };
 
 export async function legacyTriggersAbsentForMigration(

@@ -51,6 +51,8 @@ export const CRITICAL_SCHEMA_COLUMNS: Readonly<Record<string, readonly string[]>
 
 export const FORBIDDEN_TRIGGERS: ReadonlyArray<readonly [string, string]> = [
   ['sale_items', 'trg_sync_sale_totals'],
+  /** Bliss Interior 2026-11-02: PascalCase InvoiceNumber — never allow back */
+  ['invoice_payments', 'trg_invoice_payment_sync'],
 ];
 
 export interface SchemaIntegrityResult {

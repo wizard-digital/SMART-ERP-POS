@@ -46,4 +46,12 @@ describe('Financial P&L / AR aging SSOT', () => {
     expect(src).toContain('Never rewrite CREDIT → CASH');
     expect(src).not.toMatch(/currentMethod === 'CREDIT' \? 'CASH'/);
   });
+
+  it('invoice payment sync never rewrites CREDIT to settlement tender (DEPOSIT/CASH)', () => {
+    const svc = read('SamplePOS.Server/src/modules/invoices/invoiceService.ts');
+    expect(svc).toContain('Never rewrite payment_method');
+    expect(svc).not.toMatch(/currentPaymentMethod === 'CREDIT' \? paymentMethod/);
+    expect(svc).not.toMatch(/currentPaymentMethod === 'CREDIT'[\s\S]{0,80}input\.paymentMethod/);
+    expect(svc).toMatch(/SET amount_paid = \$1::numeric\s+WHERE id = \$2/);
+  });
 });

@@ -2512,10 +2512,16 @@ export const salesService = {
           });
           // CRITICAL: Invoice is MANDATORY for credit sales - must rollback!
           // Without invoice, accounts receivable cannot be tracked
+          const invoiceFailReason =
+            invoiceError instanceof Error ? invoiceError.message : String(invoiceError);
           throw new BusinessError(
-            `Credit sale requires invoice but invoice creation failed: ${invoiceError instanceof Error ? invoiceError.message : String(invoiceError)}`,
+            `Credit sale requires invoice but invoice creation failed: ${invoiceFailReason}`,
             'ERR_SALE_007',
-            { saleId: sale.id, saleNumber: sale.saleNumber }
+            {
+              saleId: sale.id,
+              saleNumber: sale.saleNumber,
+              reason: invoiceFailReason,
+            },
           );
         }
       }

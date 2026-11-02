@@ -272,6 +272,27 @@ export async function applyDepositToSaleInTransaction(
     // with the original schema so POS does not depend on 600.
     let applicationResult;
     if (!input.saleId && input.invoiceId) {
+        const schema = await client.query<{ has_invoice_id: boolean; sale_nullable: boolean }>(
+            `SELECT
+               EXISTS (
+                 SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND table_name = 'pos_deposit_applications'
+                   AND column_name = 'invoice_id'
+               ) AS has_invoice_id,
+               EXISTS (
+                 SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public'
+                   AND table_name = 'pos_deposit_applications'
+                   AND column_name = 'sale_id'
+                   AND is_nullable = 'YES'
+               ) AS sale_nullable`,
+        );
+        if (!schema.rows[0]?.has_invoice_id || !schema.rows[0]?.sale_nullable) {
+            throw new Error(
+                'DEPOSIT_APPLY_INVOICE_SCHEMA_REQUIRED: migration 600 required — apply shared/sql/600_deposit_apply_invoice.sql before using deposit on invoices without a linked sale.',
+            );
+        }
         try {
             applicationResult = await client.query<DepositApplicationDbRow>(
                 `INSERT INTO pos_deposit_applications
@@ -290,24 +311,37 @@ export async function applyDepositToSaleInTransaction(
             const msg = err instanceof Error ? err.message : String(err);
             if (/invoice_id/i.test(msg) && /does not exist|undefined column/i.test(msg)) {
                 throw new Error(
-                    'DEPOSIT_APPLY_INVOICE_TARGET: apply shared/sql/600_deposit_apply_invoice.sql before using deposit on invoices without a linked sale.',
+                    'DEPOSIT_APPLY_INVOICE_SCHEMA_REQUIRED: migration 600 required — apply shared/sql/600_deposit_apply_invoice.sql before using deposit on invoices without a linked sale.',
                 );
             }
             throw err;
         }
     } else {
-        applicationResult = await client.query<DepositApplicationDbRow>(
-            `INSERT INTO pos_deposit_applications
+        if (!input.saleId) {
+            throw new Error('DEPOSIT_APPLY_TARGET_REQUIRED: saleId or invoiceId must be provided');
+        }
+        try {
+            applicationResult = await client.query<DepositApplicationDbRow>(
+                `INSERT INTO pos_deposit_applications
          (deposit_id, sale_id, amount_applied, applied_by)
          VALUES ($1, $2, $3, $4)
          RETURNING *`,
-            [
-                input.depositId,
-                input.saleId,
-                amountFixed,
-                input.appliedBy || null,
-            ],
-        );
+                [
+                    input.depositId,
+                    input.saleId,
+                    amountFixed,
+                    input.appliedBy || null,
+                ],
+            );
+        } catch (err) {
+            const pg = err as Error & { code?: string; constraint?: string };
+            if (pg.code === '23503') {
+                throw new Error(
+                    `DEPOSIT_APPLY_SALE_FK: sale ${input.saleId} is missing — cannot apply deposit to a deleted sale. Use invoice target (migration 600) or restore the sale.`,
+                );
+            }
+            throw err;
+        }
     }
 
     // Update deposit used amount, available amount, and status

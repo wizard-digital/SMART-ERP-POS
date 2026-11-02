@@ -74,65 +74,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 1C. Invoice payment trigger - update invoice totals and customer balance
-CREATE OR REPLACE FUNCTION fn_sync_invoice_payment()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_invoice_id UUID;
-    v_customer_id UUID;
-    v_total_paid NUMERIC;
-    v_total_amount NUMERIC;
-    v_new_status TEXT;
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        v_invoice_id := OLD.invoice_id;
-    ELSE
-        v_invoice_id := NEW.invoice_id;
-    END IF;
-    
-    -- Get invoice details
-    SELECT "CustomerId", "TotalAmount" 
-    INTO v_customer_id, v_total_amount
-    FROM invoices WHERE "Id" = v_invoice_id;
-    
-    -- Sum all payments for this invoice (invoice_payments uses snake_case)
-    SELECT COALESCE(SUM(amount), 0)
-    INTO v_total_paid
-    FROM invoice_payments
-    WHERE invoice_id = v_invoice_id;
-    
-    -- Determine new status
-    IF v_total_paid >= v_total_amount THEN
-        v_new_status := 'Paid';
-    ELSIF v_total_paid > 0 THEN
-        v_new_status := 'PartiallyPaid';
-    ELSE
-        v_new_status := 'Unpaid';
-    END IF;
-    
-    -- Update invoice
-    UPDATE invoices
-    SET "AmountPaid" = v_total_paid,
-        "OutstandingBalance" = GREATEST(v_total_amount - v_total_paid, 0),
-        "Status" = v_new_status,
-        "UpdatedAt" = CURRENT_TIMESTAMP
-    WHERE "Id" = v_invoice_id;
-    
-    -- Update customer AR balance
-    IF v_customer_id IS NOT NULL THEN
-        PERFORM fn_recalculate_customer_ar_balance(v_customer_id);
-    END IF;
-    
-    RAISE NOTICE 'Invoice % updated: paid=%, status=%', v_invoice_id, v_total_paid, v_new_status;
-    
-    IF TG_OP = 'DELETE' THEN
-        RETURN OLD;
-    ELSE
-        RETURN NEW;
-    END IF;
-    -- FIXED: Removed EXCEPTION WHEN OTHERS - errors must propagate
-END;
-$$ LANGUAGE plpgsql;
+-- 1C. Invoice payment sync trigger — REMOVED (service-layer SSOT).
+-- Live regression (Bliss Interior 2026-11-02): this file was applied AFTER 067/253
+-- and re-created trg_invoice_payment_sync / fn_sync_invoice_payment against PascalCase
+-- invoices."InvoiceNumber", breaking credit sales (ERR_SALE_007). Never recreate.
+-- App path: invoiceRepository.recalcInvoice + syncCustomerBalanceFromInvoices.
+DROP TRIGGER IF EXISTS trg_invoice_payment_sync ON invoice_payments;
+DROP FUNCTION IF EXISTS fn_sync_invoice_payment() CASCADE;
 
 -- Create/replace customer invoice triggers
 DROP TRIGGER IF EXISTS trg_sync_customer_on_invoice ON invoices;
@@ -140,12 +88,6 @@ CREATE TRIGGER trg_sync_customer_on_invoice
     AFTER INSERT OR UPDATE OR DELETE ON invoices
     FOR EACH ROW
     EXECUTE FUNCTION fn_sync_customer_on_invoice_change();
-
-DROP TRIGGER IF EXISTS trg_invoice_payment_sync ON invoice_payments;
-CREATE TRIGGER trg_invoice_payment_sync
-    AFTER INSERT OR UPDATE OR DELETE ON invoice_payments
-    FOR EACH ROW
-    EXECUTE FUNCTION fn_sync_invoice_payment();
 
 -- ============================================================================
 -- PART 2: SUPPLIER INVOICE TRIGGERS
@@ -602,7 +544,7 @@ SELECT '=== CUSTOMER INVOICE TRIGGERS ===' AS section
 UNION ALL
 SELECT 'trg_sync_customer_on_invoice - Updates customer balance when invoice changes'
 UNION ALL
-SELECT 'trg_invoice_payment_sync - Updates invoice totals when payment made'
+SELECT 'trg_invoice_payment_sync - REMOVED (service-layer SSOT; never recreate)'
 UNION ALL
 SELECT 'trg_post_customer_invoice_to_ledger - Posts invoice to GL'
 UNION ALL
