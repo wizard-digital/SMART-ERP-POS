@@ -234,6 +234,24 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     expect(invPaySyncSql).toContain('DROP TRIGGER IF EXISTS trg_invoice_payment_sync');
     expect(invPaySyncSql).toContain('DROP FUNCTION IF EXISTS fn_sync_invoice_payment() CASCADE');
     expect(invPaySyncSql).toContain('INSERT INTO schema_version (version) VALUES (645)');
+    const invPaySalesSyncSql = fs.readFileSync(
+      path.join(sqlDir, '646_drop_invoice_payment_sales_sync_trigger.sql'),
+      'utf8',
+    );
+    expect(invPaySalesSyncSql).toContain('DROP TRIGGER IF EXISTS trg_sync_invoice_payment');
+    expect(invPaySalesSyncSql).toContain(
+      'DROP FUNCTION IF EXISTS sync_invoice_payment_to_sales_and_customer() CASCADE',
+    );
+    expect(invPaySalesSyncSql).toContain('INSERT INTO schema_version (version) VALUES (646)');
+    const createInvPayTrigger = fs.readFileSync(
+      path.join(sqlDir, 'create_invoice_payment_trigger.sql'),
+      'utf8',
+    );
+    expect(createInvPayTrigger).toContain('DROP TRIGGER IF EXISTS trg_sync_invoice_payment');
+    expect(createInvPayTrigger).not.toMatch(/CREATE\s+TRIGGER\s+trg_sync_invoice_payment/i);
+    expect(createInvPayTrigger).not.toMatch(
+      /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+sync_invoice_payment_to_sales_and_customer/i,
+    );
     const comprehensiveTriggers = fs.readFileSync(
       path.join(sqlDir, 'comprehensive_data_triggers.sql'),
       'utf8',

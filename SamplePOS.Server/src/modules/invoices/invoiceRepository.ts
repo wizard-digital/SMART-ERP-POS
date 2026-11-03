@@ -430,8 +430,9 @@ export const invoiceRepository = {
   /**
    * Settlement on an invoice: cash, posted credit/debit notes, write-offs,
    * and completed returns on the linked sale.
-   * Returns stay tied to the sale, not to the current payment method. Full
-   * settlement (write-off / CN) updates amount_paid only — CREDIT stays CREDIT.
+   * Returns stay tied to the sale, not to the current payment method.
+   * Write-off / CN settle the invoice open item; linked-sale sync uses tender
+   * only (see syncLinkedSaleFromInvoice) so CREDIT never fakes full cash pay.
    */
   async getInvoiceSettlement(
     pool: Pool | PoolClient,
@@ -545,40 +546,121 @@ export const invoiceRepository = {
   },
 
   /**
-   * Keep linked sale amount_paid in sync with invoice settlement.
-   * Never rewrite CREDIT → CASH: write-off / CN settlement is not cash collected.
+   * Keep linked sale tender in sync with invoice liquidity (cash / deposit / card…).
+   *
+   * SSOT rules (chk_sales_credit_has_debt: CREDIT ⇒ amount_paid < total_amount):
+   * - sales.amount_paid = tender collected only (invoice_payments + legacy dist receipts).
+   *   Write-off / CN settle the invoice open item — they must NOT fake full sales.amount_paid
+   *   under payment_method = CREDIT.
+   * - Liquidity full settle on a CREDIT sale leaves CREDIT in one UPDATE: set amount_paid to
+   *   tender and rewrite payment_method to the clearing tender (DEPOSIT/CASH/…).
+   * - Partial tender stays CREDIT with amount_paid = tender (< total).
    */
-  async syncLinkedSaleFromInvoice(pool: Pool | PoolClient, invoiceId: string): Promise<void> {
+  async syncLinkedSaleFromInvoice(
+    pool: Pool | PoolClient,
+    invoiceId: string,
+    options?: { preferredClearingMethod?: string | null },
+  ): Promise<void> {
     const res = await pool.query(
-      `SELECT sale_id, total_amount, amount_paid, amount_due
-       FROM invoices WHERE id = $1`,
+      `SELECT
+         i.sale_id,
+         i.total_amount,
+         COALESCE(pay.cash_paid, 0) + COALESCE(legacy.legacy_paid, 0) AS tender_paid,
+         (
+           SELECT ip.payment_method::text
+           FROM invoice_payments ip
+           WHERE ip.invoice_id = i.id
+             AND ip.payment_method::text <> 'CREDIT'
+           ORDER BY ip.created_at DESC NULLS LAST, ip.id DESC
+           LIMIT 1
+         ) AS clearing_method
+       FROM invoices i
+       LEFT JOIN (
+         SELECT ip.invoice_id, SUM(ip.amount) AS cash_paid
+         FROM invoice_payments ip
+         WHERE ip.invoice_id = $1
+           AND (
+             NOT EXISTS (
+               SELECT 1 FROM ar_payment_allocations a
+               WHERE a.invoice_payment_id = ip.id
+             )
+             OR EXISTS (
+               SELECT 1 FROM ar_payment_allocations a
+               WHERE a.invoice_payment_id = ip.id
+                 AND a.status = 'ACTIVE'
+             )
+           )
+         GROUP BY ip.invoice_id
+       ) pay ON pay.invoice_id = i.id
+       LEFT JOIN (
+         SELECT invoice_id, SUM(amount) AS legacy_paid
+         FROM (
+           SELECT invoice_id, amount FROM dist_receipts WHERE invoice_id = $1
+           UNION ALL
+           SELECT invoice_id, amount FROM dist_down_payment_clearings WHERE invoice_id = $1
+         ) d
+         GROUP BY invoice_id
+       ) legacy ON legacy.invoice_id = i.id
+       WHERE i.id = $1`,
       [invoiceId],
     );
     const row = res.rows[0] as {
       sale_id?: string | null;
       total_amount?: string | number;
-      amount_paid?: string | number;
-      amount_due?: string | number;
+      tender_paid?: string | number;
+      clearing_method?: string | null;
     } | undefined;
     if (!row?.sale_id) return;
 
     const totalDec = Money.parseDb(row.total_amount ?? 0);
-    const paidDec = Money.parseDb(row.amount_paid ?? 0);
-    const dueDec = Money.parseDb(row.amount_due ?? 0);
+    const tenderDec = Money.parseDb(row.tender_paid ?? 0);
+    const tenderPaid = Money.toNumber(tenderDec);
+    const totalAmount = Money.toNumber(totalDec);
+    const fullyTendered = !tenderDec.lessThan(totalDec);
+
+    const preferred = String(options?.preferredClearingMethod || '').trim().toUpperCase();
+    const fromPayments = String(row.clearing_method || '').trim().toUpperCase();
+    const clearingRaw = preferred || fromPayments;
+    const clearingMethod =
+      clearingRaw && clearingRaw !== 'CREDIT' ? clearingRaw : null;
+
+    if (fullyTendered && !clearingMethod) {
+      const saleMethod = await pool.query<{ payment_method: string }>(
+        `SELECT payment_method::text AS payment_method FROM sales WHERE id = $1`,
+        [row.sale_id],
+      );
+      const current = String(saleMethod.rows[0]?.payment_method || '').toUpperCase();
+      if (current === 'CREDIT') {
+        throw new Error(
+          `Linked sale ${row.sale_id} is fully tendered (${tenderPaid}) on CREDIT but no clearing ` +
+            `payment_method was found on invoice ${invoiceId}. Refusing amount_paid-only sync ` +
+            `(chk_sales_credit_has_debt).`,
+        );
+      }
+    }
 
     await pool.query(
-      `UPDATE sales
-       SET amount_paid = $1::numeric
-       WHERE id = $2`,
-      [Money.toNumber(paidDec), row.sale_id],
+      `UPDATE sales s
+       SET amount_paid = $1::numeric,
+           payment_method = CASE
+             WHEN s.payment_method = 'CREDIT'::payment_method
+                  AND $3::boolean
+                  AND $4::text IS NOT NULL
+               THEN $4::payment_method
+             ELSE s.payment_method
+           END
+       WHERE s.id = $2`,
+      [tenderPaid, row.sale_id, fullyTendered, clearingMethod],
     );
 
-    logger.info('Linked sale synced from invoice settlement', {
+    logger.info('Linked sale synced from invoice tender', {
       invoiceId,
       saleId: row.sale_id,
-      amountPaid: Money.toNumber(paidDec),
-      amountDue: Money.toNumber(dueDec),
-      totalAmount: Money.toNumber(totalDec),
+      tenderPaid,
+      totalAmount,
+      fullyTendered,
+      clearingMethod,
+      leftCredit: !fullyTendered,
     });
   },
 

@@ -53,6 +53,8 @@ export const FORBIDDEN_TRIGGERS: ReadonlyArray<readonly [string, string]> = [
   ['sale_items', 'trg_sync_sale_totals'],
   /** Bliss Interior 2026-11-02: PascalCase InvoiceNumber — never allow back */
   ['invoice_payments', 'trg_invoice_payment_sync'],
+  /** Blis-class 2026-11-03: amount_paid-only under CREDIT → chk_sales_credit_has_debt */
+  ['invoice_payments', 'trg_sync_invoice_payment'],
 ];
 
 export interface SchemaIntegrityResult {

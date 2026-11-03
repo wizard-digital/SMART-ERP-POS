@@ -1,0 +1,56 @@
+{
+  "proof": "LINKED_SALE_TENDER_SYNC_REALPG",
+  "generatedAt": "2026-11-03T08:45:58.626Z",
+  "exercised": true,
+  "passed": true,
+  "gateCount": 9,
+  "failedCount": 0,
+  "gates": [
+    {
+      "id": "CONSTRAINT_PRESENT",
+      "ok": true,
+      "detail": "chk_sales_credit_has_debt on scratch"
+    },
+    {
+      "id": "TRIGGER_646_GONE",
+      "ok": true,
+      "detail": "trg_sync_invoice_payment dropped by 646"
+    },
+    {
+      "id": "PLANTED_TRIGGER_FULL_DEPOSIT_FAILS",
+      "ok": true,
+      "detail": "new row for relation \"sales\" violates check constraint \"chk_sales_credit_has_debt\""
+    },
+    {
+      "id": "REHEAL_646",
+      "ok": true,
+      "detail": "646 drops planted trigger"
+    },
+    {
+      "id": "RECALC_OK",
+      "ok": true,
+      "detail": "balance=0.000000 paid=50000.000000"
+    },
+    {
+      "id": "FULL_DEPOSIT_LEAVES_CREDIT",
+      "ok": true,
+      "detail": "{\"method\":\"DEPOSIT\",\"paid\":50000,\"total\":50000}"
+    },
+    {
+      "id": "AMOUNT_PAID_ONLY_UNDER_CREDIT_FAILS",
+      "ok": true,
+      "detail": "new row for relation \"sales\" violates check constraint \"chk_sales_credit_has_debt\""
+    },
+    {
+      "id": "WRITEOFF_KEEPS_CREDIT_ZERO_TENDER",
+      "ok": true,
+      "detail": "{\"method\":\"CREDIT\",\"paid\":0,\"total\":50000}"
+    },
+    {
+      "id": "PARTIAL_STAYS_CREDIT",
+      "ok": true,
+      "detail": "{\"method\":\"CREDIT\",\"paid\":10000,\"total\":50000}"
+    }
+  ],
+  "constraint": "CHECK (payment_method <> 'CREDIT' OR (payment_method = 'CREDIT' AND amount_paid < total_amount))"
+}

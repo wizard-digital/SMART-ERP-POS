@@ -160,11 +160,13 @@ describe('PROOF: invoice deposit payment integrity', () => {
       'orphan sale_id falls back to invoice target',
     );
     gate(
-      'INV_NEVER_REWRITE_CREDIT_TO_DEPOSIT',
+      'INV_LIQUIDITY_FULL_SETTLE_LEAVES_CREDIT',
       !/currentPaymentMethod === 'CREDIT'[\s\S]{0,80}input\.paymentMethod/.test(svc) &&
         !/currentPaymentMethod === 'CREDIT' \? paymentMethod/.test(svc) &&
-        svc.includes('Never rewrite payment_method'),
-      'never rewrite CREDIT → DEPOSIT/CASH on sale header',
+        svc.includes('syncLinkedSaleFromInvoice') &&
+        svc.includes('liquidity full settle on CREDIT leaves CREDIT') &&
+        !/SET amount_paid = \$1::numeric\s+WHERE id = \$2/.test(svc),
+      'full tender leaves CREDIT via sync SSOT (not amount_paid-only)',
     );
     const gl = readRepo('SamplePOS.Server/src/services/glEntryService.ts');
     gate(

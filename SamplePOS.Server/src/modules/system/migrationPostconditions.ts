@@ -38,6 +38,7 @@ export const MIGRATION_POSTCONDITION_FILES = [
     '643_sale_gift_foc.sql',
     '644_pnl_bad_debt_opex.sql',
     '645_drop_legacy_invoice_payment_sync.sql',
+    '646_drop_invoice_payment_sales_sync_trigger.sql',
 ] as const;
 
 export type MigrationPostconditionFile = (typeof MIGRATION_POSTCONDITION_FILES)[number];
@@ -590,6 +591,22 @@ export async function verifyMigrationPostcondition(
                     JOIN pg_namespace n ON n.oid = p.pronamespace
                     WHERE n.nspname = 'public'
                       AND p.proname = 'fn_sync_invoice_payment'
+                ) AS ok`,
+            );
+            return triggerGone && rows[0]?.ok === true;
+        }
+        case '646_drop_invoice_payment_sales_sync_trigger.sql': {
+            const triggerGone = await legacyTriggersAbsentForMigration(
+                pool,
+                '646_drop_invoice_payment_sales_sync_trigger.sql',
+            );
+            const { rows } = await pool.query<{ ok: boolean }>(
+                `SELECT NOT EXISTS (
+                    SELECT 1
+                    FROM pg_proc p
+                    JOIN pg_namespace n ON n.oid = p.pronamespace
+                    WHERE n.nspname = 'public'
+                      AND p.proname = 'sync_invoice_payment_to_sales_and_customer'
                 ) AS ok`,
             );
             return triggerGone && rows[0]?.ok === true;

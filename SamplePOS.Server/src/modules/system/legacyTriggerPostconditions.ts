@@ -32,6 +32,9 @@ export const LEGACY_TRIGGERS_BY_MIGRATION: Record<string, ReadonlyArray<readonly
     '645_drop_legacy_invoice_payment_sync.sql': [
         ['invoice_payments', 'trg_invoice_payment_sync'],
     ],
+    '646_drop_invoice_payment_sales_sync_trigger.sql': [
+        ['invoice_payments', 'trg_sync_invoice_payment'],
+    ],
 };
 
 export async function legacyTriggersAbsentForMigration(

@@ -99,6 +99,13 @@ describe('tenantSchemaIntegrity', () => {
     ]);
   });
 
+  it('forbids trg_sync_invoice_payment (amount_paid-only under CREDIT)', () => {
+    expect(FORBIDDEN_TRIGGERS).toContainEqual([
+      'invoice_payments',
+      'trg_sync_invoice_payment',
+    ]);
+  });
+
   it('fails when trg_sync_sale_totals is still attached', async () => {
     const tables = Object.keys(CRITICAL_SCHEMA_COLUMNS);
     const columnsByTable: Record<string, string[]> = {};

@@ -273,12 +273,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Drop existing and create new trigger
+-- DROP-only: never re-CREATE trg_sync_invoice_payment (646 / chk_sales_credit_has_debt).
+-- Linked-sale tender sync is service-layer SSOT (invoiceRepository.syncLinkedSaleFromInvoice).
 DROP TRIGGER IF EXISTS trg_sync_invoice_payment ON invoice_payments;
-CREATE TRIGGER trg_sync_invoice_payment
-    AFTER INSERT ON invoice_payments
-    FOR EACH ROW
-    EXECUTE FUNCTION fn_sync_invoice_payment();
+DROP FUNCTION IF EXISTS sync_invoice_payment_to_sales_and_customer() CASCADE;
 
 -- ============================================================================
 -- PART 5: VERIFY FINAL CONSISTENCY

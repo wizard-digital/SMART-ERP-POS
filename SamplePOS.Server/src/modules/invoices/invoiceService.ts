@@ -108,34 +108,30 @@ type InvoicePaymentInput = {
 };
 
 /**
- * Keep linked sale amount_paid in sync with invoice settlement.
- * Never rewrite payment_method (CREDIT stays CREDIT). Settlement tender
- * (CASH / DEPOSIT / …) lives on invoice_payments — rewriting the sale header
- * to DEPOSIT caused Postgres constraint failures and corrupted tender identity.
- * SSOT matches invoiceRepository.syncLinkedSaleFromInvoice.
+ * Keep linked sale tender in sync after an AR-SSOT invoice payment.
+ * SSOT is invoiceRepository.syncLinkedSaleFromInvoice: tender-only amount_paid;
+ * liquidity full settle on CREDIT leaves CREDIT → clearing tender in one UPDATE.
+ * Write-off / CN must not drive sales.amount_paid to total under CREDIT.
  */
 async function syncLinkedSaleAfterInvoicePayment(
   handle: DbConnection,
+  invoiceId: string,
   inv: { sale_id: string | null; invoice_number: string },
-  fresh: { amount_paid: number | null; total_amount: number | null },
-  _paymentMethod: string,
+  paymentMethod: string,
   paymentAmount: number,
 ): Promise<void> {
   if (!inv.sale_id) return;
 
-  await handle.query(
-    `UPDATE sales
-     SET amount_paid = $1::numeric
-     WHERE id = $2`,
-    [fresh.amount_paid, inv.sale_id],
-  );
+  await invoiceRepository.syncLinkedSaleFromInvoice(handle, invoiceId, {
+    preferredClearingMethod: paymentMethod,
+  });
 
   logger.info('Sale payment synchronized', {
     saleId: inv.sale_id,
     invoiceNumber: inv.invoice_number,
-    amountPaid: fresh.amount_paid,
+    invoiceId,
     paymentAmount,
-    paymentMethodUpdated: false,
+    preferredClearingMethod: paymentMethod,
   });
 }
 
@@ -298,8 +294,8 @@ async function addLegacyInvoicePayment(
     if (!fresh) {
       throw new Error('Failed to recalculate invoice after recording payment');
     }
-    // Linked sale amount_paid is synced inside recalcInvoice → syncLinkedSaleFromInvoice.
-    // Never rewrite sales.payment_method here (CREDIT / DEPOSIT identity SSOT).
+    // Linked sale tender sync is inside recalcInvoice → syncLinkedSaleFromInvoice
+    // (liquidity full settle leaves CREDIT; write-off does not fake full pay).
 
     if (inv.customer_id) {
       await openItemEngine.syncCustomerBalanceFromOpenItems(
@@ -848,8 +844,8 @@ export const invoiceService = {
       if (result.invoice?.sale_id) {
         await syncLinkedSaleAfterInvoicePayment(
           handle,
+          invoiceId,
           { sale_id: result.invoice.sale_id, invoice_number: result.invoice.invoice_number },
-          result.invoice,
           input.paymentMethod,
           input.amount,
         );
