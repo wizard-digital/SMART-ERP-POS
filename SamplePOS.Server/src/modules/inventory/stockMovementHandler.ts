@@ -173,6 +173,52 @@ export class StockMovementHandler {
       const absQtyDec = Money.parseDb(Math.abs(quantityChange));
       const unitCostDec = Money.parseDb(params.unitCost ?? batch.cost_price ?? 0);
 
+      // ADJUSTMENT_IN: returnLot only bumps qty and ignores costPrice on existing lots.
+      // Without stamping zero-cost batches (or refusing cost mismatch), GL posts from
+      // subledger delta at the OLD cost → Flugone (GL=0) / Fentanyl (GL≠unitCost×qty).
+      if (
+        params.movementType === 'ADJUSTMENT_IN' &&
+        changeQty.gt(0) &&
+        unitCostDec.gt(INVENTORY_COUPLING_TOLERANCE)
+      ) {
+        const batchCostDec = Money.parseDb(batch.cost_price ?? 0);
+        if (!batchCostDec.gt(INVENTORY_COUPLING_TOLERANCE)) {
+          await client.query(
+            `UPDATE inventory_batches
+             SET cost_price = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [Money.toNumber(unitCostDec), batch.id],
+          );
+          batch.cost_price = Money.toNumber(unitCostDec);
+        } else if (
+          previousQty.gt(INVENTORY_COUPLING_TOLERANCE) &&
+          Money.abs(batchCostDec.minus(unitCostDec)).gt(INVENTORY_COUPLING_TOLERANCE)
+        ) {
+          throw new BusinessError(
+            `Cannot ADJUSTMENT_IN onto batch ${batch.batch_number} at unit cost ` +
+              `${Money.format(unitCostDec)} — lot is locked at ${Money.format(batchCostDec)}. ` +
+              'Use a new lot or a valuation repair before changing cost.',
+            'ERR_INVENTORY_ADJUST_COST_MISMATCH',
+            {
+              batchId: batch.id,
+              batchNumber: batch.batch_number,
+              batchCost: Money.toNumber(batchCostDec),
+              unitCost: Money.toNumber(unitCostDec),
+              remainingQuantity: Money.toNumber(previousQty),
+            },
+          );
+        } else if (!previousQty.gt(INVENTORY_COUPLING_TOLERANCE)) {
+          // Depleted lot restocked at a (possibly new) unit cost.
+          await client.query(
+            `UPDATE inventory_batches
+             SET cost_price = $1, updated_at = NOW()
+             WHERE id = $2`,
+            [Money.toNumber(unitCostDec), batch.id],
+          );
+          batch.cost_price = Money.toNumber(unitCostDec);
+        }
+      }
+
       // Step 6: Mutate lot quantity through LotService gateway
       if (changeQty.gt(0)) {
         await lotService.returnLot(client, {
@@ -328,8 +374,20 @@ export class StockMovementHandler {
       // INSIDE transaction (SAP LUW pattern — same as GRN).
       // Inventory batch update + GL entry commit atomically.
       // If GL fails → full rollback → no phantom inventory without GL backing.
+      // ADJUSTMENT_IN must never create valued stock without a 1300 debit
+      // (historical Henber Flugone gap: qty×cost on movement, GL=0).
       if (GL_MOVEMENT_TYPES.has(params.movementType)) {
+        // Fallback: if subledger delta resolved to ~0 but caller supplied a positive
+        // unit cost with qty, use qty×unitCost so we never skip GL silently.
+        if (
+          !movementValueDec.gt(INVENTORY_COUPLING_TOLERANCE) &&
+          absQtyDec.gt(0) &&
+          unitCostDec.gt(INVENTORY_COUPLING_TOLERANCE)
+        ) {
+          movementValueDec = Money.multiply(unitCostDec, absQtyDec);
+        }
         movementValue = Money.toNumber(movementValueDec);
+
         if (movementValueDec.gt(INVENTORY_COUPLING_TOLERANCE)) {
           const prodRes = await client.query('SELECT name FROM products WHERE id = $1', [params.productId]);
           const productName = prodRes.rows[0]?.name || 'Unknown';
@@ -343,19 +401,18 @@ export class StockMovementHandler {
             productName,
             expenseAccountCode: params.expenseAccountCode ?? undefined,
           }, undefined, client);  // pass client → atomic with inventory
-        } else if (
-          !isInbound &&
-          absQtyDec.gt(0) &&
-          unitCostDec.gt(INVENTORY_COUPLING_TOLERANCE)
-        ) {
+        } else if (absQtyDec.gt(0) && unitCostDec.gt(INVENTORY_COUPLING_TOLERANCE)) {
           throw new BusinessError(
-            'Inventory GL entry was not created for this stock reduction. Transaction rolled back.',
+            isInbound
+              ? 'Inventory GL entry was not created for this stock increase. Transaction rolled back.'
+              : 'Inventory GL entry was not created for this stock reduction. Transaction rolled back.',
             'ERR_INVENTORY_ADJUST_NO_COST',
             {
               batchId: batch.id,
               unitCost,
               quantity: Money.toNumber(absQtyDec),
               movementValue,
+              movementType: params.movementType,
             },
           );
         }

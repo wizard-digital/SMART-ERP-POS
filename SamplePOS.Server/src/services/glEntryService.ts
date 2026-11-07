@@ -2819,6 +2819,13 @@ export interface StockMovementData {
 export async function recordStockMovementToGL(movement: StockMovementData, pool?: pg.Pool, txClient?: pg.PoolClient): Promise<void> {
   try {
     if (movement.movementValue <= 0) {
+      // ADJUSTMENT_IN with zero value must never be a silent no-op — that created
+      // Henber residual stock without GL (Flugone). Refuse so the LUW rolls back.
+      if (movement.movementType === 'ADJUSTMENT_IN') {
+        throw new Error(
+          `GL posting refused for ADJUSTMENT_IN ${movement.movementNumber}: movementValue must be > 0`,
+        );
+      }
       logger.debug('Skipping stock movement GL posting (zero value)', {
         movementNumber: movement.movementNumber,
       });

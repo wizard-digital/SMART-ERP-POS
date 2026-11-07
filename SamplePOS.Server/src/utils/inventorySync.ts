@@ -55,20 +55,29 @@ export async function syncProductQuantity(client: PoolClient, productId: string)
         [productId]
     );
 
-    // Step 2-4: Aggregate ACTIVE batches → update product_inventory + products atomically
+    // Step 2-4: Aggregate ACTIVE batches → update product_inventory + products atomically.
+    // Also sync products.cost_price to batch weighted-average so header valuation
+    // cannot drift from FEFO subledger (Henber Ozempic/Septrin cache-lane noise).
     await client.query(
-        `WITH new_qty AS (
-       SELECT COALESCE(SUM(remaining_quantity), 0) AS qty
+        `WITH batch_agg AS (
+       SELECT
+         COALESCE(SUM(remaining_quantity), 0) AS qty,
+         CASE
+           WHEN COALESCE(SUM(remaining_quantity), 0) > 0
+             THEN SUM(remaining_quantity * cost_price) / SUM(remaining_quantity)
+           ELSE NULL
+         END AS wavg_cost
        FROM inventory_batches
        WHERE product_id = $1 AND status = 'ACTIVE'
      ), upd_pi AS (
        UPDATE product_inventory
-       SET quantity_on_hand = (SELECT qty FROM new_qty),
+       SET quantity_on_hand = (SELECT qty FROM batch_agg),
            updated_at = CURRENT_TIMESTAMP
        WHERE product_id = $1
      )
      UPDATE products
-     SET quantity_on_hand = (SELECT qty FROM new_qty),
+     SET quantity_on_hand = (SELECT qty FROM batch_agg),
+         cost_price = COALESCE((SELECT wavg_cost FROM batch_agg), cost_price),
          updated_at = CURRENT_TIMESTAMP
      WHERE id = $1`,
         [productId]

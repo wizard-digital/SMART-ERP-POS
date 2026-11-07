@@ -1758,6 +1758,10 @@ export const salesRepository = {
     const isFull = await this.isSaleFullyRefunded(pool, saleId);
     if (isFull) {
       await this.markSaleVoidedByReturn(pool, saleId);
+      const { cancelLinkedInvoicesForDeadSale } = await import(
+        '../invoices/cancelLinkedInvoicesForDeadSale.js'
+      );
+      await cancelLinkedInvoicesForDeadSale(pool, saleId, 'SALE_FULL_RETURN_SYNC');
       return;
     }
     const statusRes = await pool.query<{ status: string }>(

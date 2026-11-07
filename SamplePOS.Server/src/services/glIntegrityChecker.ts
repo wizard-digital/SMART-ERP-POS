@@ -70,8 +70,10 @@ export class GLIntegrityChecker {
       orphanTransactions,
       trialBalance,
       arRecon,
+      deadSaleOpenInvoices,
       apRecon,
       inventoryRecon,
+      adjInMissingGl,
       duplicateIdempotency,
       lockedPeriodViolations,
       sequenceGaps,
@@ -90,8 +92,10 @@ export class GLIntegrityChecker {
       this.checkOrphanTransactions(pool),
       this.checkTrialBalance(pool),
       this.checkARReconciliation(pool),
+      this.checkDeadSaleOpenInvoices(pool),
       this.checkAPReconciliation(pool),
       this.checkInventoryReconciliation(pool),
+      this.checkAdjustmentInMissingGl(pool),
       this.checkDuplicateIdempotencyKeys(pool),
       this.checkLockedPeriodViolations(pool),
       this.checkSequenceGaps(pool),
@@ -112,8 +116,10 @@ export class GLIntegrityChecker {
       ...orphanTransactions,
       ...trialBalance,
       ...arRecon,
+      ...deadSaleOpenInvoices,
       ...apRecon,
       ...inventoryRecon,
+      ...adjInMissingGl,
       ...duplicateIdempotency,
       ...lockedPeriodViolations,
       ...sequenceGaps,
@@ -370,6 +376,112 @@ export class GLIntegrityChecker {
         check: 'ar_reconciliation',
         severity: 'INFO',
         message: 'AR reconciliation: GL matches customer subledger.',
+      });
+    }
+
+    return findings;
+  }
+
+  /**
+   * Open invoices must not survive VOID / VOIDED_BY_RETURN / REFUNDED sales.
+   * Henber INV-2026-0020: refund corrected GL 1200 but left the invoice UNPAID.
+   */
+  private static async checkDeadSaleOpenInvoices(
+    pool: pg.Pool
+  ): Promise<IntegrityFinding[]> {
+    const findings: IntegrityFinding[] = [];
+
+    const result = await pool.query(`
+      SELECT i.invoice_number,
+             s.sale_number,
+             s.status::text AS sale_status,
+             i.amount_due::numeric AS amount_due
+      FROM invoices i
+      JOIN sales s ON s.id = i.sale_id
+      WHERE i.status NOT IN ('CANCELLED', 'VOIDED', 'DRAFT', 'PAID')
+        AND COALESCE(i.amount_due, 0) > 0.009
+        AND s.status IN ('VOID', 'VOIDED_BY_RETURN', 'REFUNDED')
+      ORDER BY i.amount_due DESC
+      LIMIT 50
+    `);
+
+    if (result.rows.length > 0) {
+      const totalDue = result.rows.reduce(
+        (sum, r) => sum + Number(r.amount_due || 0),
+        0,
+      );
+      findings.push({
+        check: 'dead_sale_open_invoices',
+        severity: 'ERROR',
+        message:
+          `${result.rows.length} open invoice(s) linked to voided/fully-returned sales ` +
+          `(outstanding ${totalDue.toFixed(2)}). Cancel subledger only — do not re-post AR.`,
+        details: {
+          count: result.rows.length,
+          totalDue,
+          samples: result.rows.slice(0, 10),
+        },
+      });
+    } else {
+      findings.push({
+        check: 'dead_sale_open_invoices',
+        severity: 'INFO',
+        message: 'No open invoices linked to voided or fully-returned sales.',
+      });
+    }
+
+    return findings;
+  }
+
+  /**
+   * Valued ADJUSTMENT_IN movements must have a STOCK_MOVEMENT twin on GL 1300.
+   */
+  private static async checkAdjustmentInMissingGl(
+    pool: pg.Pool
+  ): Promise<IntegrityFinding[]> {
+    const findings: IntegrityFinding[] = [];
+
+    const result = await pool.query(`
+      WITH mov_gl AS (
+        SELECT DISTINCT lt."ReferenceNumber" AS mov
+        FROM ledger_entries le
+        JOIN ledger_transactions lt ON le."TransactionId" = lt."Id"
+        JOIN accounts a ON le."AccountId" = a."Id"
+        WHERE a."AccountCode" = '1300'
+          AND lt."ReferenceType" = 'STOCK_MOVEMENT'
+          AND lt."Status" = 'POSTED'
+          AND lt."IsReversed" = FALSE
+      )
+      SELECT m.movement_number,
+             ROUND((ABS(m.quantity) * COALESCE(m.unit_cost, 0))::numeric, 2) AS val
+      FROM stock_movements m
+      LEFT JOIN mov_gl g ON g.mov = m.movement_number
+      WHERE m.movement_type::text = 'ADJUSTMENT_IN'
+        AND g.mov IS NULL
+        AND ABS(m.quantity) * COALESCE(m.unit_cost, 0) > 0.01
+      ORDER BY ABS(m.quantity) * COALESCE(m.unit_cost, 0) DESC
+      LIMIT 50
+    `);
+
+    if (result.rows.length > 0) {
+      const totalVal = result.rows.reduce((sum, r) => sum + Number(r.val || 0), 0);
+      findings.push({
+        check: 'adjustment_in_missing_gl',
+        severity: 'ERROR',
+        message:
+          `${result.rows.length} valued ADJUSTMENT_IN movement(s) have no GL 1300 twin ` +
+          `(exposed value ${totalVal.toFixed(2)}).`,
+        details: {
+          count: result.rows.length,
+          totalVal,
+          samples: result.rows.slice(0, 10),
+        },
+      });
+    } else {
+      findings.push({
+        check: 'adjustment_in_missing_gl',
+        severity: 'INFO',
+        message: 'All valued ADJUSTMENT_IN movements have a GL 1300 twin.',
       });
     }
 

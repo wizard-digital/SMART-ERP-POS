@@ -3446,36 +3446,13 @@ export const salesService = {
         }
       }
 
-      // Cancel linked invoice if exists (SINGLE SOURCE OF TRUTH)
-      // The invoice cancellation will trigger customer balance recalculation
-      const linkedInvoiceResult = await client.query(
-        `SELECT id FROM invoices WHERE sale_id = $1`,
-        [saleId]
+      // Cancel linked invoice(s) — SSOT with full-return path (no second AR journal)
+      const { cancelLinkedInvoicesForDeadSale } = await import(
+        '../invoices/cancelLinkedInvoicesForDeadSale.js'
       );
-
-      if (linkedInvoiceResult.rows.length > 0) {
-        const invoiceId = linkedInvoiceResult.rows[0].id;
-
-        // Set invoice to Cancelled with zero outstanding (customer no longer owes)
-        await client.query(
-          `UPDATE invoices 
-           SET status = 'CANCELLED', 
-               amount_due = 0,
-               updated_at = NOW()
-           WHERE id = $1`,
-          [invoiceId]
-        );
-
-        logger.info('Invoice cancelled for voided sale', {
-          saleId,
-          invoiceId,
-        });
-
-        // NOTE: The trg_sync_customer_balance_on_invoice trigger will automatically
-        // recalculate customer.balance from remaining unpaid invoices
-      } else if (sale.customer_id) {
+      const cancelled = await cancelLinkedInvoicesForDeadSale(client, saleId, 'SALE_VOID');
+      if (cancelled.cancelledInvoiceIds.length === 0 && sale.customer_id) {
         // No invoice exists - recalculate customer balance from invoices (SSOT)
-        // Even legacy sales: the balance must always derive from invoices
         const paymentLinesResult = await client.query(
           `SELECT SUM(amount) as credit_amount 
            FROM payment_lines 
@@ -4156,6 +4133,13 @@ export const salesService = {
           saleId,
           saleNumber: sale.sale_number,
         });
+
+        // Same SSOT as sale void: open invoice must not survive a dead sale.
+        // Refund GL already relieved AR — cancel subledger only (no second 1200 post).
+        const { cancelLinkedInvoicesForDeadSale } = await import(
+          '../invoices/cancelLinkedInvoicesForDeadSale.js'
+        );
+        await cancelLinkedInvoicesForDeadSale(client, saleId, 'SALE_VOIDED_BY_RETURN');
 
         // SAP GLT0: Sale status changes from COMPLETED → REFUNDED,
         // so it no longer counts in COMPLETED summaries — decrement rollup

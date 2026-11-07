@@ -17,6 +17,7 @@
  * UNIQUE constraint on IdempotencyKey, so re-running is always safe.
  */
 
+import { createHash } from 'node:crypto';
 import { pool as globalPool } from '../../db/pool.js';
 import type pg from 'pg';
 import Decimal from 'decimal.js';
@@ -1553,6 +1554,12 @@ export interface HealInventoryGlDriftResult {
     durationMs: number;
 }
 
+/** Stable UUID from heal idempotency key (one referenceId per business day). */
+export function inventoryGlDriftHealReferenceId(idempotencyKey: string): string {
+    const h = createHash('sha256').update(`inventory-gl-drift:${idempotencyKey}`).digest('hex');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-5${h.slice(13, 16)}-${((parseInt(h.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0')}${h.slice(18, 20)}-${h.slice(20, 32)}`;
+}
+
 export async function healInventoryGlDrift(
     dbPool?: pg.Pool,
     userId?: string,
@@ -1626,6 +1633,10 @@ export async function healInventoryGlDrift(
     const absDrift = Math.abs(drift);
     const today = getBusinessDate();
     const idempotencyKey = `INV-GL-DRIFT-HEAL-${today}`;
+    // Deterministic per-day UUID — NEVER reuse the nil UUID. AccountingCore's
+    // ReferenceType+ReferenceId guard blocked every heal after May 2026
+    // (INV-GL-DRIFT-HEAL-2026-05-29) when all heals shared 00000000-...-0000.
+    const referenceId = inventoryGlDriftHealReferenceId(idempotencyKey);
     const action: HealInventoryGlDriftResult['action'] =
         drift > 0 ? 'credit-inventory' : 'debit-inventory';
 
@@ -1669,7 +1680,7 @@ export async function healInventoryGlDrift(
             entryDate: today,
             description,
             referenceType: 'CORRECTION',
-            referenceId: '00000000-0000-0000-0000-000000000000',
+            referenceId,
             referenceNumber: idempotencyKey,
             idempotencyKey,
             userId: userId ?? '00000000-0000-0000-0000-000000000001',
