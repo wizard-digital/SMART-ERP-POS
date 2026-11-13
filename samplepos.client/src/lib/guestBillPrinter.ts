@@ -19,7 +19,7 @@ export function readCachedGuestBillPrinter(): string | null {
 export function writeCachedGuestBillPrinter(printerName: string | null): void {
   try {
     if (typeof localStorage === 'undefined') return;
-    const t = (printerName || '').trim();
+    const t = String(printerName ?? '').trim();
     if (!t) localStorage.removeItem(CACHE_KEY);
     else localStorage.setItem(CACHE_KEY, t);
   } catch {

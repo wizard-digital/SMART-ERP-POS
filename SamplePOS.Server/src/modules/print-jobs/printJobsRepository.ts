@@ -1,5 +1,9 @@
 import type { Pool, PoolClient } from 'pg';
 import { convertKeysToCamelCase } from '../../utils/caseConverter.js';
+import {
+  normalizePrinterName,
+  normalizeStationCode,
+} from '../restaurant/stationCode.js';
 import type { CreatePrintJobInput, PrintJobRecord, PrintJobStatus } from './printJobTypes.js';
 
 type DbConn = Pool | PoolClient;
@@ -28,13 +32,13 @@ export const printJobsRepository = {
        RETURNING *`,
       [
         input.documentType,
-        input.targetPrinter?.trim() || null,
+        normalizePrinterName(input.targetPrinter),
         input.copies ?? 1,
         JSON.stringify(input.payloadJson ?? {}),
         input.sourceType ?? null,
         input.sourceId ?? null,
         input.orderId ?? null,
-        input.stationCode?.trim().toUpperCase() || null,
+        normalizeStationCode(input.stationCode) || null,
       ],
     );
     return mapRow(result.rows[0]);

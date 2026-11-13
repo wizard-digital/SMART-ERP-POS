@@ -134,6 +134,9 @@ describe('Restaurant architecture proof (Phase 1)', () => {
     expect(repo).toMatch(/healUnsentLineKitchenStations/);
     expect(repo).toMatch(/COALESCE\(\s*NULLIF\(BTRIM\(oi\.kitchen_station\)/);
     expect(repo).toMatch(/LEFT JOIN products p ON p\.id = oi\.product_id/);
+    // Numeric-looking station codes must not crash .trim() after camelCase coercion.
+    expect(repo).toMatch(/normalizeStationCode\(code\)/);
+    expect(repo).toMatch(/stationCodesEquivalent/);
 
     const ops = readRepo('samplepos.client/src/lib/restaurantOfflineOps.ts');
     expect(ops).toMatch(/resolveOfflineKotStation/);
@@ -148,7 +151,8 @@ describe('Restaurant architecture proof (Phase 1)', () => {
     expect(print).toMatch(/companyName/);
     // Matched station must NOT fall through to default printer (BAR/PIZZA collapse).
     expect(print).toMatch(/never steal the default station printer/);
-    expect(print).toMatch(/if \(match\) return match\.printerName/);
+    expect(print).toMatch(/normalizePrinterName\(match\.printerName\)/);
+    expect(print).toMatch(/stationCodesEquivalent/);
 
     const branding = readRepo('samplepos.client/src/lib/documentCompanyBranding.ts');
     expect(branding).toMatch(/brandingFromTenant/);

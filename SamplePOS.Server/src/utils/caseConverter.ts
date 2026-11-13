@@ -17,12 +17,14 @@ export function camelToSnake(str: string): string {
 }
 
 /**
- * Check if value is a numeric string (PostgreSQL NUMERIC/DECIMAL)
+ * Check if value is a decimal numeric string (PostgreSQL NUMERIC/DECIMAL money).
+ * Integer-looking strings (station codes "1000", "002", kitchen_station "2")
+ * must stay strings — coercing them to numbers breaks .trim() / code lookups.
  */
 function isNumericString(value: unknown): value is string {
   if (typeof value !== 'string') return false;
-  // Match patterns like "1000.00", "0.50", "-123.45"
-  return /^-?\d+(\.\d+)?$/.test(value);
+  // Match patterns like "1000.00", "0.50", "-123.45" — require a decimal point.
+  return /^-?\d+\.\d+$/.test(value);
 }
 
 /**

@@ -27,6 +27,11 @@ import {
   totalLineQuantity,
   type ReconcileDesiredLine,
 } from '@shared/utils/reconcileOrderLineVoids';
+import {
+  normalizePrinterName,
+  normalizeStationCode,
+  stationCodesEquivalent,
+} from '@shared/restaurant/stationCode';
 import { decrementLocalStock, getCachedCatalog, restoreLocalStock } from '../services/offlineCatalogService';
 import { getCachedRestaurantMenu, getCachedRestaurantStations, paintRestaurantTableFreeOffline } from './restaurantOfflineCache';
 import { publishLanKdsBoardChanged } from './restaurantLanKds';
@@ -689,15 +694,24 @@ function resolveOfflineKotStation(productId: string): { code: string; printerNam
   const menu = getCachedRestaurantMenu();
   const stations = getCachedRestaurantStations().filter((s) => s.isActive);
   const product = menu.find((p) => p.id === productId);
-  const code = String(product?.kitchenStation || '')
-    .trim()
-    .toUpperCase();
+  const code = normalizeStationCode(product?.kitchenStation);
   const match = code
-    ? stations.find((s) => s.code.toUpperCase() === code)
+    ? stations.find((s) => normalizeStationCode(s.code) === code) ||
+      stations.find((s) => stationCodesEquivalent(s.code, code))
     : undefined;
-  if (match) return { code: match.code.toUpperCase(), printerName: match.printerName };
+  if (match) {
+    return {
+      code: normalizeStationCode(match.code),
+      printerName: normalizePrinterName(match.printerName),
+    };
+  }
   const def = stations.find((s) => s.isDefault) || stations[0];
-  if (def) return { code: def.code.toUpperCase(), printerName: def.printerName };
+  if (def) {
+    return {
+      code: normalizeStationCode(def.code),
+      printerName: normalizePrinterName(def.printerName),
+    };
+  }
   return { code: 'KITCHEN', printerName: null };
 }
 

@@ -1342,7 +1342,7 @@ export const restaurantService = {
       const byStation = new Map<string, { station: RestaurantStationRecord; items: typeof unsentForKot }>();
       for (const item of unsentForKot) {
         const resolved = await restaurantRepository.resolveStation(client, item.kitchenStation);
-        const key = resolved.code.toUpperCase();
+        const key = String(resolved.code ?? '').toUpperCase();
         const bucket = byStation.get(key) || { station: resolved, items: [] };
         bucket.items.push(item);
         byStation.set(key, bucket);
@@ -1543,7 +1543,7 @@ export const restaurantService = {
             item.id,
             item.kitchenStation,
           );
-          const key = resolved.code.toUpperCase();
+          const key = String(resolved.code ?? '').toUpperCase();
           const bucket = byStation.get(key) || { station: resolved, items: [] };
           bucket.items.push(item);
           byStation.set(key, bucket);
@@ -2038,7 +2038,7 @@ export const restaurantService = {
           item.id,
           item.kitchenStation,
         );
-        const key = resolved.code.toUpperCase();
+        const key = String(resolved.code ?? '').toUpperCase();
         const bucket = byStation.get(key) || { station: resolved, items: [] };
         bucket.items.push(item);
         byStation.set(key, bucket);

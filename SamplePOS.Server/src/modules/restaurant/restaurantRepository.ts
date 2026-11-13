@@ -8,6 +8,11 @@ import { convertKeysToCamelCase } from '../../utils/caseConverter.js';
 import { getBusinessYear } from '../../utils/dateRange.js';
 import { tableHasColumn } from '../../db/schemaColumnCache.js';
 import { productPosVisibleAtStoreSql } from '../inventory/warehouse/productDistributionSqlFragments.js';
+import {
+  normalizePrinterName,
+  normalizeStationCode,
+  stationCodesEquivalent,
+} from './stationCode.js';
 
 export type DbConn = Pool | PoolClient;
 
@@ -754,11 +759,9 @@ export const restaurantRepository = {
     }
     if (data.kitchenStation !== undefined) {
       sets.push(`kitchen_station = $${i++}`);
-      values.push(
-        data.kitchenStation == null || data.kitchenStation === ''
-          ? null
-          : data.kitchenStation.trim().toUpperCase(),
-      );
+      const stationRaw =
+        data.kitchenStation == null ? '' : String(data.kitchenStation).trim().toUpperCase();
+      values.push(stationRaw === '' ? null : stationRaw);
     }
     if (sets.length === 0) return null;
 
@@ -1546,7 +1549,7 @@ export const restaurantRepository = {
        ORDER BY sort_order ASC, code ASC`,
       [includeInactive],
     );
-    return result.rows.map((r) => convertKeysToCamelCase(r) as RestaurantStationRecord);
+    return result.rows.map((r) => this.normalizeStationRow(r));
   },
 
   async getDefaultStation(conn: DbConn): Promise<RestaurantStationRecord> {
@@ -1562,12 +1565,23 @@ export const restaurantRepository = {
     };
   },
 
+  normalizeStationRow(row: unknown): RestaurantStationRecord {
+    const s = convertKeysToCamelCase(row) as RestaurantStationRecord;
+    return {
+      ...s,
+      code: normalizeStationCode(s.code),
+      printerName: normalizePrinterName(s.printerName),
+    };
+  },
+
   async resolveStation(
     conn: DbConn,
-    code: string | null | undefined,
+    code: string | number | null | undefined,
   ): Promise<RestaurantStationRecord> {
     const fallback = await this.getDefaultStation(conn);
-    const normalized = (code || '').trim().toUpperCase();
+    // Kitchen station / station codes are varchar identifiers. Never assume string —
+    // convertKeysToCamelCase used to coerce "1000"/"2" to numbers and crash .trim().
+    const normalized = normalizeStationCode(code);
     if (!normalized) return fallback;
     if (!(await this.stationsTableExists(conn))) {
       return { ...fallback, code: normalized || fallback.code, name: normalized || fallback.name };
@@ -1579,8 +1593,15 @@ export const restaurantRepository = {
        LIMIT 1`,
       [normalized],
     );
-    if (!result.rows[0]) return fallback;
-    return convertKeysToCamelCase(result.rows[0]) as RestaurantStationRecord;
+    if (result.rows[0]) return this.normalizeStationRow(result.rows[0]);
+
+    // Digit-only numeric equivalence (product "2" ↔ station "002") — exact miss only.
+    if (/^\d+$/.test(normalized)) {
+      const stations = await this.listStations(conn, false);
+      const match = stations.find((s) => stationCodesEquivalent(s.code, normalized));
+      if (match) return match;
+    }
+    return fallback;
   },
 
   /**
@@ -1626,7 +1647,8 @@ export const restaurantRepository = {
     if (!(await this.stationsTableExists(conn))) {
       throw new Error('Station registry migration 563 is required');
     }
-    const code = data.code.trim().toUpperCase();
+    const code = normalizeStationCode(data.code);
+    if (!code) throw new Error('Station code is required');
     if (data.isDefault) {
       await conn.query(`UPDATE restaurant_stations SET is_default = FALSE WHERE is_default = TRUE`);
     }
@@ -1636,13 +1658,13 @@ export const restaurantRepository = {
        RETURNING id, code, name, printer_name, sort_order, is_active, is_default, created_at, updated_at`,
       [
         code,
-        data.name.trim(),
-        data.printerName?.trim() || null,
+        String(data.name ?? '').trim(),
+        normalizePrinterName(data.printerName),
         data.sortOrder ?? 0,
         data.isDefault ?? false,
       ],
     );
-    return convertKeysToCamelCase(result.rows[0]) as RestaurantStationRecord;
+    return this.normalizeStationRow(result.rows[0]);
   },
 
   async updateStation(
@@ -1670,15 +1692,15 @@ export const restaurantRepository = {
     let i = 1;
     if (data.code !== undefined) {
       sets.push(`code = $${i++}`);
-      values.push(data.code.trim().toUpperCase());
+      values.push(normalizeStationCode(data.code));
     }
     if (data.name !== undefined) {
       sets.push(`name = $${i++}`);
-      values.push(data.name.trim());
+      values.push(String(data.name ?? '').trim());
     }
     if (data.printerName !== undefined) {
       sets.push(`printer_name = $${i++}`);
-      values.push(data.printerName?.trim() || null);
+      values.push(normalizePrinterName(data.printerName));
     }
     if (data.sortOrder !== undefined) {
       sets.push(`sort_order = $${i++}`);
@@ -1698,7 +1720,7 @@ export const restaurantRepository = {
          FROM restaurant_stations WHERE id = $1`,
         [id],
       );
-      return cur.rows[0] ? (convertKeysToCamelCase(cur.rows[0]) as RestaurantStationRecord) : null;
+      return cur.rows[0] ? this.normalizeStationRow(cur.rows[0]) : null;
     }
     sets.push(`updated_at = NOW()`);
     values.push(id);
@@ -1709,8 +1731,6 @@ export const restaurantRepository = {
        RETURNING id, code, name, printer_name, sort_order, is_active, is_default, created_at, updated_at`,
       values,
     );
-    return result.rows[0]
-      ? (convertKeysToCamelCase(result.rows[0]) as RestaurantStationRecord)
-      : null;
+    return result.rows[0] ? this.normalizeStationRow(result.rows[0]) : null;
   },
 };

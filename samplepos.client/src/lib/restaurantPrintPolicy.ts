@@ -39,7 +39,7 @@ function serviceLooksOnline(): boolean {
  * Usual case: station mapped to a name that is not a real Windows printer.
  */
 export function silentPrintFailureMessage(printerName?: string | null): string {
-  const name = printerName?.trim();
+  const name = String(printerName ?? '').trim() || undefined;
   const online = serviceLooksOnline();
 
   if (name) {

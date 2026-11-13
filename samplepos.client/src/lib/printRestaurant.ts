@@ -15,6 +15,11 @@ import { buildKotThermalTicket, resolveKotStaffLabels } from '@shared/printing/b
 import { renderThermalTicketEscPos } from '@shared/printing/escposRenderer';
 import { renderThermalTicketHtml } from '@shared/printing/htmlRenderer';
 import {
+  normalizePrinterName,
+  normalizeStationCode,
+  stationCodesEquivalent,
+} from '@shared/restaurant/stationCode';
+import {
   type DocumentCompanyBranding,
 } from './documentCompanyBranding';
 import { printHtmlDocument } from './print';
@@ -64,7 +69,7 @@ function bridgePreflight(printerName?: string | null): BridgeResult | null {
   if (bridgeRejectsUnnamedPrinter(printerName)) {
     return { ok: false, reason: 'rejected' };
   }
-  const name = printerName!.trim();
+  const name = normalizePrinterName(printerName)!;
   const health = getPrinterServiceHealthCache();
   if (health.status === 'offline') return { ok: false, reason: 'offline' };
   const cached = readCachedBridgePrinters();
@@ -165,7 +170,7 @@ async function postToPrintBridge(
   printerName?: string | null,
 ): Promise<BridgeResult> {
   const trace = startPrintPathTrace('postToPrintBridge');
-  const name = printerName?.trim() || null;
+  const name = normalizePrinterName(printerName);
   const blocked = bridgePreflight(name);
   if (blocked) {
     trace.end({ reason: blocked.reason });
@@ -220,7 +225,7 @@ async function postEscPosToPrintBridge(
   printerName?: string | null,
 ): Promise<BridgeResult> {
   const trace = startPrintPathTrace('postEscPosToPrintBridge');
-  const name = printerName?.trim() || null;
+  const name = normalizePrinterName(printerName);
   const blocked = bridgePreflight(name);
   if (blocked) {
     trace.end({ reason: blocked.reason });
@@ -285,18 +290,18 @@ function agentSupportsEscPos(): boolean {
  * (same SSOT managers map on Stations page). Used when the API omits printerName.
  */
 export function resolveStationPrinterName(stationCode: string | null | undefined): string | null {
-  const code = String(stationCode || '')
-    .trim()
-    .toUpperCase();
+  const code = normalizeStationCode(stationCode);
   const stations = getCachedRestaurantStations().filter((s) => s.isActive);
   if (code) {
-    const match = stations.find((s) => s.code.toUpperCase() === code);
+    const match =
+      stations.find((s) => normalizeStationCode(s.code) === code) ||
+      stations.find((s) => stationCodesEquivalent(s.code, code));
     // Matched station: use ITS printer only — never steal the default station printer
     // (that collapses BAR/PIZZA tickets onto Kitchen).
-    if (match) return match.printerName?.trim() || null;
+    if (match) return normalizePrinterName(match.printerName);
   }
   const def = stations.find((s) => s.isDefault) || stations[0];
-  return def?.printerName?.trim() || null;
+  return normalizePrinterName(def?.printerName);
 }
 
 /**
@@ -306,7 +311,7 @@ export function resolveStationPrinterName(stationCode: string | null | undefined
  * 3) Browser dialog only if emergency fallback is enabled on this terminal
  */
 async function printHtml(html: string, printerName?: string | null): Promise<void> {
-  const name = printerName?.trim() || null;
+  const name = normalizePrinterName(printerName);
   const allowBrowser = isRestaurantBrowserPrintFallbackEnabled();
 
   if (!name) {
@@ -379,7 +384,7 @@ export async function printKitchenTicket(data: KotPrintData): Promise<void> {
   const printer = data.printerName || resolveStationPrinterName(data.station);
   const allowBrowser = isRestaurantBrowserPrintFallbackEnabled();
 
-  if (!printer?.trim()) {
+  if (!normalizePrinterName(printer)) {
     if (allowBrowser) {
       const html = renderThermalTicketHtml(ticket, buildThermalPrintCss(80));
       return printHtmlDocument(html);
@@ -500,7 +505,7 @@ export async function printGuestThermalDocument(
   const tried = new Set<string>();
   const queue: Array<string | null> = [];
   const push = (n?: string | null) => {
-    const t = n?.trim() || null;
+    const t = normalizePrinterName(n);
     if (!t) return; // never enqueue empty as "named" target
     const key = t.toLowerCase();
     if (tried.has(key)) return;

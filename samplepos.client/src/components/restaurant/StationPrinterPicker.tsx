@@ -38,10 +38,10 @@ export function StationPrinterPicker({
   const [fromCache, setFromCache] = useState(false);
   const [loading, setLoading] = useState(false);
   const [customMode, setCustomMode] = useState(() => {
-    const v = (value || '').trim();
+    const v = String(value ?? '').trim();
     return Boolean(v) && !readCachedBridgePrinters().includes(v);
   });
-  const [draft, setDraft] = useState(value || '');
+  const [draft, setDraft] = useState(String(value ?? ''));
 
   const options = useMemo(
     () => mergePrinterOptions(discovered, [...knownPrinters, value]),
@@ -56,7 +56,7 @@ export function StationPrinterPicker({
       setBridgeOnline(res.bridgeOnline);
       setFromCache(Boolean(res.fromCache));
       // Keep typed/saved mapping editable even when list is empty
-      const v = (value || '').trim();
+      const v = String(value ?? '').trim();
       if (v && res.printers.length > 0 && !res.printers.includes(v) && !knownPrinters.some((k) => (k || '').trim() === v)) {
         setCustomMode(true);
       }
@@ -72,7 +72,7 @@ export function StationPrinterPicker({
 
   useEffect(() => {
     setDraft(value || '');
-    const v = (value || '').trim();
+    const v = String(value ?? '').trim();
     if (!v) {
       setCustomMode(false);
       return;
@@ -84,9 +84,9 @@ export function StationPrinterPicker({
 
   const selectValue = customMode
     ? CUSTOM
-    : (value || '').trim() && options.includes((value || '').trim())
-      ? (value || '').trim()
-      : (value || '').trim()
+    : String(value ?? '').trim() && options.includes(String(value ?? '').trim())
+      ? String(value ?? '').trim()
+      : String(value ?? '').trim()
         ? CUSTOM
         : NONE;
 
@@ -162,7 +162,7 @@ export function StationPrinterPicker({
           <button
             type="button"
             className="shrink-0 text-xs px-2 py-1.5 rounded bg-stone-900 text-white disabled:opacity-40"
-            disabled={disabled || draft.trim() === (value || '').trim()}
+            disabled={disabled || draft.trim() === String(value ?? '').trim()}
             onClick={() => commit(draft.trim() || null)}
           >
             Save

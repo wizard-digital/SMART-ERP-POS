@@ -127,10 +127,10 @@ export function normalizePrintJob(raw: unknown): ClientPrintJob | null {
     payload = {};
   }
 
-  const printer =
-    (typeof r.targetPrinter === 'string' && r.targetPrinter.trim()) ||
-    (typeof r.target_printer === 'string' && r.target_printer.trim()) ||
-    null;
+  const printerRaw = r.targetPrinter ?? r.target_printer;
+  const printer = String(printerRaw ?? '').trim() || null;
+  const stationRaw = r.stationCode ?? r.station_code;
+  const stationCode = String(stationRaw ?? '').trim() || null;
 
   return {
     id,
@@ -138,10 +138,7 @@ export function normalizePrintJob(raw: unknown): ClientPrintJob | null {
     targetPrinter: printer,
     payloadJson: payload as Record<string, unknown>,
     status: typeof r.status === 'string' ? r.status : undefined,
-    stationCode:
-      (typeof r.stationCode === 'string' && r.stationCode) ||
-      (typeof r.station_code === 'string' && r.station_code) ||
-      null,
+    stationCode,
     createdAt:
       (typeof r.createdAt === 'string' && r.createdAt) ||
       (typeof r.created_at === 'string' && r.created_at) ||
