@@ -38,10 +38,17 @@ describe('KOT Steward = login firer (Blis evidence)', () => {
 
   it('EVIDENCE gate: print uses Steward (not Waiter: check-owner only)', () => {
     const print = readRepo('samplepos.client/src/lib/printRestaurant.ts');
-    expect(print).toMatch(/Steward:/);
     expect(print).toMatch(/resolveKotStaffPrintLabels/);
     expect(print).not.toMatch(/Sent by:/);
     expect(print).not.toMatch(/Waiter: \$\{/);
+
+    const html = readRepo('shared/printing/htmlRenderer.ts');
+    expect(html).toMatch(/Steward:/);
+    expect(html).not.toMatch(/Waiter:/);
+
+    const guest = readRepo('samplepos.client/src/lib/thermalGuestDocument.ts');
+    expect(guest).toMatch(/label:\s*'Steward'/);
+    expect(guest).not.toMatch(/label:\s*'Waiter'/);
 
     const service = readRepo('SamplePOS.Server/src/modules/restaurant/restaurantService.ts');
     const sendKot = service.slice(
@@ -57,3 +64,4 @@ describe('KOT Steward = login firer (Blis evidence)', () => {
     expect(pos).toMatch(/serverName:\s*kot\.serverName/);
   });
 });
+

@@ -685,12 +685,19 @@ export function updateRestaurantCheckNotesOffline(
  */
 export type OfflineKotTicket = {
   kotOfflineId: string;
+  /** Human station name for printed documents. */
   station: string;
+  /** Station code for printer routing. */
+  stationCode: string;
   printerName: string | null;
   lines: Array<{ lineId: string; productName: string; quantity: number; lineNotes?: string | null }>;
 };
 
-function resolveOfflineKotStation(productId: string): { code: string; printerName: string | null } {
+function resolveOfflineKotStation(productId: string): {
+  code: string;
+  name: string;
+  printerName: string | null;
+} {
   const menu = getCachedRestaurantMenu();
   const stations = getCachedRestaurantStations().filter((s) => s.isActive);
   const product = menu.find((p) => p.id === productId);
@@ -700,19 +707,25 @@ function resolveOfflineKotStation(productId: string): { code: string; printerNam
       stations.find((s) => stationCodesEquivalent(s.code, code))
     : undefined;
   if (match) {
+    const stationCode = normalizeStationCode(match.code);
+    const name = String(match.name ?? '').trim() || stationCode;
     return {
-      code: normalizeStationCode(match.code),
+      code: stationCode,
+      name,
       printerName: normalizePrinterName(match.printerName),
     };
   }
   const def = stations.find((s) => s.isDefault) || stations[0];
   if (def) {
+    const stationCode = normalizeStationCode(def.code);
+    const name = String(def.name ?? '').trim() || stationCode;
     return {
-      code: normalizeStationCode(def.code),
+      code: stationCode,
+      name,
       printerName: normalizePrinterName(def.printerName),
     };
   }
-  return { code: 'KITCHEN', printerName: null };
+  return { code: 'KITCHEN', name: 'KITCHEN', printerName: null };
 }
 
 export function fireRestaurantKotOffline(order: DerivedOrder): { tickets: OfflineKotTicket[] } {
@@ -724,13 +737,14 @@ export function fireRestaurantKotOffline(order: DerivedOrder): { tickets: Offlin
   const firedAt = new Date().toISOString();
   const byStation = new Map<
     string,
-    { station: string; printerName: string | null; items: typeof unsent }
+    { station: string; stationName: string; printerName: string | null; items: typeof unsent }
   >();
   for (const line of unsent) {
     const resolved = resolveOfflineKotStation(line.productId);
     const key = resolved.code;
     const bucket = byStation.get(key) || {
       station: key,
+      stationName: resolved.name,
       printerName: resolved.printerName,
       items: [],
     };
@@ -781,7 +795,8 @@ export function fireRestaurantKotOffline(order: DerivedOrder): { tickets: Offlin
 
     tickets.push({
       kotOfflineId,
-      station: bucket.station,
+      station: bucket.stationName,
+      stationCode: bucket.station,
       printerName: bucket.printerName,
       lines: printLines,
     });
@@ -1067,7 +1082,7 @@ function emitVoidKotTicketsOffline(
 ): OfflineKotTicket[] {
   const byStation = new Map<
     string,
-    { station: string; printerName: string | null; items: typeof sentLines }
+    { station: string; stationName: string; printerName: string | null; items: typeof sentLines }
   >();
   for (const line of sentLines) {
     if (!line.lineId) continue;
@@ -1078,6 +1093,7 @@ function emitVoidKotTicketsOffline(
     const key = resolved.code;
     const bucket = byStation.get(key) || {
       station: key,
+      stationName: resolved.name,
       printerName: resolved.printerName,
       items: [],
     };
@@ -1112,7 +1128,8 @@ function emitVoidKotTicketsOffline(
     });
     tickets.push({
       kotOfflineId,
-      station: bucket.station,
+      station: bucket.stationName,
+      stationCode: bucket.station,
       printerName: bucket.printerName,
       lines: kotLines,
     });

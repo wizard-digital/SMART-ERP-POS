@@ -1,0 +1,28 @@
+{
+  "proofId": "RESTAURANT_PRINT_STATION_NAME_STEWARD",
+  "date": "2026-11-14",
+  "verdict": "PASS",
+  "requirement": {
+    "stationOnPrintedDocs": "NAME not CODE",
+    "staffLabelOnBillAndKot": "Steward (same reading on both)"
+  },
+  "behavioral": {
+    "kotHtmlShowsStationNameAndSteward": true,
+    "billHtmlShowsStewardNotWaiter": true,
+    "serverPayloadStationNameAndStewardName": true,
+    "offlineTicketsUseStationNamePlusStationCode": true
+  },
+  "tests": {
+    "command": "npx vitest run src/__tests__/restaurant-print-station-name-steward.evidence.test.ts src/__tests__/restaurant-kot-sent-by.evidence.test.ts src/__tests__/restaurant-station-printer-routing.evidence.test.ts",
+    "passed": 12,
+    "failed": 0,
+    "note": "kot-escpos agent version assert (1.3 vs 1.4) is unrelated pre-existing drift; not part of this change"
+  },
+  "paths": {
+    "server": "SamplePOS.Server/src/modules/restaurant/restaurantService.ts#stationPrintLabel,kotToPrintPayload,requestBill",
+    "kotRender": "shared/printing/htmlRenderer.ts + escposRenderer.ts (Steward:)",
+    "billRender": "samplepos.client/src/lib/thermalGuestDocument.ts (label Steward)",
+    "offline": "samplepos.client/src/lib/restaurantOfflineOps.ts (station name + stationCode)",
+    "clientDispatch": "samplepos.client/src/lib/printJobDispatcher.ts"
+  }
+}

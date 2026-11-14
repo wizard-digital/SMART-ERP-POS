@@ -242,14 +242,21 @@ function asKotPrintData(
   const items = Array.isArray(p.items)
     ? (p.items as Array<{ productName: string; quantity: number; lineNotes?: string | null }>)
     : [];
+  const stationCode =
+    String(p.stationCode || job.stationCode || '').trim() || null;
+  const stationRaw = String(p.station || stationCode || 'KITCHEN').trim();
   return {
     kotNumber: String(p.kotNumber || job.id),
-    station: String(p.station || job.stationCode || 'KITCHEN'),
+    station: stationRaw,
+    stationCode,
     printerName: job.targetPrinter,
     tableLabel: String(p.tableLabel || p.tableName || p.tableCode || 'Table'),
-    sentByName: (p.sentByName as string | null) ?? null,
+    sentByName: (p.sentByName as string | null) ?? (p.stewardName as string | null) ?? null,
     serverName: (p.serverName as string | null) ?? null,
-    waiterName: (p.waiterName as string | null) ?? null,
+    waiterName:
+      (p.stewardName as string | null) ??
+      (p.waiterName as string | null) ??
+      null,
     firedAt:
       typeof p.firedAt === 'string'
         ? Number.isNaN(Date.parse(p.firedAt))
@@ -295,10 +302,13 @@ function asBillPrintData(job: ClientPrintJob, branding: GuestBillBranding): Bill
     ? (p.paymentAccounts as BillPrintData['paymentAccounts'])
     : null;
 
+  const steward =
+    (p.stewardName as string | null) ?? (p.waiterName as string | null) ?? null;
   return {
     orderNumber: String(p.orderNumber || ''),
     tableLabel: String(p.tableLabel || 'Table'),
-    waiterName: (p.waiterName as string | null) ?? null,
+    stewardName: steward,
+    waiterName: steward,
     printedAt:
       typeof p.printedAt === 'string'
         ? p.printedAt

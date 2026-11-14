@@ -2758,12 +2758,14 @@ export default function RestaurantPosPage() {
         enqueueOfflinePrintJob({
           documentType: 'KOT',
           targetPrinter: kot.printerName,
-          stationCode: kot.station,
+          stationCode: kot.stationCode,
           payloadJson: {
             kotNumber: kot.kotOfflineId,
             station: kot.station,
+            stationCode: kot.stationCode,
             tableLabel: derived.tableName || derived.tableCode || selectedTable?.name || 'Table',
             sentByName: user?.fullName || user?.email || null,
+            stewardName: user?.fullName || user?.email || derived.waiterName || null,
             serverName:
               derived.waiterName &&
               derived.waiterName !== (user?.fullName || user?.email)
@@ -4319,8 +4321,11 @@ export default function RestaurantPosPage() {
         payloadJson: {
           kotNumber: kot.kotNumber,
           station: kot.station,
+          stationCode: kot.station,
           tableLabel: kot.tableName || kot.tableCode || selectedTable?.name || 'Table',
           sentByName:
+            kot.firedByName || kot.waiterName || user?.fullName || user?.email || null,
+          stewardName:
             kot.firedByName || kot.waiterName || user?.fullName || user?.email || null,
           serverName: kot.serverName || null,
           waiterName: kot.firedByName || kot.waiterName,
@@ -4456,12 +4461,14 @@ export default function RestaurantPosPage() {
             enqueueOfflinePrintJob({
               documentType: 'VOID_KOT',
               targetPrinter: kot.printerName,
-              stationCode: kot.station,
+              stationCode: kot.stationCode,
               payloadJson: {
                 kotNumber: kot.kotOfflineId,
                 station: kot.station,
+                stationCode: kot.stationCode,
                 tableLabel: derived.tableName || derived.tableCode || selectedTable?.name || 'Table',
                 sentByName: user?.fullName || user?.email || null,
+                stewardName: user?.fullName || user?.email || derived.waiterName || null,
                 waiterName: user?.fullName || user?.email || derived.waiterName || null,
                 firedAt: new Date().toISOString(),
                 ticketKind: 'VOID',
@@ -5065,12 +5072,14 @@ export default function RestaurantPosPage() {
               enqueueOfflinePrintJob({
                 documentType: 'VOID_KOT',
                 targetPrinter: kot.printerName,
-                stationCode: kot.station,
+                stationCode: kot.stationCode,
                 payloadJson: {
                   kotNumber: kot.kotOfflineId,
                   station: kot.station,
+                  stationCode: kot.stationCode,
                   tableLabel: derived.tableName || derived.tableCode || selectedTable?.name || 'Table',
                   sentByName: user?.fullName || user?.email || null,
+                  stewardName: user?.fullName || user?.email || derived.waiterName || null,
                   waiterName: user?.fullName || user?.email || derived.waiterName || null,
                   firedAt: new Date().toISOString(),
                   ticketKind: 'VOID',

@@ -221,6 +221,7 @@ export function buildThermalGuestDocumentHtml(doc: ThermalGuestDocument): string
 export function billToThermalGuestDocument(data: {
   orderNumber: string;
   tableLabel: string;
+  stewardName?: string | null;
   waiterName?: string | null;
   printedAt?: string | null;
   orderChannel?: string | null;
@@ -284,7 +285,9 @@ export function billToThermalGuestDocument(data: {
     { label: 'Order', value: data.orderNumber },
     { label: 'Date', value: printedAt },
   ];
-  if (data.waiterName) meta.push({ label: 'Waiter', value: data.waiterName });
+  // Same staff reading as KOT thermal tickets (Steward, not Waiter).
+  const steward = String(data.stewardName || data.waiterName || '').trim();
+  if (steward) meta.push({ label: 'Steward', value: steward });
   if (data.guestName) meta.push({ label: 'Guest', value: data.guestName });
   if (data.guestPhone) meta.push({ label: 'Phone', value: data.guestPhone });
   if (data.pickupLabel) meta.push({ label: 'Pickup', value: data.pickupLabel });

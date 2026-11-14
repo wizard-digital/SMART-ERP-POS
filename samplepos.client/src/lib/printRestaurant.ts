@@ -304,6 +304,22 @@ export function resolveStationPrinterName(stationCode: string | null | undefined
   return normalizePrinterName(def?.printerName);
 }
 
+/** Human station label for printed KOT/bill headers (name over code). */
+export function resolveStationPrintLabel(stationCodeOrName: string | null | undefined): string {
+  const raw = String(stationCodeOrName ?? '').trim();
+  if (!raw) return 'KITCHEN';
+  const stations = getCachedRestaurantStations().filter((s) => s.isActive);
+  const match =
+    stations.find((s) => normalizeStationCode(s.code) === normalizeStationCode(raw)) ||
+    stations.find((s) => stationCodesEquivalent(s.code, raw)) ||
+    stations.find((s) => String(s.name ?? '').trim().toLowerCase() === raw.toLowerCase());
+  if (match) {
+    const name = String(match.name ?? '').trim();
+    return name || normalizeStationCode(match.code) || raw;
+  }
+  return raw;
+}
+
 /**
  * Silent restaurant print SSOT.
  * 1) Mapped name → bridge only (never send a kitchen ticket to the wrong default printer)
@@ -327,7 +343,10 @@ async function printHtml(html: string, printerName?: string | null): Promise<voi
 
 export interface KotPrintData extends DocumentCompanyBranding {
   kotNumber: string;
+  /** Printed station label (name preferred). */
   station: string;
+  /** Station code for printer routing when distinct from display name. */
+  stationCode?: string | null;
   tableLabel: string;
   /** @deprecated Prefer sentByName — kept for older callers. */
   waiterName?: string | null;
@@ -353,6 +372,7 @@ export interface KotPrintData extends DocumentCompanyBranding {
 /** Pure labels for KOT header — login firer is Steward; check owner is Server when different. */
 export function resolveKotStaffPrintLabels(input: {
   sentByName?: string | null;
+  stewardName?: string | null;
   serverName?: string | null;
   waiterName?: string | null;
 }): { steward: string | null; server: string | null } {
@@ -360,9 +380,10 @@ export function resolveKotStaffPrintLabels(input: {
 }
 
 export async function printKitchenTicket(data: KotPrintData): Promise<void> {
+  const stationLabel = resolveStationPrintLabel(data.station);
   const ticket = buildKotThermalTicket({
     kotNumber: data.kotNumber,
-    station: data.station,
+    station: stationLabel,
     tableLabel: data.tableLabel,
     waiterName: data.waiterName,
     sentByName: data.sentByName,
@@ -381,7 +402,11 @@ export async function printKitchenTicket(data: KotPrintData): Promise<void> {
     items: data.items,
   });
 
-  const printer = data.printerName || resolveStationPrinterName(data.station);
+  // Printer routing uses station code when present; never the display name alone.
+  const printer =
+    data.printerName ||
+    resolveStationPrinterName(data.stationCode) ||
+    resolveStationPrinterName(data.station);
   const allowBrowser = isRestaurantBrowserPrintFallbackEnabled();
 
   if (!normalizePrinterName(printer)) {
@@ -417,6 +442,7 @@ export async function printKitchenTicket(data: KotPrintData): Promise<void> {
 export interface BillPrintData extends DocumentCompanyBranding {
   orderNumber: string;
   tableLabel: string;
+  stewardName?: string | null;
   waiterName?: string | null;
   /** When the bill was printed (defaults to now if omitted). */
   printedAt?: string | null;

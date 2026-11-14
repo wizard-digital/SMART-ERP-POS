@@ -27,10 +27,12 @@ export type KotTicketInput = {
 
 export function resolveKotStaffLabels(input: {
   sentByName?: string | null;
+  stewardName?: string | null;
   serverName?: string | null;
   waiterName?: string | null;
 }): { steward: string | null; server: string | null } {
-  const steward = (input.sentByName || input.waiterName || '').trim() || null;
+  const steward =
+    (input.sentByName || input.stewardName || input.waiterName || '').trim() || null;
   const server = (input.serverName || '').trim() || null;
   if (server && steward && server === steward) {
     return { steward, server: null };

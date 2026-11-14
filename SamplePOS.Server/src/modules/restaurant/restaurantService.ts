@@ -74,6 +74,12 @@ function applyKotActorNames(
   }
 }
 
+/** Printed station label — name first; code only if name missing. */
+function stationPrintLabel(station: { code: string; name?: string | null }): string {
+  const name = String(station.name ?? '').trim();
+  return name || String(station.code ?? '').trim() || 'KITCHEN';
+}
+
 /** Structured print payload — client renders HTML; agent receives silent job. */
 function kotToPrintPayload(
   kot: KotRecord,
@@ -84,15 +90,24 @@ function kotToPrintPayload(
     deliveryAddress?: string | null;
     pickupLabel?: string | null;
   },
+  station?: { code: string; name?: string | null },
 ): Record<string, unknown> {
+  const stationCode = String(station?.code ?? kot.station ?? '').trim();
+  const stationName = station
+    ? stationPrintLabel(station)
+    : String(kot.station ?? '').trim() || 'KITCHEN';
   return {
     kotNumber: kot.kotNumber,
-    station: kot.station,
+    // Printed documents show the human station name (e.g. "bar"), not the code ("002").
+    station: stationName,
+    stationCode,
     tableLabel: kot.tableName || kot.tableCode || 'Table',
     tableCode: kot.tableCode,
     tableName: kot.tableName,
     sentByName: kot.firedByName || kot.waiterName || null,
     serverName: kot.serverName || null,
+    // Steward SSOT (same reading as KOT). waiterName kept for older clients.
+    stewardName: kot.firedByName || kot.waiterName || null,
     waiterName: kot.firedByName || kot.waiterName || null,
     firedAt: kot.firedAt,
     ticketKind: kot.ticketKind || 'FIRE',
@@ -1381,7 +1396,7 @@ export const restaurantService = {
         const job = await printJobsService.enqueue(client, {
           documentType: isVoid ? 'VOID_KOT' : 'KOT',
           targetPrinter: station.printerName,
-          payloadJson: kotToPrintPayload(kot, meta),
+          payloadJson: kotToPrintPayload(kot, meta, station),
           sourceType: 'restaurant_kot',
           sourceId: kot.id,
           orderId,
@@ -1575,7 +1590,7 @@ export const restaurantService = {
           const voidJob = await printJobsService.enqueue(client, {
             documentType: 'VOID_KOT',
             targetPrinter: station.printerName,
-            payloadJson: kotToPrintPayload(kot, meta),
+            payloadJson: kotToPrintPayload(kot, meta, station),
             sourceType: 'restaurant_kot',
             sourceId: kot.id,
             orderId,
@@ -1901,6 +1916,8 @@ export const restaurantService = {
         orderId,
         orderNumber: order.orderNumber,
         tableLabel: table?.name || meta.tableName || meta.tableCode || 'Table',
+        // Same Steward reading as KOT (waiterName kept for older clients).
+        stewardName: meta.waiterName,
         waiterName: meta.waiterName,
         orderChannel: meta.orderChannel,
         guestName: meta.guestName,
@@ -2073,7 +2090,7 @@ export const restaurantService = {
         const cancelJob = await printJobsService.enqueue(client, {
           documentType: 'VOID_KOT',
           targetPrinter: station.printerName,
-          payloadJson: kotToPrintPayload(kot, meta),
+          payloadJson: kotToPrintPayload(kot, meta, station),
           sourceType: 'restaurant_kot',
           sourceId: kot.id,
           orderId,
