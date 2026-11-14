@@ -5,6 +5,8 @@ export const restaurantEnabledQueryKey = ['restaurant', 'enabled'] as const;
 
 /** Last known restaurant_mode_enabled — avoids retail POS flash before the API resolves. */
 export const RESTAURANT_ENABLED_CACHE_KEY = 'restaurant_mode_enabled_v1';
+/** Last known restaurant_allow_oversell — FOH soft stock policy. */
+export const RESTAURANT_ALLOW_OVERSELL_CACHE_KEY = 'restaurant_allow_oversell_v1';
 
 export function readCachedRestaurantEnabled(): boolean | null {
   try {
@@ -25,6 +27,22 @@ export function writeCachedRestaurantEnabled(enabled: boolean): void {
   }
 }
 
+export function readCachedRestaurantAllowOversell(): boolean {
+  try {
+    return localStorage.getItem(RESTAURANT_ALLOW_OVERSELL_CACHE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeCachedRestaurantAllowOversell(allow: boolean): void {
+  try {
+    localStorage.setItem(RESTAURANT_ALLOW_OVERSELL_CACHE_KEY, allow ? '1' : '0');
+  } catch {
+    /* private mode / blocked storage */
+  }
+}
+
 /**
  * Fetch tenant restaurant flag and persist on success.
  * On failure, keep the last known cache (do not poison restaurant tenants with false).
@@ -34,6 +52,9 @@ export async function fetchRestaurantEnabled(): Promise<boolean> {
     const res = await api.restaurant.getEnabled();
     const enabled = Boolean(res.data?.data?.enabled);
     writeCachedRestaurantEnabled(enabled);
+    if (typeof res.data?.data?.allowOversell === 'boolean') {
+      writeCachedRestaurantAllowOversell(res.data.data.allowOversell);
+    }
     return enabled;
   } catch (err) {
     // Fail loud in console — never hide 401/network as "flag off"
@@ -45,6 +66,26 @@ export async function fetchRestaurantEnabled(): Promise<boolean> {
     if (cached !== null) return cached;
     // Pre-migration / flag-off / unauthenticated — Layout must not break
     return false;
+  }
+}
+
+/** FOH oversell soft-policy from /restaurant/enabled (cached). */
+export async function fetchRestaurantFohFlags(): Promise<{
+  enabled: boolean;
+  allowOversell: boolean;
+}> {
+  try {
+    const res = await api.restaurant.getEnabled();
+    const enabled = Boolean(res.data?.data?.enabled);
+    const allowOversell = Boolean(res.data?.data?.allowOversell);
+    writeCachedRestaurantEnabled(enabled);
+    writeCachedRestaurantAllowOversell(allowOversell);
+    return { enabled, allowOversell };
+  } catch {
+    return {
+      enabled: readCachedRestaurantEnabled() ?? false,
+      allowOversell: readCachedRestaurantAllowOversell(),
+    };
   }
 }
 

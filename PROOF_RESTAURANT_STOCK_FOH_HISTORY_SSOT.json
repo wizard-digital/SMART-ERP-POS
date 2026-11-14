@@ -1,0 +1,156 @@
+{
+  "proofId": "RESTAURANT_STOCK_FOH_HISTORY_SSOT",
+  "date": "2026-11-14",
+  "generatedAtUtc": "2026-11-14T09:45:50.106Z",
+  "verdict": "PASS",
+  "scope": {
+    "historyDoubleSaleDisplay": "fixed + unit proven",
+    "serviceSkipsParentStock": "reuse planSaleStockDeduction (existing createSale SSOT)",
+    "menuRemainingQty": "inventory/consumable only; service null",
+    "restaurantAllowOversell": "FOH soft warn gate; pay still hard-fails insufficient stock"
+  },
+  "investigation": {
+    "exampleSale": "SALE-2026-0004 / AMSTEL 330ML",
+    "rootCause": {
+      "notDuplicateSaleDocument": true,
+      "twoSaleItemsOnOneSale": true,
+      "balanceKeyCollision": "productHistoryService keyed running balance by eventDate|type|quantityChange — identical same-second lines both painted Balance 18",
+      "stockMathConsistent": "Total IN 22, Total OUT 4, net +18 matches physical valuation ~18 units"
+    },
+    "fixes": {
+      "runningBalance": "shared/utils/productHistoryRunningBalance.ts — originalIndex SSOT",
+      "saleQtyPerLine": "productHistoryRepository uses si.base_qty per sale_item (not SUM sm per sale×product)"
+    }
+  },
+  "behavioral": {
+    "identicalSaleLinesGetDistinctBalances": true,
+    "serviceNeverShowsMenuRemaining": true,
+    "serviceNeverFohStockWarn": true,
+    "oversellOnSuppressesFohWarn": true,
+    "oversellOffWarnsOnKotAvoidPrinting": true,
+    "sendKotDoesNotHardBlockStock": true,
+    "createSaleSkipsServiceParentStock": true,
+    "menuExposesRemainingQuantity": true,
+    "settingsToggleRestaurantAllowOversell": true,
+    "enabledApiExposesAllowOversell": true,
+    "schema647RestaurantAllowOversell": true
+  },
+  "tests": {
+    "command": "npx vitest run src/__tests__/product-history-running-balance.unit.test.ts src/__tests__/restaurant-stock-policy.unit.test.ts src/__tests__/restaurant-stock-foh.evidence.test.ts --reporter=json --outputFile=../PROOF_GATES_ARTIFACTS/restaurant-stock-foh-vitest.json",
+    "cwd": "samplepos.client",
+    "passed": 14,
+    "failed": 0,
+    "total": 14,
+    "files": [
+      {
+        "name": "product-history-running-balance.unit.test.ts",
+        "assertions": 2,
+        "status": "passed"
+      },
+      {
+        "name": "restaurant-stock-policy.unit.test.ts",
+        "assertions": 5,
+        "status": "passed"
+      },
+      {
+        "name": "restaurant-stock-foh.evidence.test.ts",
+        "assertions": 7,
+        "status": "passed"
+      }
+    ],
+    "artifact": "PROOF_GATES_ARTIFACTS/restaurant-stock-foh-vitest.json",
+    "artifactSha256": "5151c309e46541468438c5ee892c0dc1af65863dc6e1412b950f3e690a8964fc"
+  },
+  "gates": [
+    {
+      "id": "H1",
+      "name": "AMSTEL same-second lines distinct balances",
+      "result": "PASS"
+    },
+    {
+      "id": "H2",
+      "name": "No date|type|qty balance key collision",
+      "result": "PASS"
+    },
+    {
+      "id": "H3",
+      "name": "Sale history qty = sale_item base_qty SSOT",
+      "result": "PASS"
+    },
+    {
+      "id": "S1",
+      "name": "Service skips menu remaining",
+      "result": "PASS"
+    },
+    {
+      "id": "S2",
+      "name": "Service never FOH stock warn",
+      "result": "PASS"
+    },
+    {
+      "id": "S3",
+      "name": "createSale planSaleStockDeduction skip for service",
+      "result": "PASS"
+    },
+    {
+      "id": "F1",
+      "name": "Oversell OFF warns KOT avoid printing",
+      "result": "PASS"
+    },
+    {
+      "id": "F2",
+      "name": "Oversell ON suppresses FOH warn",
+      "result": "PASS"
+    },
+    {
+      "id": "F3",
+      "name": "Menu remaining_quantity wired",
+      "result": "PASS"
+    },
+    {
+      "id": "F4",
+      "name": "FOH paints data-menu-remaining-qty",
+      "result": "PASS"
+    },
+    {
+      "id": "F5",
+      "name": "Settings + /restaurant/enabled allowOversell",
+      "result": "PASS"
+    },
+    {
+      "id": "F6",
+      "name": "Migration 647 + CURRENT_SCHEMA_VERSION 647",
+      "result": "PASS"
+    },
+    {
+      "id": "F7",
+      "name": "sendKot does not validateStockAvailability",
+      "result": "PASS"
+    }
+  ],
+  "paths": {
+    "historyBalanceSsot": "shared/utils/productHistoryRunningBalance.ts",
+    "historyService": "SamplePOS.Server/src/modules/products/productHistoryService.ts",
+    "historyRepository": "SamplePOS.Server/src/modules/products/productHistoryRepository.ts",
+    "fohStockPolicy": "shared/restaurant/restaurantStockPolicy.ts",
+    "productTypeRules": "shared/utils/productTypeRules.ts",
+    "migration": "shared/sql/647_restaurant_allow_oversell.sql",
+    "schemaVersion": "SamplePOS.Server/src/constants/schemaVersion.ts",
+    "menuRemaining": "SamplePOS.Server/src/modules/restaurant/restaurantRepository.ts#listMenuProducts",
+    "settingsFlag": "SamplePOS.Server/src/modules/restaurant/restaurantSettings.ts#isRestaurantAllowOversellEnabled",
+    "fohUi": "samplepos.client/src/pages/restaurant/RestaurantPosPage.tsx",
+    "settingsUi": "samplepos.client/src/pages/settings/tabs/SystemSettingsTab.tsx",
+    "createSaleStock": "SamplePOS.Server/src/modules/sales/salesService.ts#planSaleStockDeduction"
+  },
+  "explicitlyNotProven": [
+    "Live tenant DB row inspection of SALE-2026-0004 (no local docker/psql in this run)",
+    "Browser click path on production FOH (UI mount not exercised this run)",
+    "True negative inventory at pay when oversell ON (intentionally deferred — pay still hard-fails)",
+    "Commit / deploy (blocked until explicit user request after proof)"
+  ],
+  "deploy": {
+    "committed": false,
+    "deployed": false,
+    "reason": "no-untested-deploy + user rule: never commit/deploy until asked after proof"
+  }
+}

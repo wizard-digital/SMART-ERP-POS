@@ -76,6 +76,12 @@ export interface RestaurantMenuProduct {
   categoryName: string | null;
   kitchenStation: string | null;
   availableInRestaurant: boolean;
+  /**
+   * Remaining sellable qty for inventory/consumable (null for service).
+   * Multistore: shop store sellable; else product_inventory.on_hand.
+   * Omitted/undefined on flag-patch responses that are not menu list SSOT.
+   */
+  remainingQuantity?: number | null;
 }
 
 export interface RestaurantCategory {
@@ -692,7 +698,9 @@ export const restaurantRepository = {
     }
 
     // Multistore: restaurant FOH uses the shop/SELLING store (same as retail POS) — never MAIN.
+    let storeParamIndex = 0;
     if (filters?.sellingStoreId) {
+      storeParamIndex = i;
       conditions.push(`(
         COALESCE(p.product_type, 'inventory') = 'service'
         OR ${productPosVisibleAtStoreSql('p', `$${i}`)}
@@ -716,6 +724,23 @@ export const restaurantRepository = {
       i += 1;
     }
 
+    const remainingExpr = filters?.sellingStoreId
+      ? `CASE
+           WHEN COALESCE(p.product_type, 'inventory') = 'service' THEN NULL
+           ELSE (
+             SELECT COALESCE(SUM(GREATEST(
+               ib.quantity_on_hand - ib.quantity_reserved - ib.quantity_committed, 0
+             )), 0)
+             FROM inventory_balances ib
+             WHERE ib.product_id = p.id
+               AND ib.store_location_id = $${storeParamIndex}
+           )
+         END`
+      : `CASE
+           WHEN COALESCE(p.product_type, 'inventory') = 'service' THEN NULL
+           ELSE COALESCE(pi.quantity_on_hand, 0)
+         END`;
+
     const result = await conn.query(
       `SELECT
          p.id, p.name, p.sku,
@@ -731,9 +756,11 @@ export const restaurantRepository = {
            )
          ) AS category_id,
          COALESCE(c.name, p.category) AS category_name,
-         p.kitchen_station, COALESCE(p.available_in_restaurant, false) AS available_in_restaurant
+         p.kitchen_station, COALESCE(p.available_in_restaurant, false) AS available_in_restaurant,
+         ${remainingExpr} AS remaining_quantity
        FROM products p
        LEFT JOIN product_valuation pv ON pv.product_id = p.id
+       LEFT JOIN product_inventory pi ON pi.product_id = p.id
        LEFT JOIN product_categories c ON c.id = p.category_id
        WHERE ${conditions.join(' AND ')}
        ORDER BY COALESCE(c.name, p.category) NULLS LAST, p.name
@@ -741,7 +768,13 @@ export const restaurantRepository = {
       values,
     );
 
-    return result.rows.map((r) => convertKeysToCamelCase(r) as RestaurantMenuProduct);
+    return result.rows.map((r) => {
+      const mapped = convertKeysToCamelCase(r) as RestaurantMenuProduct;
+      if (mapped.remainingQuantity != null) {
+        mapped.remainingQuantity = Number(mapped.remainingQuantity);
+      }
+      return mapped;
+    });
   },
 
   async setProductRestaurantFlags(

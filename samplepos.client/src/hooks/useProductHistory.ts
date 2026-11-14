@@ -68,6 +68,7 @@ export interface ProductHistoryItem {
     // Sale fields
     saleId?: string;
     saleNumber?: string;
+    saleItemId?: string;
     saleStatus?: string;
     customerId?: string;
     customerName?: string;

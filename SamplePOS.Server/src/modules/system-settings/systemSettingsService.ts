@@ -54,10 +54,14 @@ export const systemSettingsService = {
         };
 
         return UnitOfWork.run(pool, async (client) => {
-            // Restaurant-domain SSOT: kitchen production cannot stay on when restaurant is off
+            // Restaurant-domain SSOT: kitchen production + FOH oversell cannot stay on when restaurant is off
             const gateUpdates =
                 updates.restaurantModeEnabled === false
-                    ? { ...updatesWithUser, kitchenProductionEnabled: false }
+                    ? {
+                        ...updatesWithUser,
+                        kitchenProductionEnabled: false,
+                        restaurantAllowOversell: false,
+                      }
                     : updatesWithUser;
 
             const updated = await systemSettingsRepository.updateSettings(

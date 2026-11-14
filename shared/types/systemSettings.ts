@@ -78,6 +78,12 @@ export interface SystemSettings {
     /** Restaurant module FOH/KOT (default false — retail unchanged) */
     restaurantModeEnabled: boolean;
 
+    /**
+     * Restaurant FOH: allow order/KOT when menu remaining is low (default false).
+     * Pay still enforces insufficient stock for inventory parents.
+     */
+    restaurantAllowOversell: boolean;
+
     /** Sales Targets module (default false — tenants opt in) */
     salesTargetsEnabled: boolean;
 
@@ -154,6 +160,7 @@ export interface SystemSettingsDbRow {
     is_multistore_enabled: boolean;
     treasury_document_enabled?: boolean;
     restaurant_mode_enabled?: boolean;
+    restaurant_allow_oversell?: boolean;
     sales_targets_enabled?: boolean;
     kitchen_production_enabled?: boolean;
     bad_debt_writeoff_enabled?: boolean;
@@ -211,6 +218,7 @@ export interface UpdateSystemSettingsDto {
     isMultistoreEnabled?: boolean;
     treasuryDocumentEnabled?: boolean;
     restaurantModeEnabled?: boolean;
+    restaurantAllowOversell?: boolean;
     salesTargetsEnabled?: boolean;
     kitchenProductionEnabled?: boolean;
     badDebtWriteoffEnabled?: boolean;
@@ -269,6 +277,7 @@ export function normalizeSystemSettings(dbRow: SystemSettingsDbRow): SystemSetti
         isMultistoreEnabled: dbRow.is_multistore_enabled ?? false,
         treasuryDocumentEnabled: dbRow.treasury_document_enabled ?? false,
         restaurantModeEnabled: dbRow.restaurant_mode_enabled ?? false,
+        restaurantAllowOversell: dbRow.restaurant_allow_oversell ?? false,
         salesTargetsEnabled: dbRow.sales_targets_enabled ?? false,
         kitchenProductionEnabled: dbRow.kitchen_production_enabled ?? false,
         badDebtWriteoffEnabled: dbRow.bad_debt_writeoff_enabled ?? false,

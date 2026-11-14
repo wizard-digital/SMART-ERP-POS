@@ -2,6 +2,7 @@
 
 import Decimal from 'decimal.js';
 import type pg from 'pg';
+import { applyProductHistoryRunningBalances } from '../../../../shared/utils/productHistoryRunningBalance.js';
 import { productHistoryRepository } from './productHistoryRepository.js';
 import * as productRepository from './productRepository.js';
 import type {
@@ -99,6 +100,7 @@ export const productHistoryService = {
         reference: {
           saleId: r.sale_id,
           saleNumber: r.sale_number,
+          saleItemId: r.sale_item_id ?? undefined,
           saleStatus: r.sale_status ?? undefined,
           customerId: r.customer_id ?? undefined,
           customerName: r.customer_name ?? undefined,
@@ -136,104 +138,16 @@ export const productHistoryService = {
     // Optional type filter applied across all events
     const filtered = filters.type ? normalized.filter((x) => x.type === filters.type) : normalized;
 
-    // Sort desc by date
+    // Sort desc by date (UI newest-first). Balances use original-index SSOT —
+    // never date|type|qty keys (collides on multi-line same-second sales).
     filtered.sort((a, b) => new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime());
 
-    // Compute running quantity and valuation (from most recent backwards compute current balance?)
-    // We'll compute forward in time for clarity: sort asc, accumulate, then map back to desc ordering
-    const asc = [...filtered].sort(
-      (a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime()
-    );
-    let runningQty = new Decimal(0);
-    let runningValue = new Decimal(0);
-    let totalCostAccumulated = new Decimal(0);
-
-    const withBalanceAsc = asc.map((item) => {
-      const qtyChange = new Decimal(item.quantityChange || 0);
-      runningQty = runningQty.plus(qtyChange);
-
-      // For valuation:
-      // - For receipts (IN): add totalCost to accumulated cost
-      // - For sales/OUT: deduct based on averageCost (totalCostAccumulated / runningQty before deduction)
-      // - Track average cost as totalCostAccumulated / runningQty
-
-      if (qtyChange.greaterThan(0)) {
-        // IN movement: add cost
-        const addedCost = item.totalCost
-          ? new Decimal(item.totalCost)
-          : qtyChange.times(item.unitCost ?? product.costPrice ?? 0);
-        totalCostAccumulated = totalCostAccumulated.plus(addedCost);
-      } else if (qtyChange.lessThan(0)) {
-        // OUT movement: deduct cost
-        const qtyBefore = runningQty.minus(qtyChange); // qty before this movement
-        const avgCost = qtyBefore.greaterThan(0)
-          ? totalCostAccumulated.dividedBy(qtyBefore)
-          : new Decimal(0);
-        const deductedCost = avgCost.times(qtyChange.abs());
-        totalCostAccumulated = totalCostAccumulated.minus(deductedCost);
-      }
-
-      runningValue = totalCostAccumulated;
-      const avgCost = runningQty.greaterThan(0)
-        ? totalCostAccumulated.dividedBy(runningQty)
-        : new Decimal(0);
-
-      return {
-        ...item,
-        runningQuantity: runningQty.toNumber(),
-        runningValuation: runningValue.toNumber(),
-        averageCost: avgCost.toNumber(),
-      } as ProductHistoryItem;
+    const balanced = applyProductHistoryRunningBalances(filtered, {
+      fallbackUnitCost:
+        product.costPrice != null ? Number(product.costPrice) : undefined,
     });
-
-    // Map back to original desc order preserving running balances by matching event identity (timestamp+type+qty)
-    const key = (x: ProductHistoryItem) => `${x.eventDate}|${x.type}|${x.quantityChange}`;
-    const balanceByKey = new Map(
-      withBalanceAsc.map((x) => [
-        key(x),
-        {
-          runningQuantity: x.runningQuantity!,
-          runningValuation: x.runningValuation!,
-          averageCost: x.averageCost!,
-        },
-      ])
-    );
-    const withBalanceDesc = filtered.map((x) => {
-      const bal = balanceByKey.get(key(x));
-      return {
-        ...x,
-        runningQuantity: bal?.runningQuantity,
-        runningValuation: bal?.runningValuation,
-        averageCost: bal?.averageCost,
-      } as ProductHistoryItem;
-    });
-
-    // Compute summary stats
-    const summary: ProductHistorySummary = {
-      firstMovementDate: asc.length > 0 ? asc[0].eventDate : undefined,
-      lastMovementDate: asc.length > 0 ? asc[asc.length - 1].eventDate : undefined,
-      totalInQuantity: asc
-        .filter((x) => new Decimal(x.quantityChange || 0).greaterThan(0))
-        .reduce((sum, x) => sum.plus(x.quantityChange || 0), new Decimal(0))
-        .toNumber(),
-      totalOutQuantity: asc
-        .filter((x) => new Decimal(x.quantityChange || 0).lessThan(0))
-        .reduce((sum, x) => sum.plus(new Decimal(x.quantityChange || 0).abs()), new Decimal(0))
-        .toNumber(),
-      netQuantityChange: asc
-        .reduce((sum, x) => sum.plus(x.quantityChange || 0), new Decimal(0))
-        .toNumber(),
-      totalInValue: asc
-        .filter((x) => new Decimal(x.quantityChange || 0).greaterThan(0))
-        .reduce((sum, x) => sum.plus(x.totalCost || 0), new Decimal(0))
-        .toNumber(),
-      totalOutValue: asc
-        .filter((x) => new Decimal(x.quantityChange || 0).lessThan(0))
-        .reduce((sum, x) => sum.plus(x.lineTotal || 0), new Decimal(0))
-        .toNumber(),
-      currentValuation:
-        asc.length > 0 ? withBalanceAsc[withBalanceAsc.length - 1].runningValuation : undefined,
-    };
+    const withBalanceDesc = balanced.items as ProductHistoryItem[];
+    const summary: ProductHistorySummary = balanced.summary;
 
     const total = withBalanceDesc.length;
     const totalPages = Math.ceil(total / limit) || 1;

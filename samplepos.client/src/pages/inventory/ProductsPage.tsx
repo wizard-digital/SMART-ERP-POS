@@ -2431,16 +2431,21 @@ export default function ProductsPage() {
                 </div>
               )}
 
-              {historyData && historyData.items.length > 0 && (
+                  {historyData && historyData.items.length > 0 && (
                 <div className="space-y-3">
                   {historyData.items.map((item, idx) => {
                     const variant = getHistoryTypeVariant(item.type);
                     const expiring = isExpiringSoon(item.expiryDate);
                     const actor = getHistoryActor(item);
+                    const historyKey =
+                      item.reference?.saleItemId ||
+                      item.reference?.movementId ||
+                      item.reference?.grId ||
+                      `${item.eventDate}-${item.type}-${item.quantityChange}-${idx}`;
 
                     return (
                       <div
-                        key={idx}
+                        key={historyKey}
                         className={`bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow border-l-4`}
                       >
                         <div className="flex items-start justify-between">

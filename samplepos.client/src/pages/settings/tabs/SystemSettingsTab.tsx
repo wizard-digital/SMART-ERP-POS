@@ -22,6 +22,7 @@ import {
 import {
     restaurantEnabledQueryKey,
     writeCachedRestaurantEnabled,
+    writeCachedRestaurantAllowOversell,
 } from '../../../hooks/useRestaurantEnabled';
 
 interface TaxRate {
@@ -82,6 +83,8 @@ interface SystemSettings {
     treasuryDocumentEnabled?: boolean;
     /** Restaurant FOH module (tables, KOT, SambaPOS-style ordering) */
     restaurantModeEnabled?: boolean;
+    /** Restaurant FOH: allow order/KOT when stock low (pay still enforces) */
+    restaurantAllowOversell?: boolean;
     /** Sales Targets (per-tenant opt-in) */
     salesTargetsEnabled?: boolean;
     /** ADR-005 Kitchen Production cook-to-stock batches */
@@ -176,6 +179,10 @@ export default function SystemSettingsTab() {
                 );
                 void queryClient.invalidateQueries({ queryKey: restaurantEnabledQueryKey });
                 void queryClient.invalidateQueries({ queryKey: ['kitchen-production'] });
+            }
+            if (variables.restaurantAllowOversell !== undefined) {
+                writeCachedRestaurantAllowOversell(Boolean(variables.restaurantAllowOversell));
+                void queryClient.invalidateQueries({ queryKey: restaurantEnabledQueryKey });
             }
             if (variables.salesTargetsEnabled !== undefined) {
                 void queryClient.invalidateQueries({ queryKey: ['sales-targets', 'enabled'] });
@@ -803,6 +810,41 @@ function TaxSettings({
                             Individual cashier revenue targets with Target / Achieved /
                             Remaining on Sales. Leave off if this tenant does not use sales
                             targets — nav, KPI strip, and APIs stay hidden.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
+                <div className="flex items-start">
+                    <input
+                        type="checkbox"
+                        id="restaurantAllowOversell"
+                        checked={
+                            Boolean(settings.restaurantModeEnabled) &&
+                            Boolean(settings.restaurantAllowOversell)
+                        }
+                        disabled={isSaving || !settings.restaurantModeEnabled}
+                        onChange={(e) => onSave({ restaurantAllowOversell: e.target.checked })}
+                        className="mt-0.5 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                        data-restaurant-allow-oversell-toggle="true"
+                    />
+                    <div className="ml-2">
+                        <label
+                            htmlFor="restaurantAllowOversell"
+                            className={`block text-sm font-medium ${
+                                settings.restaurantModeEnabled
+                                    ? 'text-gray-900'
+                                    : 'text-gray-400'
+                            }`}
+                        >
+                            Restaurant: allow order when stock is low
+                        </label>
+                        <p className="mt-0.5 text-xs text-gray-600">
+                            When off (default), stewards are warned before KOT if inventory items
+                            are short — payment still rejects insufficient stock. When on, FOH may
+                            order and print even when remaining is low. Service menu items never
+                            use stock. Requires Restaurant Module.
                         </p>
                     </div>
                 </div>

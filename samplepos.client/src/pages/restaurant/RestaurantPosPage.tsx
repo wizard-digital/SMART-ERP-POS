@@ -23,7 +23,16 @@ import { api, getStructuredError } from '../../utils/api';
 import { getStructuredErrorMessage, toastApiError } from '../../utils/errorHandler';
 import { isBackendUnavailableError } from '../../lib/isBackendUnavailableError';
 import { formatCurrency } from '../../utils/currency';
-import { useRestaurantEnabled } from '../../hooks/useRestaurantEnabled';
+import {
+  fetchRestaurantFohFlags,
+  readCachedRestaurantAllowOversell,
+  useRestaurantEnabled,
+} from '../../hooks/useRestaurantEnabled';
+import {
+  restaurantFohStockWarnForLines,
+  restaurantFohStockWarnMessage,
+  showRestaurantMenuRemainingQty,
+} from '@shared/restaurant/restaurantStockPolicy';
 import { useLayoutTier } from '../../hooks/useLayoutTier';
 import {
   inlineRowEditorsOnSameLine,
@@ -244,6 +253,8 @@ interface MenuProduct {
   categoryName: string | null;
   kitchenStation: string | null;
   productType?: 'inventory' | 'consumable' | 'service' | string;
+  /** Inventory/consumable remaining; null/omit for service. */
+  remainingQuantity?: number | null;
 }
 
 interface OrderItem {
@@ -950,6 +961,17 @@ export default function RestaurantPosPage() {
   const { tier, chrome, height, width, touchFirst, tokens } = useLayoutTier();
   // dense/ultra from SSOT (tier + height + touch) — Sunmi short landscape packs ultra.
   const { data: restaurantEnabled, isLoading: flagLoading } = useRestaurantEnabled();
+  const fohFlagsQuery = useQuery({
+    queryKey: ['restaurant', 'foh-flags', isOnline],
+    queryFn: fetchRestaurantFohFlags,
+    enabled: !!restaurantEnabled,
+    staleTime: 30_000,
+    initialData: {
+      enabled: Boolean(restaurantEnabled),
+      allowOversell: readCachedRestaurantAllowOversell(),
+    },
+  });
+  const allowOversell = Boolean(fohFlagsQuery.data?.allowOversell);
   const canManage = useCanAccess(undefined, ['restaurant.manage']);
   /** Floor service (add/void/KOT/bill/transfer) — waiters/cashiers/managers with restaurant.order. */
   const canOrder = useCanAccess(undefined, ['restaurant.order']);
@@ -1694,6 +1716,18 @@ export default function RestaurantPosPage() {
         'product' in input && input.quantity != null
           ? Math.max(1, Math.min(9999, Math.floor(input.quantity)))
           : parsePendingOrderQty(pendingQtyDigits);
+
+      const addStockWarn = restaurantFohStockWarnMessage({
+        allowOversell,
+        productType: product.productType,
+        productName: product.name,
+        remainingQty: product.remainingQuantity,
+        requestedQty: quantity,
+        stage: 'add',
+      });
+      if (addStockWarn) {
+        toast(addStockWarn, { id: `foh-stock-warn-${product.id}`, duration: 5000, icon: '⚠️' });
+      }
 
       if (!selectedTableId) throw new Error('Select a table or service lane first');
       if (!selectedWaiterId) throw new Error('Select a waiter first');
@@ -2726,8 +2760,31 @@ export default function RestaurantPosPage() {
     awaitPrint?: boolean;
   }): Promise<{ kotCount: number; printFailures: number }> => {
     if (!order) return { kotCount: 0, printFailures: 0 };
-    const unsentCount = orderLines.filter((l) => !l.kitchenSentAt).length;
+    const unsentLines = orderLines.filter((l) => !l.kitchenSentAt);
+    const unsentCount = unsentLines.length;
     if (unsentCount === 0) return { kotCount: 0, printFailures: 0 };
+
+    const remainingByProductId = new Map<string, number | null | undefined>();
+    for (const p of productsQuery.data || []) {
+      remainingByProductId.set(p.id, p.remainingQuantity);
+    }
+    const kotWarns = restaurantFohStockWarnForLines({
+      allowOversell,
+      stage: 'kot',
+      lines: unsentLines.map((l) => {
+        const menu = (productsQuery.data || []).find((p) => p.id === l.productId);
+        return {
+          productId: l.productId || '',
+          productName: l.productName,
+          productType: menu?.productType,
+          quantity: Number(l.quantity) || 0,
+        };
+      }),
+      remainingByProductId,
+    });
+    if (kotWarns.length > 0) {
+      toast(kotWarns[0], { id: 'foh-stock-warn-kot', duration: 7000, icon: '⚠️' });
+    }
 
     // Integrity: await spool confirm (ESC/POS is near-instant) so toast matches paper.
     const awaitPrint = opts?.awaitPrint !== false;
@@ -5853,8 +5910,29 @@ export default function RestaurantPosPage() {
                               {product.categoryName}
                             </div>
                           ) : null}
-                          <div className="type-amount type-ellipsis text-stone-600 mt-1 font-medium">
-                            {formatCurrency(Number(product.sellingPrice))}
+                          <div className="flex items-baseline justify-between gap-2 mt-1 min-w-0">
+                            <div className="type-amount type-ellipsis text-stone-600 font-medium">
+                              {formatCurrency(Number(product.sellingPrice))}
+                            </div>
+                            {showRestaurantMenuRemainingQty(product.productType) &&
+                            product.remainingQuantity != null ? (
+                              <div
+                                className={`shrink-0 type-caption tabular-nums font-semibold ${
+                                  Number(product.remainingQuantity) <= 0
+                                    ? 'text-red-700'
+                                    : Number(product.remainingQuantity) <= 5
+                                      ? 'text-amber-700'
+                                      : 'text-stone-500'
+                                }`}
+                                data-menu-remaining-qty={product.id}
+                                title="Remaining on hand"
+                              >
+                                {Number(product.remainingQuantity).toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                })}{' '}
+                                left
+                              </div>
+                            ) : null}
                           </div>
                         </button>
                       ))}

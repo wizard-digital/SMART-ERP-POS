@@ -16,7 +16,10 @@ import { ordersRepository, type CreateOrderItemData } from '../orders/ordersRepo
 import { ordersService, type OrderItemInput } from '../orders/ordersService.js';
 import logger from '../../utils/logger.js';
 import { DocumentTaxService } from '../../services/documentTaxService.js';
-import { isRestaurantModeEnabled } from './restaurantSettings.js';
+import {
+  isRestaurantAllowOversellEnabled,
+  isRestaurantModeEnabled,
+} from './restaurantSettings.js';
 import { publishNotificationEvent } from '../notifications/notificationPublisher.js';
 import {
   restaurantRepository,
@@ -356,6 +359,14 @@ function assertChannelGuest(
 }
 
 export const restaurantService = {
+  async getFohFlags(pool: Pool): Promise<{ enabled: boolean; allowOversell: boolean }> {
+    const [enabled, allowOversell] = await Promise.all([
+      isRestaurantModeEnabled(pool),
+      isRestaurantAllowOversellEnabled(pool),
+    ]);
+    return { enabled, allowOversell };
+  },
+
   async isEnabled(pool: Pool): Promise<boolean> {
     return isRestaurantModeEnabled(pool);
   },

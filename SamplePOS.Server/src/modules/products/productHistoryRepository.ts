@@ -100,12 +100,15 @@ export const productHistoryRepository = {
       SELECT 
         si.created_at AS event_date,
         'SALE' AS type,
-        -- Use stock_movement.quantity (base units) when available; fall back to si.quantity (sale UoM)
-        ROUND(-COALESCE(sm_agg.quantity, si.quantity)::numeric, 2) AS quantity_change,
+        -- One history card per sale_item. Qty is this line's base_qty (SSOT) —
+        -- never SUM(stock_movements) per (sale, product), which re-applies the
+        -- same aggregate onto every duplicate product line on one SALE.
+        ROUND(-COALESCE(si.base_qty, si.quantity)::numeric, 2) AS quantity_change,
         ROUND(si.unit_price::numeric, 2) AS unit_price,
         ROUND(si.total_price::numeric, 2) AS line_total,
-        ROUND(COALESCE(sm_agg.unit_cost, si.unit_cost)::numeric, 2) AS cost_price,
+        ROUND(si.unit_cost::numeric, 2) AS cost_price,
         ROUND(si.profit::numeric, 2) AS profit,
+        si.id AS sale_item_id,
         s.id AS sale_id,
         s.sale_number,
         s.status AS sale_status,
@@ -117,8 +120,7 @@ export const productHistoryRepository = {
         ROUND(s.amount_paid::numeric, 2) AS payment_received,
         ROUND(s.change_amount::numeric, 2) AS change_amount,
         ROUND(s.total_amount::numeric, 2) AS total_amount,
-        -- UoM: prefer base_uom from stock movement (canonical unit); fall back to sale UoM
-        COALESCE(sm_agg.base_uom_id, si.uom_id) AS uom_id,
+        COALESCE(si.base_uom_id, si.uom_id) AS uom_id,
         COALESCE(base_uom.name, sold_uom.name) AS uom_name,
         COALESCE(base_uom.symbol, sold_uom.symbol) AS uom_symbol,
         ib.batch_number,
@@ -129,19 +131,8 @@ export const productHistoryRepository = {
       JOIN sales s ON s.id = si.sale_id
       LEFT JOIN customers c ON c.id = s.customer_id
       LEFT JOIN users u ON u.id = s.cashier_id
-      -- Aggregate base-unit quantities per (sale, product) — avoids batch_id NULL mismatch
-      -- and correctly handles multi-batch sales by summing all movements for the same line
-      LEFT JOIN (
-        SELECT reference_id, product_id,
-               SUM(quantity) AS quantity,
-               ROUND(SUM(quantity * unit_cost) / NULLIF(SUM(quantity), 0), 4) AS unit_cost,
-               (ARRAY_AGG(base_uom_id) FILTER (WHERE base_uom_id IS NOT NULL))[1] AS base_uom_id
-        FROM stock_movements
-        WHERE movement_type = 'SALE' AND reference_type = 'SALE'
-        GROUP BY reference_id, product_id
-      ) sm_agg ON sm_agg.reference_id = s.id AND sm_agg.product_id = si.product_id
       LEFT JOIN uoms sold_uom ON sold_uom.id = si.uom_id
-      LEFT JOIN uoms base_uom ON base_uom.id = sm_agg.base_uom_id
+      LEFT JOIN uoms base_uom ON base_uom.id = si.base_uom_id
       LEFT JOIN inventory_batches ib ON ib.id = si.batch_id
       WHERE ${where.join(' AND ')}
       ORDER BY si.created_at DESC`;

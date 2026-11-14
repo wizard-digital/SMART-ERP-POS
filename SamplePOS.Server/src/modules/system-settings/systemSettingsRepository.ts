@@ -190,6 +190,10 @@ export const systemSettingsRepository = {
             setClauses.push(`restaurant_mode_enabled = $${paramIndex++}`);
             values.push(updates.restaurantModeEnabled);
         }
+        if (updates.restaurantAllowOversell !== undefined) {
+            setClauses.push(`restaurant_allow_oversell = $${paramIndex++}`);
+            values.push(updates.restaurantAllowOversell);
+        }
         if (updates.salesTargetsEnabled !== undefined) {
             setClauses.push(`sales_targets_enabled = $${paramIndex++}`);
             values.push(updates.salesTargetsEnabled);

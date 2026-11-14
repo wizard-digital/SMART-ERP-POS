@@ -1544,7 +1544,11 @@ export const api = {
   },
 
   restaurant: {
-    getEnabled: () => apiClient.get<ApiResponse<{ enabled: boolean }>>('restaurant/enabled'),
+    getEnabled: () =>
+      apiClient.get<ApiResponse<{ enabled: boolean; allowOversell?: boolean }>>(
+        'restaurant/enabled',
+      ),
+
     listTables: (params?: { includeInactive?: boolean }, config?: AxiosRequestConfig) =>
       apiClient.get<ApiResponse>('restaurant/tables', { params, ...config }),
     createTable: (data: {

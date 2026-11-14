@@ -125,8 +125,11 @@ router.get(
   '/enabled',
   asyncHandler(async (req: Request, res: Response) => {
     const pool = req.tenantPool || globalPool;
-    const enabled = await restaurantService.isEnabled(pool);
-    res.json({ success: true, data: { enabled } });
+    const flags = await restaurantService.getFohFlags(pool);
+    res.json({
+      success: true,
+      data: { enabled: flags.enabled, allowOversell: flags.allowOversell },
+    });
   }),
 );
 

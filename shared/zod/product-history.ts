@@ -35,7 +35,10 @@ export const ProductHistoryReferenceSchema = z.object({
 
   saleId: z.string().uuid().optional(),
   saleNumber: z.string().optional(),
+  /** Distinguishes multiple sale_items on the same SALE (same second). */
+  saleItemId: z.string().uuid().optional(),
   saleStatus: z.string().optional(),
+
   customerId: z.string().uuid().optional(),
   customerName: z.string().optional(),
   soldByName: z.string().optional(),
