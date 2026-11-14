@@ -101,8 +101,8 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
     );
   });
 
-  it('CURRENT_SCHEMA_VERSION matches 621–645 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue/gift/bad-debt/invoice-sync P&L SSOT', () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(645);
+  it('CURRENT_SCHEMA_VERSION matches 621–647 MoMo/banking/targets/expense/ownership/FEFO/sale-totals/store-issue/gift/bad-debt/invoice-sync/restaurant-oversell P&L SSOT', () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(647);
     const sqlDir = path.resolve(process.cwd(), '..', 'shared', 'sql');
     const stamp = fs.readFileSync(path.join(sqlDir, '621_tenant_schema_ssot.sql'), 'utf8');
     expect(stamp).toContain('SELECT 621');
@@ -243,6 +243,12 @@ describe('tenant schema SSOT — copy ledger cannot fake apply', () => {
       'DROP FUNCTION IF EXISTS sync_invoice_payment_to_sales_and_customer() CASCADE',
     );
     expect(invPaySalesSyncSql).toContain('INSERT INTO schema_version (version) VALUES (646)');
+    const restaurantOversellSql = fs.readFileSync(
+      path.join(sqlDir, '647_restaurant_allow_oversell.sql'),
+      'utf8',
+    );
+    expect(restaurantOversellSql).toContain('restaurant_allow_oversell');
+    expect(restaurantOversellSql).toContain('SELECT 647');
     const createInvPayTrigger = fs.readFileSync(
       path.join(sqlDir, 'create_invoice_payment_trigger.sql'),
       'utf8',

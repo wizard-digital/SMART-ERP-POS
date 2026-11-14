@@ -19,7 +19,8 @@ describe('PROOF: drop legacy invoice payment sync (PascalCase InvoiceNumber)', (
     expect(sql).toContain('DROP TRIGGER IF EXISTS trg_invoice_payment_sync ON invoice_payments');
     expect(sql).toContain('DROP FUNCTION IF EXISTS fn_sync_invoice_payment() CASCADE');
     expect(sql).toContain('INSERT INTO schema_version (version) VALUES (645)');
-    expect(CURRENT_SCHEMA_VERSION).toBe(645);
+    // CURRENT may advance past 645; migration stamp + DROP remain the SSOT.
+    expect(CURRENT_SCHEMA_VERSION).toBeGreaterThanOrEqual(645);
   });
 
   it('postcondition + legacy trigger registry keep the trigger absent forever', () => {
