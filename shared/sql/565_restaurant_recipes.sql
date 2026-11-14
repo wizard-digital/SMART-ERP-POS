@@ -1,5 +1,6 @@
 -- Migration 565: Restaurant Phase 3 — Recipes / BOM (ingredient consumption on sale)
--- Requires 560. Deduction happens only in salesService.createSale (pay SSOT), never at KOT.
+-- Requires 560. AT_SALE recipe ingredients deduct on restaurant KOT (Samba) via
+-- restaurantKotStockService; createSale skips when KOT already issued.
 -- Retail products without a recipe are unchanged.
 
 CREATE TABLE IF NOT EXISTS product_recipes (

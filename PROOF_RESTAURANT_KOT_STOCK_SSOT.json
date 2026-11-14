@@ -1,0 +1,29 @@
+{
+  "proof": "RESTAURANT_KOT_STOCK_SSOT",
+  "verdict": "PASS",
+  "summary": "Restaurant KOT deducts inventory/consumable; void restores; createSale skips double-deduct. LIVE scratch-DB proof PASS.",
+  "checks": [
+    {
+      "name": "restaurantKotStock.evidence.test.ts",
+      "ok": true,
+      "detail": "2/2 passed"
+    },
+    {
+      "name": "restaurant-stock-foh.evidence.test.ts",
+      "ok": true,
+      "detail": "7/7 passed"
+    },
+    {
+      "name": "LIVE proof-restaurant-kot-stock-live.ts",
+      "ok": true,
+      "detail": "batch 20→17 on KOT, void +1→18, pay stays 18, zero SALE movements"
+    }
+  ],
+  "artifacts": [
+    "PROOF_RESTAURANT_KOT_STOCK_LIVE.json",
+    "PROOF_RESTAURANT_KOT_STOCK_LIVE.md",
+    "SamplePOS.Server/scripts/proof-restaurant-kot-stock-live.ts"
+  ],
+  "commitDeploy": false,
+  "note": "Code + live proof local. Prod Jazz schema already 647; KOT stock code not deployed until asked."
+}

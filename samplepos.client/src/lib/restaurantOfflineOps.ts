@@ -734,6 +734,20 @@ export function fireRestaurantKotOffline(order: DerivedOrder): { tickets: Offlin
     throw new Error('No new lines to send to kitchen');
   }
 
+  // Samba: deduct parent inventory/consumable on KOT (service skips). Pay must not double-deduct.
+  const stockDeductions: Array<{ productId: string; quantity: number }> = [];
+  for (const line of unsent) {
+    if (!line.productId || line.productId.startsWith('custom_')) continue;
+    const productType = resolveOfflineProductType(line.productId, line.productType);
+    if (isServiceProductType(productType)) continue;
+    const ok = decrementLocalStock(line.productId, line.quantity);
+    if (!ok) {
+      for (const d of stockDeductions) restoreLocalStock(d.productId, d.quantity);
+      throw new Error(`Insufficient offline stock for "${line.productName}"`);
+    }
+    stockDeductions.push({ productId: line.productId, quantity: line.quantity });
+  }
+
   const firedAt = new Date().toISOString();
   const byStation = new Map<
     string,
@@ -855,9 +869,10 @@ export function advanceRestaurantKotOffline(kotOfflineId: string): DerivedKotSta
 }
 
 /**
- * Phase 5.2 — Offline cash pay: append SALE_COMPLETED (same orderId), optimistic parent stock.
- * Service parents never consume parent stock (ingredients FEFO runs on server replay).
- * Recipe/BOM FEFO still runs on server replay via createSale — not locally.
+ * Phase 5.2 — Offline cash pay: append SALE_COMPLETED (same orderId).
+ * Kitchen-sent inventory lines were already deducted at KOT — do not double-deduct.
+ * Unsent inventory lines (oversell / pay-without-KOT) deduct here.
+ * Service parents never consume parent stock (ingredients FEFO on server replay).
  */
 export function payRestaurantCheckOffline(
   order: DerivedOrder,
@@ -890,6 +905,8 @@ export function payRestaurantCheckOffline(
     const productType = resolveOfflineProductType(line.productId, line.productType);
     // Service dishes: no parent stock. Ingredients deducted on sync/createSale.
     if (isServiceProductType(productType)) continue;
+    // Already deducted when KOT fired.
+    if (line.kitchenSentAt) continue;
     const ok = decrementLocalStock(line.productId, line.quantity);
     if (!ok) {
       for (const d of stockDeductions) restoreLocalStock(d.productId, d.quantity);
@@ -936,7 +953,8 @@ export function payRestaurantCheckOffline(
 }
 
 /**
- * Phase 5.3 — Cancel open restaurant check locally (no stock restore — stock only deducted on pay).
+ * Phase 5.3 — Cancel open restaurant check locally.
+ * Restores local stock for kitchen-sent inventory lines (KOT already deducted).
  */
 export function cancelRestaurantCheckOffline(
   order: DerivedOrder,
@@ -946,15 +964,28 @@ export function cancelRestaurantCheckOffline(
   if (!order.tableId) throw new Error('Restaurant check missing table');
   // Default: VOID each station that had a FIRE ticket (same as online cancelCheck).
   // Callers that already emitted voids (e.g. void-last-line) pass emitVoidTickets: false.
-  const voidTickets =
-    opts?.emitVoidTickets === false
-      ? []
-      : emitVoidKotTicketsOffline(
-          order,
-          order.lines.filter((l) => l.lineId && l.kitchenSentAt),
-          undefined,
-          reason,
-        );
+  const emitVoids = opts?.emitVoidTickets !== false;
+  const voidTickets = emitVoids
+    ? emitVoidKotTicketsOffline(
+        order,
+        order.lines.filter((l) => l.lineId && l.kitchenSentAt),
+        undefined,
+        reason,
+      )
+    : [];
+
+  // Restore only when this cancel owns the void path. Callers that already voided
+  // lines (emitVoidTickets: false) restored stock in removeRestaurantLinesOffline.
+  if (emitVoids) {
+    for (const line of order.lines) {
+      if (!line.kitchenSentAt) continue;
+      if (!line.productId || line.productId.startsWith('custom_')) continue;
+      const productType = resolveOfflineProductType(line.productId, line.productType);
+      if (isServiceProductType(productType)) continue;
+      restoreLocalStock(line.productId, line.quantity);
+    }
+  }
+
   appendEvent({
     eventType: 'ORDER_CANCELLED',
     key: generateEventKey(),
@@ -1168,6 +1199,19 @@ export function removeRestaurantLinesOffline(
         reason,
       )
     : [];
+
+  // Restore local stock for kitchen-sent inventory lines (mirror server VOID KOT restore).
+  for (const line of touching) {
+    if (!line.kitchenSentAt) continue;
+    if (!line.productId || line.productId.startsWith('custom_')) continue;
+    const productType = resolveOfflineProductType(line.productId, line.productType);
+    if (isServiceProductType(productType)) continue;
+    const voidQty =
+      quantityByLineId?.[line.lineId!] === undefined
+        ? line.quantity
+        : Math.min(line.quantity, quantityByLineId[line.lineId!]!);
+    if (voidQty > 0) restoreLocalStock(line.productId, voidQty);
+  }
 
   const nextLines: typeof order.lines = [];
   for (const line of order.lines) {

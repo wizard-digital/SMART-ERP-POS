@@ -57,6 +57,12 @@ import { posProductSearchService } from '../inventory/warehouse/posProductSearch
 import { printJobsService } from '../print-jobs/printJobsService.js';
 import type { PrintJobRecord } from '../print-jobs/printJobTypes.js';
 import { systemSettingsService } from '../system-settings/systemSettingsService.js';
+import {
+  issueStockOnRestaurantKot,
+  restoreStockOnRestaurantKotVoid,
+  loadRestaurantOrderedQtyByProduct,
+} from './restaurantKotStockService.js';
+import { shouldDeductStockOnRestaurantKot } from '../../../../shared/restaurant/restaurantKotStockPolicy.js';
 
 async function lookupUserDisplayName(client: PoolClient, userId: string): Promise<string | null> {
   const row = await client.query<{ full_name: string | null }>(
@@ -535,10 +541,19 @@ export const restaurantService = {
   ): Promise<RestaurantMenuProduct[]> {
     await assertRestaurantEnabled(pool);
     const sellingStoreId = await resolveRestaurantShopStoreId(pool);
-    return restaurantRepository.listMenuProducts(pool, {
-      ...filters,
-      sellingStoreId,
-    });
+    const [products, orderedByProduct] = await Promise.all([
+      restaurantRepository.listMenuProducts(pool, {
+        ...filters,
+        sellingStoreId,
+      }),
+      loadRestaurantOrderedQtyByProduct(pool),
+    ]);
+    return products.map((p) => ({
+      ...p,
+      orderedQuantity: shouldDeductStockOnRestaurantKot(p.productType)
+        ? orderedByProduct.get(p.id) ?? 0
+        : null,
+    }));
   },
 
   async setProductFlags(
@@ -1361,6 +1376,20 @@ export const restaurantService = {
           ? await restaurantRepository.listUnsentItems(client, orderId)
           : unsent;
 
+      // SambaPOS-style: deduct inventory/consumable (and AT_SALE recipe ingredients) on KOT.
+      // Service parents skip. Oversell ON + short stock → skip deduct (pay enforces).
+      await issueStockOnRestaurantKot(client, {
+        orderId,
+        firedBy,
+        lines: unsentForKot.map((it) => ({
+          orderItemId: it.id,
+          productId: it.productId,
+          productName: it.productName,
+          quantity: Money.toNumber(Money.parseDb(it.quantity)),
+          uomId: it.uomId,
+        })),
+      });
+
       // Toast/Aloha: ticket shows who SENT it (login user), not only check owner.
       const firedByName = await lookupUserDisplayName(client, firedBy);
 
@@ -1559,6 +1588,21 @@ export const restaurantService = {
       const printJobs: PrintJobRecord[] = [];
 
       if (sentSlices.length > 0) {
+        // Restore inventory issued at KOT before removing/reducing lines.
+        for (const slice of sentSlices) {
+          await restoreStockOnRestaurantKotVoid(client, {
+            orderId,
+            orderItemId: slice.id,
+            productId: slice.productId,
+            productName: slice.productName,
+            lineQuantity: Money.toNumber(Money.parseDb(slice.quantity)),
+            voidQuantity: slice.voidQuantity,
+            voidedBy: input.voidedBy,
+            reason,
+            uomId: slice.uomId,
+          });
+        }
+
         const byStation = new Map<
           string,
           { station: RestaurantStationRecord; items: VoidSlice[] }
@@ -2052,9 +2096,24 @@ export const restaurantService = {
     await requireOrderMutationAccess(pool, meta, actor || { userId: cancelledBy });
 
     // Notify kitchen for any already-fired lines before cancelling the check.
+    // Restore KOT-issued inventory (same as voidCheckItems).
     const { voidKots, printJobs } = await UnitOfWork.run(pool, async (client: PoolClient) => {
       const sent = await restaurantRepository.listKitchenSentItems(client, orderId);
       if (sent.length === 0) return { voidKots: [] as KotRecord[], printJobs: [] as PrintJobRecord[] };
+
+      for (const item of sent) {
+        const qty = Money.toNumber(Money.parseDb(item.quantity));
+        await restoreStockOnRestaurantKotVoid(client, {
+          orderId,
+          orderItemId: item.id,
+          productId: item.productId,
+          productName: item.productName,
+          lineQuantity: qty,
+          voidQuantity: qty,
+          voidedBy: cancelledBy,
+          reason: reason.trim() || 'Check cancelled',
+        });
+      }
 
       const byStation = new Map<
         string,

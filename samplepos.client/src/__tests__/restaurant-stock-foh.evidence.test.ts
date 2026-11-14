@@ -13,7 +13,7 @@ describe('restaurant FOH stock policy evidence', () => {
     const policy = read('shared/restaurant/restaurantStockPolicy.ts');
     expect(policy).toMatch(/isServiceProductType/);
     expect(policy).toMatch(/restaurant_allow_oversell/);
-    expect(policy).toMatch(/Avoid printing/);
+    expect(policy).toMatch(/Avoid sending to kitchen/);
     expect(policy).toMatch(/showRestaurantMenuRemainingQty/);
   });
 
@@ -32,12 +32,13 @@ describe('restaurant FOH stock policy evidence', () => {
     expect(repo).toMatch(/inventory_balances|product_inventory/);
   });
 
-  it('FOH paints remaining and warns on add/KOT via shared policy', () => {
+  it('FOH paints remaining (+ ordered) and warns on add/KOT via shared policy', () => {
     const pos = read('samplepos.client/src/pages/restaurant/RestaurantPosPage.tsx');
     expect(pos).toMatch(/restaurantFohStockWarnMessage/);
     expect(pos).toMatch(/restaurantFohStockWarnForLines/);
     expect(pos).toMatch(/data-menu-remaining-qty/);
-    expect(pos).toMatch(/showRestaurantMenuRemainingQty/);
+    expect(pos).toMatch(/formatRestaurantMenuStockLabel/);
+    expect(pos).toMatch(/invalidateMenuStock/);
   });
 
   it('settings toggle + enabled API expose allowOversell', () => {
@@ -62,13 +63,21 @@ describe('restaurant FOH stock policy evidence', () => {
     expect(repo).not.toMatch(/sm_agg/);
   });
 
-  it('sendKot still does not hard-block on stock (warn is FOH soft)', () => {
+  it('sendKot deducts via restaurantKotStockService; void restores; pay skips double', () => {
     const service = read('SamplePOS.Server/src/modules/restaurant/restaurantService.ts');
     const sendKot = service.slice(
       service.indexOf('async sendKot('),
       service.indexOf('async voidCheckItems('),
     );
+    expect(sendKot).toMatch(/issueStockOnRestaurantKot/);
     expect(sendKot).not.toMatch(/validateStockAvailability/);
-    expect(sendKot).not.toMatch(/stock_movements/);
+    const voidBlock = service.slice(
+      service.indexOf('async voidCheckItems('),
+      service.indexOf('async listKitchenBoard('),
+    );
+    expect(voidBlock).toMatch(/restoreStockOnRestaurantKotVoid/);
+    const sales = read('SamplePOS.Server/src/modules/sales/salesService.ts');
+    expect(sales).toMatch(/getNetRestaurantKotIssue/);
+    expect(sales).toMatch(/sourceOrderItemId/);
   });
 });

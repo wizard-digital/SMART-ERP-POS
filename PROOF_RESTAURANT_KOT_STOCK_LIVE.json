@@ -1,0 +1,179 @@
+{
+  "generatedAt": "2026-11-14T13:48:00.653Z",
+  "scratchDb": "pos_tenant_kot_proof_mwggnn65",
+  "verdict": "PASS",
+  "steps": [
+    {
+      "step": "clone_template",
+      "ok": true,
+      "detail": {
+        "scratch": "pos_tenant_kot_proof_mwggnn65"
+      }
+    },
+    {
+      "step": "prepare_schema",
+      "ok": true,
+      "detail": {
+        "version": "647",
+        "hasQuoteId": true
+      }
+    },
+    {
+      "step": "seed",
+      "ok": true,
+      "detail": {
+        "productId": "ae241d86-d6ec-4e85-9f68-aa1fc864375d",
+        "batchId": "164397bb-92cc-4c53-bff7-b377328fa7fe",
+        "userId": "00000000-0000-0000-0000-000000000000",
+        "tableId": "f6c5fb21-abd3-44bc-920a-86d541e377f2",
+        "uomId": "97c8b6ea-1d45-48c8-bf5a-2b738051aa15"
+      }
+    },
+    {
+      "step": "open_check_add_item",
+      "ok": true,
+      "detail": {
+        "orderId": "0c41db8c-01c1-4d13-a321-14a9c84c2713",
+        "orderItemId": "efb0cf98-3943-416a-bd7b-19e97d511148",
+        "qty": 3
+      }
+    },
+    {
+      "step": "sendKot",
+      "ok": true,
+      "detail": {
+        "kotCount": 1,
+        "kotNumbers": [
+          "KOT-2026-0001"
+        ]
+      }
+    },
+    {
+      "step": "kot_deducted_batch",
+      "ok": true,
+      "detail": {
+        "remBefore": 20,
+        "remAfterKot": 17,
+        "delta": 3
+      }
+    },
+    {
+      "step": "kot_movements_RESTAURANT_KOT",
+      "ok": true,
+      "detail": {
+        "rows": [
+          {
+            "movement_type": "ADJUSTMENT_OUT",
+            "reference_type": "RESTAURANT_KOT",
+            "reference_id": "efb0cf98-3943-416a-bd7b-19e97d511148",
+            "qty": 3,
+            "unit_cost": 4000
+          }
+        ]
+      }
+    },
+    {
+      "step": "kot_net_issue",
+      "ok": true,
+      "detail": {
+        "orderItemId": "efb0cf98-3943-416a-bd7b-19e97d511148",
+        "netQty": 3,
+        "netCost": 12000,
+        "issued": true
+      }
+    },
+    {
+      "step": "void_partial",
+      "ok": true,
+      "detail": {
+        "voidKotCount": 1,
+        "checkCancelled": false
+      }
+    },
+    {
+      "step": "void_restored_1",
+      "ok": true,
+      "detail": {
+        "remAfterKot": 17,
+        "remAfterVoid": 18,
+        "delta": 1
+      }
+    },
+    {
+      "step": "void_movements_RESTAURANT_KOT_VOID",
+      "ok": true,
+      "detail": {
+        "rows": [
+          {
+            "movement_type": "ADJUSTMENT_IN",
+            "reference_type": "RESTAURANT_KOT_VOID",
+            "qty": 1
+          }
+        ]
+      }
+    },
+    {
+      "step": "kot_net_after_void",
+      "ok": true,
+      "detail": {
+        "orderItemId": "efb0cf98-3943-416a-bd7b-19e97d511148",
+        "netQty": 2,
+        "netCost": 8000,
+        "issued": true
+      }
+    },
+    {
+      "step": "createSale_pay",
+      "ok": true,
+      "detail": {
+        "saleId": "722f9a95-ff7d-4c6e-8c78-b8e1e4f17760",
+        "saleNumber": "SALE-2026-0001"
+      }
+    },
+    {
+      "step": "pay_no_double_deduct",
+      "ok": true,
+      "detail": {
+        "remAfterVoid": 18,
+        "remAfterPay": 18,
+        "note": "Batch must be unchanged at pay when KOT already issued"
+      }
+    },
+    {
+      "step": "pay_no_sale_stock_movement",
+      "ok": true,
+      "detail": {
+        "n": 0
+      }
+    },
+    {
+      "step": "final_batch_qty",
+      "ok": true,
+      "detail": {
+        "remAfterPay": 18,
+        "expected": 18
+      }
+    },
+    {
+      "step": "drop_scratch_db",
+      "ok": true,
+      "detail": {
+        "scratch": "pos_tenant_kot_proof_mwggnn65"
+      }
+    }
+  ],
+  "checks": {
+    "proofUserEmail": "system@internal",
+    "batchBeforeKot": 20,
+    "batchAfterKot": 17,
+    "kotDeductedQty": 3,
+    "kotMovements": 1,
+    "kotNetQty": 3,
+    "kotNetCost": 12000,
+    "batchAfterVoid1": 18,
+    "kotNetQtyAfterVoid": 2,
+    "batchAfterPay": 18,
+    "saleMovementsForProduct": 0,
+    "expectedFinalBatch": 18
+  }
+}

@@ -297,12 +297,11 @@ describe('Restaurant architecture proof (Phase 1)', () => {
     expect(pos).toMatch(/never steal waiters\[0\]|Prefer the signed-in user/);
   });
 
-  it('Phase 3 recipes/BOM explode into createSale FEFO (not KOT)', () => {
+  it('Phase 3 recipes/BOM: AT_SALE explode on KOT deduct + createSale; pay skips double-deduct', () => {
     const sql = readRepo('shared/sql/565_restaurant_recipes.sql');
     expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS product_recipes/i);
     expect(sql).toMatch(/CREATE TABLE IF NOT EXISTS product_recipe_lines/i);
     expect(sql).toMatch(/quantity_base/);
-    expect(sql).toMatch(/Deduction happens only in salesService\.createSale/);
 
     const explosion = readRepo('SamplePOS.Server/src/modules/sales/saleRecipeExplosion.ts');
     expect(explosion).toMatch(/explodeActiveRecipe/);
@@ -311,6 +310,17 @@ describe('Restaurant architecture proof (Phase 1)', () => {
     const sales = readRepo('SamplePOS.Server/src/modules/sales/salesService.ts');
     expect(sales).toMatch(/explodeActiveRecipe/);
     expect(sales).toMatch(/planSaleStockDeduction/);
+    expect(sales).toMatch(/getNetRestaurantKotIssue/);
+    expect(sales).toMatch(/Skipping inventory deduction — restaurant KOT already issued/);
+    expect(sales).toMatch(/sourceOrderItemId/);
+
+    const kotStock = readRepo(
+      'SamplePOS.Server/src/modules/restaurant/restaurantKotStockService.ts',
+    );
+    expect(kotStock).toMatch(/issueStockOnRestaurantKot/);
+    expect(kotStock).toMatch(/restoreStockOnRestaurantKotVoid/);
+    expect(kotStock).toMatch(/explodeActiveRecipe/);
+    expect(kotStock).toMatch(/RESTAURANT_KOT/);
 
     const restaurantService = readRepo(
       'SamplePOS.Server/src/modules/restaurant/restaurantService.ts',
@@ -321,9 +331,14 @@ describe('Restaurant architecture proof (Phase 1)', () => {
 
     const sendKot = restaurantService.slice(
       restaurantService.indexOf('async sendKot('),
+      restaurantService.indexOf('async voidCheckItems('),
+    );
+    expect(sendKot).toMatch(/issueStockOnRestaurantKot/);
+    const voidBlock = restaurantService.slice(
+      restaurantService.indexOf('async voidCheckItems('),
       restaurantService.indexOf('async listKitchenBoard('),
     );
-    expect(sendKot).not.toMatch(/explodeActiveRecipe|validateStockAvailability|stock_movements/);
+    expect(voidBlock).toMatch(/restoreStockOnRestaurantKotVoid/);
 
     const routes = readRepo('SamplePOS.Server/src/modules/restaurant/restaurantRoutes.ts');
     expect(routes).toMatch(/\/recipes/);

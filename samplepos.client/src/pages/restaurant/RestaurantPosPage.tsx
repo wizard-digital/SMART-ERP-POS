@@ -31,8 +31,8 @@ import {
 import {
   restaurantFohStockWarnForLines,
   restaurantFohStockWarnMessage,
-  showRestaurantMenuRemainingQty,
 } from '@shared/restaurant/restaurantStockPolicy';
+import { formatRestaurantMenuStockLabel } from '@shared/restaurant/restaurantKotStockPolicy';
 import { useLayoutTier } from '../../hooks/useLayoutTier';
 import {
   inlineRowEditorsOnSameLine,
@@ -253,8 +253,10 @@ interface MenuProduct {
   categoryName: string | null;
   kitchenStation: string | null;
   productType?: 'inventory' | 'consumable' | 'service' | string;
-  /** Inventory/consumable remaining; null/omit for service. */
+  /** Inventory/consumable remaining; null/omit for service. After KOT, already net of kitchen issue. */
   remainingQuantity?: number | null;
+  /** Open PENDING kitchen-sent qty (Samba "ordered"). */
+  orderedQuantity?: number | null;
 }
 
 interface OrderItem {
@@ -2653,6 +2655,10 @@ export default function RestaurantPosPage() {
     void queryClient.invalidateQueries({ queryKey: ['restaurant', 'tables'] });
   };
 
+  const invalidateMenuStock = () => {
+    void queryClient.invalidateQueries({ queryKey: ['restaurant', 'menu', 'products'] });
+  };
+
   const handleWaiterChange = (waiterId: string) => {
     setSelectedWaiterId(waiterId);
     if (!order) return;
@@ -2810,6 +2816,7 @@ export default function RestaurantPosPage() {
       if (!derived) throw new Error('Offline check not found');
       const { tickets } = fireRestaurantKotOffline(derived);
       paintJournalCheck(selectedTableId, derived.orderId);
+      invalidateMenuStock();
 
       const offlineJobs: ClientPrintJob[] = tickets.map((kot) =>
         enqueueOfflinePrintJob({
@@ -2894,6 +2901,7 @@ export default function RestaurantPosPage() {
       }
     };
     const res = await api.restaurant.sendKot(serverKotOrderId);
+    invalidateMenuStock();
     const payload = res.data.data as
       | { kots?: unknown[]; printJobs?: ClientPrintJob[] }
       | unknown[];
@@ -4549,6 +4557,7 @@ export default function RestaurantPosPage() {
         setQtyPadSheet(null);
         setVoidReasonSheet(null);
         setSelectedLineIds([]);
+        if (hasKot) invalidateMenuStock();
         if (next.lines.length === 0) {
           settleCheckOnFloor(order.id, selectedTableId, 'CANCELLED', {
             reason: reason || 'Removed last lines',
@@ -4679,6 +4688,7 @@ export default function RestaurantPosPage() {
       }
       setSelectedLineIds([]);
       invalidateCheck();
+      if (hasKot) invalidateMenuStock();
     } catch (err) {
       const msg = apiErr(err, hasKot ? 'Void failed' : 'Remove failed');
       const alreadyClosed =
@@ -5195,6 +5205,7 @@ export default function RestaurantPosPage() {
       setSelectedTableId(null);
       setActiveOrderId(null);
       invalidateCheck();
+      if (hasKot) invalidateMenuStock();
     } catch (err) {
       toastApiError(err, 'Cancel failed');
     } finally {
@@ -5295,6 +5306,7 @@ export default function RestaurantPosPage() {
         const paid = payRestaurantCheckOffline(derived);
         settleCheckOnFloor(paidOrderId, selectedTableId, 'PAID');
         clearLineSelection();
+        invalidateMenuStock();
         toast.success(
           remainingTickets.length > 0
             ? `Paid ${paidOrderNumber} (${paid.offlineId}) — ${remainingTickets.length} ticket(s) still open on table`
@@ -5914,25 +5926,30 @@ export default function RestaurantPosPage() {
                             <div className="type-amount type-ellipsis text-stone-600 font-medium">
                               {formatCurrency(Number(product.sellingPrice))}
                             </div>
-                            {showRestaurantMenuRemainingQty(product.productType) &&
-                            product.remainingQuantity != null ? (
+                            {(() => {
+                              const stockLabel = formatRestaurantMenuStockLabel({
+                                productType: product.productType,
+                                availableQty: product.remainingQuantity,
+                                orderedQty: product.orderedQuantity,
+                              });
+                              if (!stockLabel.show) return null;
+                              return (
                               <div
                                 className={`shrink-0 type-caption tabular-nums font-semibold ${
-                                  Number(product.remainingQuantity) <= 0
+                                  Number(stockLabel.available) <= 0
                                     ? 'text-red-700'
-                                    : Number(product.remainingQuantity) <= 5
+                                    : Number(stockLabel.available) <= 5
                                       ? 'text-amber-700'
                                       : 'text-stone-500'
                                 }`}
                                 data-menu-remaining-qty={product.id}
-                                title="Remaining on hand"
+                                data-menu-ordered-qty={product.orderedQuantity ?? 0}
+                                title="Available after kitchen issues · ordered on open checks"
                               >
-                                {Number(product.remainingQuantity).toLocaleString(undefined, {
-                                  maximumFractionDigits: 2,
-                                })}{' '}
-                                left
+                                {stockLabel.label}
                               </div>
-                            ) : null}
+                              );
+                            })()}
                           </div>
                         </button>
                       ))}

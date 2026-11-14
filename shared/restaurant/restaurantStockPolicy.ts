@@ -1,13 +1,13 @@
 /**
- * Restaurant FOH stock policy (Toast/Square-style).
+ * Restaurant FOH stock policy (Toast/Square-style soft warn + Samba KOT deduct).
  *
  * Reuses catalog productTypeRules:
- * - service parents: no remaining qty on menu; no FOH stock warn; pay skips parent stock
- * - inventory / consumable: show remaining; warn when oversell is OFF
+ * - service parents: no remaining qty on menu; no FOH stock warn; never deduct parent
+ * - inventory / consumable: show remaining (+ ordered); warn when oversell is OFF
  *
- * Pay / createSale still enforces BR-INV-001 for inventory (insufficient at settle)
- * unless a future true-negative-inventory path is approved. This flag only controls
- * FOH order/KOT soft warnings so kitchens are not printed into a settlement fail.
+ * Hard deduct runs on KOT (restaurantKotStockService). Void restores.
+ * createSale skips physical deduct when KOT already issued; oversell-skipped lines
+ * still hard-fail at pay via BR-INV-001.
  */
 
 import { isServiceProductType } from '../utils/productTypeRules.js';
@@ -51,7 +51,7 @@ export function restaurantFohStockWarnMessage(input: {
   const base = `"${input.productName}" needs ${input.requestedQty}, remaining ${rem}.`;
 
   if (input.stage === 'kot') {
-    return `${base} Avoid printing/sending to kitchen — settlement will fail if stock is still short.`;
+    return `${base} Avoid sending to kitchen — KOT will reject if stock is still short.`;
   }
   if (input.stage === 'pay') {
     return `${base} Complete sale will reject for insufficient stock.`;

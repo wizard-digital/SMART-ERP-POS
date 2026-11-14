@@ -75,6 +75,7 @@ import { loadGlobalSelectableLots } from '../inventory-lot/postgresLotSelector.j
 import { selectLots } from '@shared/inventory-lot/index.js';
 import { warehouseReturnInventoryService } from '../inventory/warehouse/warehouseReturnInventoryService.js';
 import { warehouseSaleVoidRestoreService } from '../inventory/warehouse/warehouseSaleVoidRestoreService.js';
+import { getNetRestaurantKotIssue } from '../restaurant/restaurantKotStockService.js';
 import { allocateNextMovementNumber } from '../../utils/documentNumberAllocation.js';
 import type { AuditContext } from '../../../../shared/types/audit.js';
 import { resolveSaleHeaderTotal, assertSaleLineEconomicsConsistent } from './saleIntegrity.js';
@@ -125,6 +126,11 @@ export interface SaleItemInput {
   /** Custom/service lines — DocumentTaxService bridge when no products row */
   isTaxable?: boolean;
   taxRate?: number;
+  /**
+   * Restaurant settle: pos_order_items.id so createSale can skip FEFO deduct when
+   * KOT already issued stock (RESTAURANT_KOT movements) and attribute COGS from that issue.
+   */
+  sourceOrderItemId?: string;
 }
 
 export interface PaymentLineInput {
@@ -718,13 +724,18 @@ export const salesService = {
 
         // BR-INV-001: Validate stock availability
         // Phase 3: recipe parents validate/consume ingredients; service with no recipe skips stock.
+        // Restaurant KOT may already have issued stock — skip availability when covered.
         const recipeLines = recipeExplosionByLine.get(lineIdx) ?? null;
         const productType = String(productData.product_type || 'inventory');
         const stockPlan = planSaleStockDeduction(productType, Boolean(recipeLines?.length));
         const isServiceNoRecipe = stockPlan.kind === 'skip';
+        const kotIssue = item.sourceOrderItemId
+          ? await getNetRestaurantKotIssue(client, item.sourceOrderItemId)
+          : null;
+        const kotAlreadyIssued = Boolean(kotIssue?.issued);
 
-        if (stockPlan.kind === 'skip') {
-          // Pure service — no inventory
+        if (stockPlan.kind === 'skip' || kotAlreadyIssued) {
+          // Pure service — no inventory; or KOT already deducted (Samba)
         } else if (stockPlan.kind === 'ingredients' && recipeLines?.length) {
           for (const rl of recipeLines) {
             if (multistoreEnabled && sellingStoreId) {
@@ -1585,6 +1596,8 @@ export const salesService = {
         number,
         { storeLocationId: string | null; productLotId: string | null; batchId: string | null }
       >();
+      /** Restaurant KOT already reduced batches before this TX — add to GL COGS (delta alone is 0). */
+      let kotPreIssuedCost = new Decimal(0);
 
       const inventoryCouplingBefore = await captureInventoryCoupling(client);
 
@@ -1626,6 +1639,54 @@ export const salesService = {
             productName: item.productName,
           });
           continue;
+        }
+
+        // Samba: KOT already issued — do not double-deduct; attribute COGS from KOT movements.
+        if (item.sourceOrderItemId) {
+          const kotNet = await getNetRestaurantKotIssue(client, item.sourceOrderItemId);
+          if (kotNet.issued) {
+            const kotCost = new Decimal(kotNet.netCost);
+            kotPreIssuedCost = kotPreIssuedCost.plus(kotCost);
+            const prevKot = actualBatchCostMap.get(item.productId) ?? new Decimal(0);
+            actualBatchCostMap.set(item.productId, prevKot.plus(kotCost));
+            // Cost layers still need pay-time deduct (KOT only touched physical batches).
+            if (deductPlan.kind === 'ingredients' && recipeLines?.length) {
+              for (const rl of recipeLines) {
+                const productResult = await client.query(
+                  'SELECT costing_method FROM product_valuation WHERE product_id = $1',
+                  [rl.componentProductId],
+                );
+                const costingMethod = productResult.rows[0]?.costing_method || 'FIFO';
+                if (costingMethod === 'FIFO') {
+                  costLayerDeductions.push({
+                    productId: rl.componentProductId,
+                    quantity: rl.baseQty.toNumber(),
+                    costingMethod,
+                  });
+                }
+              }
+            } else {
+              const productResult = await client.query(
+                'SELECT costing_method FROM product_valuation WHERE product_id = $1',
+                [item.productId],
+              );
+              const costingMethod = productResult.rows[0]?.costing_method || 'FIFO';
+              if (costingMethod === 'FIFO') {
+                costLayerDeductions.push({
+                  productId: item.productId,
+                  quantity: baseQty.toNumber(),
+                  costingMethod,
+                });
+              }
+            }
+            logger.info('Skipping inventory deduction — restaurant KOT already issued', {
+              productId: item.productId,
+              orderItemId: item.sourceOrderItemId,
+              kotNetQty: kotNet.netQty,
+              kotNetCost: kotNet.netCost,
+            });
+            continue;
+          }
         }
 
         type DeductTarget = {
@@ -1847,11 +1908,12 @@ export const salesService = {
       }
 
       const couplingAfterDeduction = await captureInventoryCoupling(client);
-      const exactInventoryIssueCost = resolveGl1300FromBatchSubledgerDelta(
-        inventoryCouplingBefore,
-        couplingAfterDeduction,
-        'issue',
-      );
+      const exactInventoryIssueCost =
+        resolveGl1300FromBatchSubledgerDelta(
+          inventoryCouplingBefore,
+          couplingAfterDeduction,
+          'issue',
+        ) + Money.toNumber(Money.round(kotPreIssuedCost));
 
       // ============================================================
       // ENTERPRISE COGS: physical deduction is source of truth
@@ -2741,11 +2803,43 @@ export const salesService = {
         }
       }
 
-      assertInventoryCouplingUnchanged(
-        inventoryCouplingBefore,
-        await captureInventoryCoupling(client),
-        `sale ${sale.saleNumber}`,
-      );
+      {
+        const couplingAfterSale = await captureInventoryCoupling(client);
+        if (kotPreIssuedCost.greaterThan(0)) {
+          // Samba KOT already reduced batches before this TX. Pay COGS catches GL 1300 up —
+          // gap must shrink by kotPreIssuedCost (same-TX FEFO lines keep gap stable).
+          const expectedGap =
+            inventoryCouplingBefore.gap - Money.toNumber(Money.round(kotPreIssuedCost));
+          const gapDrift = Math.abs(couplingAfterSale.gap - expectedGap);
+          if (gapDrift > INVENTORY_COUPLING_TOLERANCE) {
+            logger.error('[INVENTORY COUPLING] KOT pre-issue GL catch-up mismatch', {
+              saleNumber: sale.saleNumber,
+              kotPreIssuedCost: Money.toNumber(Money.round(kotPreIssuedCost)),
+              gapBefore: inventoryCouplingBefore.gap,
+              gapAfter: couplingAfterSale.gap,
+              expectedGap,
+              gapDrift,
+            });
+            throw new BusinessError(
+              `Inventory accounting mismatch (sale ${sale.saleNumber} KOT catch-up). Transaction rolled back.`,
+              'ERR_INVENTORY_GL_COUPLING',
+              {
+                context: `sale ${sale.saleNumber} kot-catchup`,
+                gapBefore: inventoryCouplingBefore.gap,
+                gapAfter: couplingAfterSale.gap,
+                expectedGap,
+                kotPreIssuedCost: Money.toNumber(Money.round(kotPreIssuedCost)),
+              },
+            );
+          }
+        } else {
+          assertInventoryCouplingUnchanged(
+            inventoryCouplingBefore,
+            couplingAfterSale,
+            `sale ${sale.saleNumber}`,
+          );
+        }
+      }
       profiler.mark('order_complete_coupling');
 
       await client.query('COMMIT');

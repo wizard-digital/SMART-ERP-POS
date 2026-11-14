@@ -324,6 +324,8 @@ router.post(
       unitPrice: Money.toNumber(Money.parseDb(item.unitPrice)),
       discountAmount: item.discountAmount ? Money.toNumber(Money.parseDb(item.discountAmount)) : undefined,
       uomId: item.uomId || undefined,
+      // Restaurant KOT stock: createSale skips FEFO when this line was kitchen-issued.
+      sourceOrderItemId: item.id,
     }));
 
     // Allow customer override at payment time (cashier can assign/change customer)

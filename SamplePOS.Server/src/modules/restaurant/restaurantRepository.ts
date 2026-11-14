@@ -80,8 +80,11 @@ export interface RestaurantMenuProduct {
    * Remaining sellable qty for inventory/consumable (null for service).
    * Multistore: shop store sellable; else product_inventory.on_hand.
    * Omitted/undefined on flag-patch responses that are not menu list SSOT.
+   * After KOT deduct, this already reflects kitchen-issued stock.
    */
   remainingQuantity?: number | null;
+  /** Open PENDING kitchen-sent qty for this product (Samba "ordered"). */
+  orderedQuantity?: number | null;
 }
 
 export interface RestaurantCategory {
@@ -929,6 +932,7 @@ export const restaurantRepository = {
       quantity: string;
       lineNotes: string | null;
       kitchenStation: string | null;
+      uomId: string | null;
     }>
   > {
     // Prefer line snapshot; fall back to products.kitchen_station so menu routing
@@ -939,6 +943,7 @@ export const restaurantRepository = {
               oi.product_name,
               oi.quantity,
               oi.line_notes,
+              oi.uom_id,
               COALESCE(
                 NULLIF(BTRIM(oi.kitchen_station), ''),
                 NULLIF(BTRIM(p.kitchen_station), '')
@@ -956,6 +961,7 @@ export const restaurantRepository = {
       quantity: string;
       lineNotes: string | null;
       kitchenStation: string | null;
+      uomId: string | null;
     });
   },
 
@@ -994,6 +1000,7 @@ export const restaurantRepository = {
       kitchenSentAt: string | null;
       unitPrice: string;
       discountAmount: string;
+      uomId: string | null;
     }>
   > {
     if (itemIds.length === 0) return [];
@@ -1003,6 +1010,7 @@ export const restaurantRepository = {
               oi.product_name,
               oi.quantity,
               oi.line_notes,
+              oi.uom_id,
               COALESCE(
                 NULLIF(BTRIM(oi.kitchen_station), ''),
                 NULLIF(BTRIM(p.kitchen_station), '')

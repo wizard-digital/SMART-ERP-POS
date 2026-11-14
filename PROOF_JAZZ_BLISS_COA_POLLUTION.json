@@ -1,0 +1,25 @@
+{
+  "proof": "JAZZ_BLISS_COA_POLLUTION",
+  "generatedAt": "2026-11-14T13:30:02Z",
+  "verdict": "PASS_FIXED",
+  "rootCause": "pos_template CoA 1031/1032 named after Bliss; Jazz cloned from template",
+  "schemaParity": {
+    "jazz": { "version": 647, "tables": 270, "migrations": 302 },
+    "template": { "version": 647, "tables": 270, "migrations": 302 },
+    "tableDiffJazzVsTemplate": []
+  },
+  "before": {
+    "pos_tenant_the_jazz_bar": ["1031|BLISS INTERIORS STANBIC BANK", "1032|Dollar Bliss Interiors"],
+    "pos_template": ["1031|BLISS INTERIORS STANBIC BANK", "1032|Dollar Bliss Interiors"],
+    "pos_tenant_dynamics": ["1031|BLISS INTERIORS STANBIC BANK", "1032|Dollar Bliss Interiors"],
+    "jazzBankAccounts": ["Mobile Money|UGX|0.00"],
+    "jazzLedgerHitsOn1031_1032": 0
+  },
+  "after": {
+    "pos_tenant_the_jazz_bar": ["1031|Bank Account 2", "1032|Bank Account 3"],
+    "pos_template": ["1031|Bank Account 2", "1032|Bank Account 3"],
+    "pos_tenant_dynamics": ["1031|Bank Account 2", "1032|Bank Account 3"],
+    "pos_tenant_bliss_interior_ltd": ["1031|BLISS INTERIORS STANBIC BANK", "1032|Dollar Bliss Interiors"]
+  },
+  "script": "ops/security/03-fix-bliss-coa-pollution-jazz-template.sh"
+}

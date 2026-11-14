@@ -145,20 +145,27 @@ describe('createSale × KOT contract (source)', () => {
     expect(sales).toMatch(/Skipping inventory deduction for service item/);
   });
 
-  it('sendKot never validates stock, deducts inventory, or calls createSale', () => {
+  it('sendKot deducts via restaurantKotStockService (not createSale); void restores', () => {
     const service = readRepo(
       'SamplePOS.Server/src/modules/restaurant/restaurantService.ts',
     );
     const sendKotBlock = service.slice(
       service.indexOf('async sendKot('),
-      service.indexOf('async listKitchenBoard('),
+      service.indexOf('async voidCheckItems('),
     );
     expect(sendKotBlock.length).toBeGreaterThan(100);
     expect(sendKotBlock).not.toMatch(/createSale/);
-    expect(sendKotBlock).not.toMatch(/explodeActiveRecipe/);
-    expect(sendKotBlock).not.toMatch(/validateStockAvailability/);
-    expect(sendKotBlock).not.toMatch(/stock_movements/);
-    expect(sendKotBlock).not.toMatch(/planSaleStockDeduction/);
+    expect(sendKotBlock).toMatch(/issueStockOnRestaurantKot/);
+    const voidBlock = service.slice(
+      service.indexOf('async voidCheckItems('),
+      service.indexOf('async listKitchenBoard('),
+    );
+    expect(voidBlock).toMatch(/restoreStockOnRestaurantKotVoid/);
+    const kotStock = readRepo(
+      'SamplePOS.Server/src/modules/restaurant/restaurantKotStockService.ts',
+    );
+    expect(kotStock).toMatch(/explodeActiveRecipe/);
+    expect(kotStock).toMatch(/planSaleStockDeduction/);
   });
 
   it('recipe upsert rejects service ingredients; allows inventory/service parents', () => {

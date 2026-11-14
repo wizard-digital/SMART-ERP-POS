@@ -29,12 +29,14 @@ export interface MultistoreSaleCostPreview {
     shortfall: Decimal;
 }
 
+export type MultistoreDeductionMovementType = 'SALE' | 'DELIVERY' | 'ADJUSTMENT_OUT';
+
 export interface MultistoreStockDeductionParams {
     storeLocationId: string;
     productId: string;
     productName: string;
     baseQty: Decimal;
-    movementType: 'SALE' | 'DELIVERY';
+    movementType: MultistoreDeductionMovementType;
     referenceType: string;
     referenceId: string;
     notes: string;
@@ -54,7 +56,7 @@ async function insertStockMovement(
         batchId: string;
         quantity: Decimal;
         unitCost: number;
-        movementType: 'SALE' | 'DELIVERY';
+        movementType: MultistoreDeductionMovementType;
         referenceType: string;
         referenceId: string;
         notes: string;
