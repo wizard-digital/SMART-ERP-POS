@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-11-14T13:48:00.653Z",
-  "scratchDb": "pos_tenant_kot_proof_mwggnn65",
+  "generatedAt": "2026-11-14T14:04:38.719Z",
+  "scratchDb": "pos_tenant_kot_proof_mwgh91a7",
   "verdict": "PASS",
   "steps": [
     {
       "step": "clone_template",
       "ok": true,
       "detail": {
-        "scratch": "pos_tenant_kot_proof_mwggnn65"
+        "scratch": "pos_tenant_kot_proof_mwgh91a7"
       }
     },
     {
@@ -22,10 +22,10 @@
       "step": "seed",
       "ok": true,
       "detail": {
-        "productId": "ae241d86-d6ec-4e85-9f68-aa1fc864375d",
-        "batchId": "164397bb-92cc-4c53-bff7-b377328fa7fe",
+        "productId": "97328d32-85d8-4fcd-920d-7d6b55b31a20",
+        "batchId": "c6597cfd-6be4-43f2-81f1-343475bdc9d8",
         "userId": "00000000-0000-0000-0000-000000000000",
-        "tableId": "f6c5fb21-abd3-44bc-920a-86d541e377f2",
+        "tableId": "f2e4ef79-de19-4f38-95bc-2e4065c9ef6d",
         "uomId": "97c8b6ea-1d45-48c8-bf5a-2b738051aa15"
       }
     },
@@ -33,8 +33,8 @@
       "step": "open_check_add_item",
       "ok": true,
       "detail": {
-        "orderId": "0c41db8c-01c1-4d13-a321-14a9c84c2713",
-        "orderItemId": "efb0cf98-3943-416a-bd7b-19e97d511148",
+        "orderId": "89c052cd-3661-42ac-acbc-078cc480e06a",
+        "orderItemId": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
         "qty": 3
       }
     },
@@ -65,7 +65,7 @@
           {
             "movement_type": "ADJUSTMENT_OUT",
             "reference_type": "RESTAURANT_KOT",
-            "reference_id": "efb0cf98-3943-416a-bd7b-19e97d511148",
+            "reference_id": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
             "qty": 3,
             "unit_cost": 4000
           }
@@ -76,7 +76,7 @@
       "step": "kot_net_issue",
       "ok": true,
       "detail": {
-        "orderItemId": "efb0cf98-3943-416a-bd7b-19e97d511148",
+        "orderItemId": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
         "netQty": 3,
         "netCost": 12000,
         "issued": true
@@ -116,7 +116,7 @@
       "step": "kot_net_after_void",
       "ok": true,
       "detail": {
-        "orderItemId": "efb0cf98-3943-416a-bd7b-19e97d511148",
+        "orderItemId": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
         "netQty": 2,
         "netCost": 8000,
         "issued": true
@@ -126,7 +126,7 @@
       "step": "createSale_pay",
       "ok": true,
       "detail": {
-        "saleId": "722f9a95-ff7d-4c6e-8c78-b8e1e4f17760",
+        "saleId": "393c14ea-5c89-4a8d-b0e9-4b4656ac4610",
         "saleNumber": "SALE-2026-0001"
       }
     },
@@ -158,7 +158,7 @@
       "step": "drop_scratch_db",
       "ok": true,
       "detail": {
-        "scratch": "pos_tenant_kot_proof_mwggnn65"
+        "scratch": "pos_tenant_kot_proof_mwgh91a7"
       }
     }
   ],

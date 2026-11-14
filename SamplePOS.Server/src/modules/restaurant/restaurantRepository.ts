@@ -1036,6 +1036,7 @@ export const restaurantRepository = {
           kitchenSentAt: string | null;
           unitPrice: string;
           discountAmount: string;
+          uomId: string | null;
         },
     );
   },
