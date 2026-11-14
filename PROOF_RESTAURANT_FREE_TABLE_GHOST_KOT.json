@@ -1,0 +1,57 @@
+{
+  "proof": "RESTAURANT_FREE_TABLE_GHOST_KOT",
+  "generatedAt": "2026-11-14T15:42:00.000Z",
+  "verdict": "PASS_ROOT_CAUSE_PROVEN",
+  "honestScope": {
+    "proven": [
+      "Prod Jazz KOT 400s targeted COMPLETED order ORD-2026-0008 (nginx + DB)",
+      "Server sendKot rejects non-PENDING with ERR_RESTAURANT_KOT",
+      "getTableCheck returns order:null for non-PENDING (does not paint settled checks)",
+      "Pre-fix coalesce(!incomingId) resurrects cached lines over live order:null",
+      "Current coalesce accepts live order:null (FREE reopen stays empty)",
+      "Floor FREE hides server-UUID journal occupancy (tile looks empty)",
+      "KOT POST id = activeOrderId || painted order id"
+    ],
+    "notProvenInBrowserClick": [
+      "Did not capture a live Playwright/Chrome session of waiter click FREE→open→KOT on Jazz today"
+    ],
+    "mechanismProvenByCodePlusFixture": "FREE tile + React Query cache of paid ticket + pre-fix coalesce over empty GET → ghost id → KOT 400"
+  },
+  "prodIncident": {
+    "tenant": "the-jazz-bar",
+    "db": "pos_tenant_the_jazz_bar",
+    "orderId": "06519de6-0777-4256-8470-62d4e4beeb80",
+    "orderNumber": "ORD-2026-0008",
+    "status": "COMPLETED",
+    "completedAt": "2026-11-14 12:23:28.427103+00",
+    "tableCode": "TB13",
+    "nginxKot201WhileOpen": "2026-11-14:12:22:07",
+    "nginxKot400AfterCompleted": [
+      "2026-11-14:12:25:32",
+      "2026-11-14:12:25:38",
+      "2026-11-14:12:25:45",
+      "2026-11-14:12:25:59"
+    ],
+    "error": "Open restaurant check required to send KOT",
+    "errorCode": "ERR_RESTAURANT_KOT"
+  },
+  "rootCause": {
+    "id": "CLIENT_CACHE_RESURRECT_OVER_EMPTY_GET",
+    "summary": "After pay/cancel the floor correctly shows FREE (server + floor paint rules). Reopening the table ran getTableCheck which correctly returned order:null, but coalesceRestaurantCheckFetch kept the previous React Query cache when incoming.order was null (!incomingId branch). UI bound that ghost COMPLETED/missing UUID and POST /kot failed the PENDING gate.",
+    "notRootCause": [
+      "KOT stock deduction (Samba) — guard runs before stock issue",
+      "Server returning COMPLETED order in getTableCheck — it nulls non-PENDING",
+      "Random missing UUID alone — same UI path; missing and COMPLETED share ERR_RESTAURANT_KOT"
+    ]
+  },
+  "fixes": [
+    "coalesce: live order:null wins unless in-flight paintGen advanced",
+    "settleCheckOnFloor: removeQueries restaurant/check for table",
+    "FREE table open: strip only ofl_ord_* journal tabs; clear check cache"
+  ],
+  "evidenceTests": {
+    "file": "samplepos.client/src/__tests__/restaurant-free-table-ghost-kot.evidence.test.ts",
+    "also": "samplepos.client/src/lib/restaurantCheckOptimistic.proof.test.ts",
+    "result": "11 + related coalesce evidence PASS (vitest 2026-11-14)"
+  }
+}

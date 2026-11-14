@@ -262,6 +262,7 @@ describe('Restaurant optimistic online add (behavioral proof)', () => {
     const emptySame = {
       order: { id: '398cb162-906b-42e9-a224-3248fdf5bb7c', items: [] as { id: string }[] },
     };
+    // In-flight GET that started before a newer paint must not wipe the ticket.
     expect(
       coalesceRestaurantCheckFetch({
         startedGen: 1,
@@ -270,6 +271,7 @@ describe('Restaurant optimistic online add (behavioral proof)', () => {
         incoming: empty,
       }).order?.items,
     ).toEqual(painted.order.items);
+    // Same open check id with momentarily empty items — keep paint.
     expect(
       coalesceRestaurantCheckFetch({
         startedGen: 2,
@@ -292,6 +294,25 @@ describe('Restaurant optimistic online add (behavioral proof)', () => {
         incoming: sent,
       }).order?.items,
     ).toEqual(sent.order.items);
+  });
+
+  it('EVIDENCE authoritative order:null must not resurrect a settled cached ticket', () => {
+    const paidGhost = {
+      order: {
+        id: '06519de6-0777-4256-8470-62d4e4beeb80',
+        items: [{ id: 'line-paid' }],
+      },
+    };
+    const freeTable = { order: null as null, siblingChecks: [] as Array<{ id: string }> };
+    // Live GET after pay/cancel (same paint gen): empty wins — FREE reopen stays empty.
+    const cleared = coalesceRestaurantCheckFetch({
+      startedGen: 5,
+      paintGen: 5,
+      cached: paidGhost,
+      incoming: freeTable,
+    });
+    expect(cleared.order).toBeNull();
+    expect(cleared.order?.items).toBeUndefined();
   });
 
   it('EVIDENCE addItems envelope without a server UUID is not a void target', () => {

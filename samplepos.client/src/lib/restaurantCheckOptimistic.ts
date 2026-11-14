@@ -316,7 +316,9 @@ export function applyTicketNoteToTabs(
 
 /**
  * Check query vs in-place paint (add / KOT / ticket note).
- * An empty or older fetch must not blank a ticket the waiter already sees.
+ * An older in-flight GET must not blank a ticket the waiter already sees after
+ * a newer paint (add / KOT). A live GET that returns order:null (FREE / settled)
+ * must win — otherwise paid/cancelled tickets resurrect on reopen and KOT 400s.
  */
 export function coalesceRestaurantCheckFetch<
   T extends {
@@ -338,7 +340,9 @@ export function coalesceRestaurantCheckFetch<
     secondary = input.incoming;
   } else if (cachedCount > 0 && incomingCount === 0) {
     const incomingId = input.incoming.order?.id;
-    if (!incomingId || incomingId === input.cached?.order?.id) {
+    // order:null = authoritative empty check (table free / paid / cancelled).
+    // Never resurrect cached lines from a settled ticket.
+    if (incomingId && incomingId === input.cached?.order?.id) {
       primary = input.cached as T;
       secondary = input.incoming;
     }

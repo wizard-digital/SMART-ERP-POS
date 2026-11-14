@@ -2585,6 +2585,9 @@ export default function RestaurantPosPage() {
       pickView === 'list' && floorOpenCount > 1 ? selectedTableId : null;
     const journalTabs = deriveRestaurantOpenChecks(getAllEvents(), getAllSyncState())
       .filter((c) => c.tableId === selectedTableId)
+      // Server FREE / no open checks: never seed the strip with stale server UUIDs
+      // (paid/cancelled ghosts → KOT "Open restaurant check required").
+      .filter((c) => occupied || floorOpenCount > 0 || isJournalLocalOrderId(c.orderId))
       .map((c) => ({
         id: c.orderId,
         orderNumber: c.offlineId,
@@ -2595,6 +2598,9 @@ export default function RestaurantPosPage() {
       tableId: selectedTableId,
       tabs: scrubRestaurantTicketTabs(journalTabs),
     };
+    if (!occupied && floorOpenCount === 0) {
+      queryClient.removeQueries({ queryKey: ['restaurant', 'check', selectedTableId] });
+    }
   }, [selectedTableId]);
 
   useEffect(() => {
@@ -2750,9 +2756,15 @@ export default function RestaurantPosPage() {
       }
     }
     bumpJournal();
+    // Drop cached check payloads for this table so FREE reopen cannot resurrect
+    // a paid/cancelled ticket (coalesce used to keep cached lines over order:null).
+    if (tableId) {
+      queryClient.removeQueries({ queryKey: ['restaurant', 'check', tableId] });
+    } else {
+      queryClient.removeQueries({ queryKey: ['restaurant', 'check'] });
+    }
     void queryClient.invalidateQueries({ queryKey: ['restaurant', 'tables'] });
     void queryClient.invalidateQueries({ queryKey: ['restaurant', 'kitchen'] });
-    void queryClient.invalidateQueries({ queryKey: ['restaurant', 'check'] });
   };
 
   /**
