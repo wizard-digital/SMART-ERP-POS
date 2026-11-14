@@ -269,13 +269,25 @@ async function main() {
         delta: remAfterVoid - remAfterKot,
       });
 
-      const movIn = await pool.query(
-        `SELECT movement_type, reference_type, quantity::float8 AS qty
+      const movIn = await pool.query<{
+        movement_type: string;
+        reference_type: string;
+        qty: number;
+        conversion_factor: string | null;
+      }>(
+        `SELECT movement_type, reference_type, quantity::float8 AS qty,
+                conversion_factor::text AS conversion_factor
          FROM stock_movements
          WHERE reference_id = $1 AND reference_type = 'RESTAURANT_KOT_VOID'`,
         [orderItemId],
       );
-      add('void_movements_RESTAURANT_KOT_VOID', movIn.rowCount! > 0, { rows: movIn.rows });
+      const voidCfOk =
+        movIn.rowCount! > 0 &&
+        movIn.rows.every(
+          (r) => r.conversion_factor != null && Number(r.conversion_factor) > 0,
+        );
+      report.checks.voidConversionFactorNotNull = voidCfOk;
+      add('void_movements_RESTAURANT_KOT_VOID', voidCfOk, { rows: movIn.rows });
 
       const net2 = await getNetRestaurantKotIssue(pool, orderItemId);
       report.checks.kotNetQtyAfterVoid = net2.netQty;

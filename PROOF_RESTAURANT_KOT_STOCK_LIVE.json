@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-11-14T14:04:38.719Z",
-  "scratchDb": "pos_tenant_kot_proof_mwgh91a7",
+  "generatedAt": "2026-11-14T20:19:06.088Z",
+  "scratchDb": "pos_tenant_kot_proof_mwguml7r",
   "verdict": "PASS",
   "steps": [
     {
       "step": "clone_template",
       "ok": true,
       "detail": {
-        "scratch": "pos_tenant_kot_proof_mwgh91a7"
+        "scratch": "pos_tenant_kot_proof_mwguml7r"
       }
     },
     {
@@ -22,10 +22,10 @@
       "step": "seed",
       "ok": true,
       "detail": {
-        "productId": "97328d32-85d8-4fcd-920d-7d6b55b31a20",
-        "batchId": "c6597cfd-6be4-43f2-81f1-343475bdc9d8",
+        "productId": "ace42864-c5fd-4096-ae35-255ce5a77c27",
+        "batchId": "bf83e275-6d3b-499a-81d6-047c00a0754a",
         "userId": "00000000-0000-0000-0000-000000000000",
-        "tableId": "f2e4ef79-de19-4f38-95bc-2e4065c9ef6d",
+        "tableId": "d0bde0f2-9b15-4729-905c-f98247d0d22b",
         "uomId": "97c8b6ea-1d45-48c8-bf5a-2b738051aa15"
       }
     },
@@ -33,8 +33,8 @@
       "step": "open_check_add_item",
       "ok": true,
       "detail": {
-        "orderId": "89c052cd-3661-42ac-acbc-078cc480e06a",
-        "orderItemId": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
+        "orderId": "52498764-066c-45ea-9be7-9d6feefaa642",
+        "orderItemId": "9bd6730c-2f7d-473a-8472-0a63c262f2be",
         "qty": 3
       }
     },
@@ -65,7 +65,7 @@
           {
             "movement_type": "ADJUSTMENT_OUT",
             "reference_type": "RESTAURANT_KOT",
-            "reference_id": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
+            "reference_id": "9bd6730c-2f7d-473a-8472-0a63c262f2be",
             "qty": 3,
             "unit_cost": 4000
           }
@@ -76,7 +76,7 @@
       "step": "kot_net_issue",
       "ok": true,
       "detail": {
-        "orderItemId": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
+        "orderItemId": "9bd6730c-2f7d-473a-8472-0a63c262f2be",
         "netQty": 3,
         "netCost": 12000,
         "issued": true
@@ -107,7 +107,8 @@
           {
             "movement_type": "ADJUSTMENT_IN",
             "reference_type": "RESTAURANT_KOT_VOID",
-            "qty": 1
+            "qty": 1,
+            "conversion_factor": "1.000000"
           }
         ]
       }
@@ -116,7 +117,7 @@
       "step": "kot_net_after_void",
       "ok": true,
       "detail": {
-        "orderItemId": "92225d82-b090-48ff-b06c-9df80fe9dd6d",
+        "orderItemId": "9bd6730c-2f7d-473a-8472-0a63c262f2be",
         "netQty": 2,
         "netCost": 8000,
         "issued": true
@@ -126,7 +127,7 @@
       "step": "createSale_pay",
       "ok": true,
       "detail": {
-        "saleId": "393c14ea-5c89-4a8d-b0e9-4b4656ac4610",
+        "saleId": "7db9be25-75c1-445b-bfcb-3b802fe8e95f",
         "saleNumber": "SALE-2026-0001"
       }
     },
@@ -158,7 +159,7 @@
       "step": "drop_scratch_db",
       "ok": true,
       "detail": {
-        "scratch": "pos_tenant_kot_proof_mwgh91a7"
+        "scratch": "pos_tenant_kot_proof_mwguml7r"
       }
     }
   ],
@@ -171,6 +172,7 @@
     "kotNetQty": 3,
     "kotNetCost": 12000,
     "batchAfterVoid1": 18,
+    "voidConversionFactorNotNull": true,
     "kotNetQtyAfterVoid": 2,
     "batchAfterPay": 18,
     "saleMovementsForProduct": 0,

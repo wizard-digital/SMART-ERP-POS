@@ -1,0 +1,30 @@
+{
+  "proof": "RESTAURANT_KOT_VOID_CONVERSION_FACTOR",
+  "verdict": "PASS",
+  "summary": "Void restore ADJUSTMENT_IN never inserts null stock_movements.conversion_factor. Live void row has conversion_factor=1.000000.",
+  "bug": "null value in column \"conversion_factor\" of relation \"stock_movements\" violates not-null constraint",
+  "rootCause": "restoreStockOnRestaurantKotVoid called insertAdjMovement without conversionFactor; insert used ?? null",
+  "fix": {
+    "insertAdjMovement": "params.conversionFactor ?? '1'",
+    "listOpenKotIssueLayers": "selects conversion_factor + base_uom_id from ADJUSTMENT_OUT",
+    "restoreStockOnRestaurantKotVoid": "passes layer.conversionFactor and derived enteredQty"
+  },
+  "checks": [
+    {
+      "name": "restaurantKotStock.evidence.test.ts",
+      "ok": true,
+      "detail": "2/2 — asserts ?? '1' and restore passes layer.conversionFactor"
+    },
+    {
+      "name": "proof-restaurant-kot-stock-live.ts",
+      "ok": true,
+      "detail": "voidConversionFactorNotNull=true; ADJUSTMENT_IN conversion_factor=1.000000; batch 20→17 KOT, void +1→18"
+    }
+  ],
+  "artifacts": [
+    "PROOF_RESTAURANT_KOT_STOCK_LIVE.json",
+    "PROOF_GATES_ARTIFACTS/kot-void-cf-live.out.txt"
+  ],
+  "generatedAt": "2026-11-14T20:19:06.088Z",
+  "commitDeploy": false
+}

@@ -85,9 +85,10 @@ async function insertAdjMovement(
       params.referenceId,
       params.notes,
       params.userId,
-      params.enteredQty ?? null,
+      params.enteredQty ?? Money.toNumber(params.quantity.abs()),
       params.baseUomId ?? null,
-      params.conversionFactor ?? null,
+      // stock_movements.conversion_factor is NOT NULL — base-qty restores default to 1.
+      params.conversionFactor ?? '1',
     ],
   );
 }
@@ -338,6 +339,8 @@ async function listOpenKotIssueLayers(
     quantity: number;
     unitCost: number;
     restored: number;
+    baseUomId: string | null;
+    conversionFactor: string;
   }>
 > {
   const result = await client.query<{
@@ -346,8 +349,11 @@ async function listOpenKotIssueLayers(
     batch_id: string;
     quantity: string;
     unit_cost: string;
+    base_uom_id: string | null;
+    conversion_factor: string | null;
   }>(
-    `SELECT id, product_id, batch_id, quantity::text, unit_cost::text
+    `SELECT id, product_id, batch_id, quantity::text, unit_cost::text,
+            base_uom_id, conversion_factor::text
      FROM stock_movements
      WHERE reference_type = $1
        AND reference_id = $2
@@ -384,6 +390,8 @@ async function listOpenKotIssueLayers(
     quantity: number;
     unitCost: number;
     restored: number;
+    baseUomId: string | null;
+    conversionFactor: string;
   }> = [];
   const remainingRestore = new Map(restoredMap);
   for (const row of result.rows) {
@@ -395,6 +403,7 @@ async function listOpenKotIssueLayers(
     if (availRestore > 0) {
       remainingRestore.set(key, availRestore - applied);
     }
+    const cfRaw = row.conversion_factor != null ? String(row.conversion_factor).trim() : '';
     layers.push({
       id: row.id,
       productId: row.product_id,
@@ -402,6 +411,8 @@ async function listOpenKotIssueLayers(
       quantity: qty,
       unitCost: Number(row.unit_cost),
       restored: applied,
+      baseUomId: row.base_uom_id,
+      conversionFactor: cfRaw && Number(cfRaw) > 0 ? cfRaw : '1',
     });
   }
   return layers;
@@ -466,6 +477,8 @@ export async function restoreStockOnRestaurantKotVoid(
       notes: `Restaurant VOID KOT ${params.orderId}: ${params.reason}`,
       userId: params.voidedBy,
     });
+    const cf = new Decimal(layer.conversionFactor || '1');
+    const enteredQty = cf.gt(0) ? Money.toNumber(qty.div(cf)) : Money.toNumber(qty);
     await insertAdjMovement(client, {
       productId: layer.productId,
       batchId: layer.batchId,
@@ -476,6 +489,9 @@ export async function restoreStockOnRestaurantKotVoid(
       referenceId: params.orderItemId,
       notes: `Restaurant VOID KOT ${params.orderId} — restore ${params.productName}: ${params.reason}`,
       userId: params.voidedBy,
+      enteredQty,
+      baseUomId: layer.baseUomId ?? undefined,
+      conversionFactor: layer.conversionFactor || '1',
     });
     touched.add(layer.productId);
     toRestore = toRestore.minus(qty);

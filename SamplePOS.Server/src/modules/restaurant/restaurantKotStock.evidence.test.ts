@@ -27,6 +27,13 @@ describe('Restaurant KOT stock evidence (Samba)', () => {
     expect(kot).toMatch(/loadRestaurantOrderedQtyByProduct/);
     expect(kot).toMatch(/ADJUSTMENT_OUT/);
     expect(kot).toMatch(/ADJUSTMENT_IN/);
+    // VOID restore must never insert null conversion_factor (NOT NULL on stock_movements).
+    expect(kot).toMatch(/params\.conversionFactor \?\? '1'/);
+    const restoreBlock = kot.slice(
+      kot.indexOf('export async function restoreStockOnRestaurantKotVoid'),
+      kot.indexOf('export async function getNetRestaurantKotIssue'),
+    );
+    expect(restoreBlock).toMatch(/conversionFactor:\s*layer\.conversionFactor/);
 
     const service = readRepo('SamplePOS.Server/src/modules/restaurant/restaurantService.ts');
     expect(service).toMatch(/issueStockOnRestaurantKot/);

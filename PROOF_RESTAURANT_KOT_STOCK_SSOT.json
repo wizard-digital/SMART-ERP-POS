@@ -25,5 +25,5 @@
     "SamplePOS.Server/scripts/proof-restaurant-kot-stock-live.ts"
   ],
   "commitDeploy": false,
-  "note": "Code + live proof local. Prod Jazz schema already 647; KOT stock code not deployed until asked."
+  "note": "Void conversion_factor NOT NULL hardened (insertAdjMovement ?? '1'; restore copies OUT layer). Live voidConversionFactorNotNull=true. Deploy when asked."
 }
